@@ -15,6 +15,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // with organization setup moved lower as an admin/setup area.
     alignEmployeeWorkspaceCardOrder();
 
+    // DESCRIPTION ITEM 4 - STEP 2B
+    // Start long HR/payroll working cards collapsed by default.
+    // This keeps the workspace clean while preserving all existing
+    // save/edit flows that reopen cards when needed.
+    collapseDashboardWorkingCardsByDefault();
+
     const access = await window.SessionManager.protectPage([
       "hr",
       "hr_manager",
@@ -57,8 +63,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     // need dropdown values. This is read-only for now.
     await refreshOrganizationHrSetupValues();
 
+    // DESCRIPTION ITEM 3 - STEP 2A-4
+    // Load controlled Payroll Grade / Level values before Payroll Master Data,
+    // so the Payroll Master dropdown and edit mode can use real setup records.
+    await loadPayrollGradeLevels();
+
     await refreshPayrollMasterWorkspace();
     await refreshPayrollAllowanceWorkspace();
+
+    // DESCRIPTION ITEM 3 - STEP 2C
+    // Load saved statutory deductions after Payroll Master Records are available,
+    // because the records table resolves employee and grade context from Payroll Master.
+    await refreshPayrollStatutoryWorkspace();
+
     await refreshPayrollWorkspace();
 
     // BANK DIRECTORY - STEP 7A
@@ -114,6 +131,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.hrEditPayrollAllowanceRecord = (allowanceId) => {
       startPayrollAllowanceEdit(allowanceId);
     };
+
+    // DESCRIPTION ITEM 3 - STEP 2D
+// Expose statutory deduction edit handler for the records table action button.
+window.hrEditPayrollStatutoryRecord = (statutoryDeductionId) => {
+  startPayrollStatutoryEdit(statutoryDeductionId);
+};
     // =========================================================
     // DESCRIPTION ITEM 1
     // Expose payroll master edit handler for table action buttons.
@@ -162,6 +185,11 @@ const PROFILE_IMAGES_BUCKET = "profile-images";
 const state = {
   currentUser: null,
   currentProfile: null,
+
+  // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+  // Stores the loaded profile values so Save Profile Changes only turns blue
+  // when HR actually changes an editable profile field.
+  currentProfileEditableBaseline: null,
   employees: [],
   filteredEmployees: [],
   // MANAGE ORGANIZATION CARD - STEP 3
@@ -238,6 +266,11 @@ const state = {
   payrollMasterRecords: [],
   filteredPayrollMasterRecords: [],
 
+  // DESCRIPTION ITEM 3 - STEP 2A-4
+  // Active Payroll Grade / Level setup records loaded from Supabase.
+  // Payroll Master Data uses this list for its controlled dropdown.
+  payrollGradeLevels: [],
+
   // =========================================================
   // DESCRIPTION ITEM 2
   // Allowance component state holders
@@ -245,6 +278,29 @@ const state = {
   // =========================================================
   payrollAllowanceComponents: [],
   filteredPayrollAllowanceComponents: [],
+
+  // DESCRIPTION ITEM 3 - STEP 2C
+  // Holds saved statutory deduction setup records loaded from Supabase.
+  // These records are view-only in this step.
+  payrollStatutoryDeductions: [],
+  filteredPayrollStatutoryDeductions: [],
+
+  // DESCRIPTION ITEM 3 - STEP 2D
+  // Tracks the statutory deduction currently being edited.
+  // Null means the form is in normal create mode.
+  currentEditingPayrollStatutory: null,
+
+    // DESCRIPTION ITEM 4 - STEP 2
+  // Holds saved non-statutory deductions such as union dues,
+  // cooperative deductions, and salary advance repayments.
+  // Save/load logic will be added after the UI shell is confirmed.
+  payrollOtherDeductions: [],
+  filteredPayrollOtherDeductions: [],
+
+  // DESCRIPTION ITEM 4 - STEP 2
+  // Tracks the Other Deduction currently being edited.
+  // Null means the form is in create mode.
+  currentEditingPayrollOtherDeduction: null,
 
   // BANK DIRECTORY - STEP 5
   // Temporary in-page bank directory records.
@@ -607,6 +663,12 @@ function cacheDomElements() {
     // Header target used after submit/update so Payroll Records appears
     // cleanly without the heading being cut off.
     payrollRecordsHeader: document.getElementById("payrollRecordsHeader"),
+
+        // DESCRIPTION ITEM 4 - STEP 2C
+    // Collapse controls for the Payroll Records review/audit card.
+    // This keeps long payroll record lists compact by default.
+    togglePayrollRecordsCardBtn: document.getElementById("togglePayrollRecordsCardBtn"),
+    payrollRecordsCardCollapse: document.getElementById("payrollRecordsCardCollapse"),
     // =========================================================
     // DESCRIPTION ITEM 1
     // Payroll master form DOM cache
@@ -693,9 +755,12 @@ function cacheDomElements() {
 
     payrollMasterEmployeeId: document.getElementById("payrollMasterEmployeeId"),
 
-    // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-    // Grade has been removed from Payroll Master Data.
-    // Payroll Master now uses Employee + Salary + Effective Date + Pay Cycle + Status.
+    // DESCRIPTION ITEM 3 - STEP 2A-2
+    // Payroll Grade / Level is restored as optional payroll master data.
+    // This connects payroll master records to future statutory deduction
+    // inheritance without changing current salary calculations.
+    payrollMasterGradeLevel: document.getElementById("payrollMasterGradeLevel"),
+
     payrollMasterBasicSalary: document.getElementById("payrollMasterBasicSalary"),
     payrollMasterEffectiveDate: document.getElementById("payrollMasterEffectiveDate"),
     payrollMasterPayCycle: document.getElementById("payrollMasterPayCycle"),
@@ -750,6 +815,85 @@ function cacheDomElements() {
     payrollAllowanceRecordsEmptyState: document.getElementById("payrollAllowanceRecordsEmptyState"),
     payrollAllowanceRecordsTableWrapper: document.getElementById("payrollAllowanceRecordsTableWrapper"),
     payrollAllowanceRecordsTableBody: document.getElementById("payrollAllowanceRecordsTableBody"),
+
+    // DESCRIPTION ITEM 3 - STEP 2A-5
+    // Cache Statutory Deductions shell fields.
+    // These are connected to Payroll Master Data for UI context only in this step.
+    // Save/edit persistence will be added after the shell is confirmed.
+    payrollStatutoryCreateForm: document.getElementById("payrollStatutoryCreateForm"),
+    editingPayrollStatutoryId: document.getElementById("editingPayrollStatutoryId"),
+    payrollStatutoryMasterRecordId: document.getElementById("payrollStatutoryMasterRecordId"),
+    payrollStatutoryDeductionType: document.getElementById("payrollStatutoryDeductionType"),
+    payrollStatutoryCalculationMethod: document.getElementById("payrollStatutoryCalculationMethod"),
+    payrollStatutoryDeductionValue: document.getElementById("payrollStatutoryDeductionValue"),
+
+    // DESCRIPTION ITEM 3 - STEP 2A-5
+    // These helper elements let Calculation Method control whether
+    // Deduction Value is manually required or rule-derived.
+    payrollStatutoryDeductionValueRequiredMarker: document.getElementById(
+      "payrollStatutoryDeductionValueRequiredMarker",
+    ),
+    payrollStatutoryDeductionValueHelp: document.getElementById(
+      "payrollStatutoryDeductionValueHelp",
+    ),
+
+    payrollStatutoryEffectiveDate: document.getElementById("payrollStatutoryEffectiveDate"),
+    payrollStatutoryConfigSource: document.getElementById("payrollStatutoryConfigSource"),
+    payrollStatutoryGradeLevelContextCol: document.getElementById("payrollStatutoryGradeLevelContextCol"),
+    payrollStatutoryGradeLevelDisplay: document.getElementById("payrollStatutoryGradeLevelDisplay"),
+    payrollStatutoryGradeLevelId: document.getElementById("payrollStatutoryGradeLevelId"),
+    payrollStatutoryGradeLevelSnapshot: document.getElementById("payrollStatutoryGradeLevelSnapshot"),
+    payrollStatutoryGradeLevelHelp: document.getElementById("payrollStatutoryGradeLevelHelp"),
+    payrollStatutoryStatus: document.getElementById("payrollStatutoryStatus"),
+    payrollStatutoryNotes: document.getElementById("payrollStatutoryNotes"),
+
+    // DESCRIPTION ITEM 3 - STEP 2B
+    // Cache Statutory Deduction create controls.
+savePayrollStatutoryBtn: document.getElementById("savePayrollStatutoryBtn"),
+savePayrollStatutoryBtnText: document.getElementById("savePayrollStatutoryBtnText"),
+
+// DESCRIPTION ITEM 3 - STEP 2D
+// Cancel Edit appears only when maintaining an existing statutory deduction.
+cancelPayrollStatutoryEditBtn: document.getElementById("cancelPayrollStatutoryEditBtn"),
+
+resetPayrollStatutoryFormBtn: document.getElementById("resetPayrollStatutoryFormBtn"),
+
+    // DESCRIPTION ITEM 3 - STEP 2C
+    // Cache Statutory Deductions collapse and records table controls.
+    togglePayrollStatutoryCardBtn: document.getElementById("togglePayrollStatutoryCardBtn"),
+    payrollStatutoryCardCollapse: document.getElementById("payrollStatutoryCardCollapse"),
+    refreshPayrollStatutoryRecordsBtn: document.getElementById("refreshPayrollStatutoryRecordsBtn"),
+    payrollStatutorySearchInput: document.getElementById("payrollStatutorySearchInput"),
+    payrollStatutoryRecordsHeader: document.getElementById("payrollStatutoryRecordsHeader"),
+    payrollStatutoryRecordsEmptyState: document.getElementById("payrollStatutoryRecordsEmptyState"),
+    payrollStatutoryRecordsTableWrapper: document.getElementById("payrollStatutoryRecordsTableWrapper"),
+    payrollStatutoryRecordsTableBody: document.getElementById("payrollStatutoryRecordsTableBody"),
+
+    // DESCRIPTION ITEM 4 - STEP 2
+    // Cache Other Deductions UI shell fields.
+    // These IDs come from the new Other Deductions card in hr-dashboard.html.
+    payrollOtherDeductionCreateForm: document.getElementById("payrollOtherDeductionCreateForm"),
+    editingPayrollOtherDeductionId: document.getElementById("editingPayrollOtherDeductionId"),
+    payrollOtherDeductionMasterRecordId: document.getElementById("payrollOtherDeductionMasterRecordId"),
+    payrollOtherDeductionType: document.getElementById("payrollOtherDeductionType"),
+    payrollOtherDeductionAmount: document.getElementById("payrollOtherDeductionAmount"),
+    payrollOtherDeductionDurationMonths: document.getElementById("payrollOtherDeductionDurationMonths"),
+    payrollOtherDeductionStartDate: document.getElementById("payrollOtherDeductionStartDate"),
+    payrollOtherDeductionReferenceNumber: document.getElementById("payrollOtherDeductionReferenceNumber"),
+    payrollOtherDeductionStatus: document.getElementById("payrollOtherDeductionStatus"),
+    payrollOtherDeductionNotes: document.getElementById("payrollOtherDeductionNotes"),
+    savePayrollOtherDeductionBtn: document.getElementById("savePayrollOtherDeductionBtn"),
+    savePayrollOtherDeductionBtnText: document.getElementById("savePayrollOtherDeductionBtnText"),
+    cancelPayrollOtherDeductionEditBtn: document.getElementById("cancelPayrollOtherDeductionEditBtn"),
+    resetPayrollOtherDeductionFormBtn: document.getElementById("resetPayrollOtherDeductionFormBtn"),
+    togglePayrollOtherDeductionCardBtn: document.getElementById("togglePayrollOtherDeductionCardBtn"),
+    payrollOtherDeductionCardCollapse: document.getElementById("payrollOtherDeductionCardCollapse"),
+    refreshPayrollOtherDeductionRecordsBtn: document.getElementById("refreshPayrollOtherDeductionRecordsBtn"),
+    payrollOtherDeductionSearchInput: document.getElementById("payrollOtherDeductionSearchInput"),
+    payrollOtherDeductionRecordsHeader: document.getElementById("payrollOtherDeductionRecordsHeader"),
+    payrollOtherDeductionRecordsEmptyState: document.getElementById("payrollOtherDeductionRecordsEmptyState"),
+    payrollOtherDeductionRecordsTableWrapper: document.getElementById("payrollOtherDeductionRecordsTableWrapper"),
+    payrollOtherDeductionRecordsTableBody: document.getElementById("payrollOtherDeductionRecordsTableBody"),
 
     payrollCreateForm: document.getElementById("payrollCreateForm"),
 
@@ -965,6 +1109,70 @@ function setDashboardCardExpanded(button, panel, shouldExpand) {
   if (label) {
     label.textContent = shouldExpand ? "Collapse" : "Expand";
   }
+}
+
+// DESCRIPTION ITEM 4 - STEP 2B
+// Central list of long HR/payroll working cards that can collapse.
+// Keeping the pairs in one place prevents duplicate collapse logic
+// and keeps the dashboard behaviour consistent.
+function getDashboardWorkingCardPairs() {
+  return [
+    [state.dom.toggleOrganizationSettingsCardBtn, state.dom.organizationSettingsCardCollapse],
+    [state.dom.toggleEmployeeListCardBtn, state.dom.employeeListCardCollapse],
+    [state.dom.toggleEmployeeFormCardBtn, state.dom.employeeFormCardCollapse],
+    [state.dom.toggleBankDirectoryCardBtn, state.dom.bankDirectoryCardCollapse],
+    [state.dom.toggleEmployeeBankDetailsCardBtn, state.dom.employeeBankDetailsCardCollapse],
+    [state.dom.togglePayrollMasterCardBtn, state.dom.payrollMasterCardCollapse],
+    [state.dom.togglePayrollAllowanceCardBtn, state.dom.payrollAllowanceCardCollapse],
+    [state.dom.togglePayrollStatutoryCardBtn, state.dom.payrollStatutoryCardCollapse],
+    [state.dom.togglePayrollOtherDeductionCardBtn, state.dom.payrollOtherDeductionCardCollapse],
+    [state.dom.togglePayrollRecordCardBtn, state.dom.payrollRecordCardCollapse],
+        // DESCRIPTION ITEM 4 - STEP 2C
+    // Payroll Records can become long, so it should collapse by default
+    // and support the same double-click collapse shortcut.
+    [state.dom.togglePayrollRecordsCardBtn, state.dom.payrollRecordsCardCollapse],
+  ];
+}
+
+// DESCRIPTION ITEM 4 - STEP 2B
+// Collapse long working cards by default so HR lands on a clean,
+// scan-friendly workspace and expands only the card they need.
+function collapseDashboardWorkingCardsByDefault() {
+  getDashboardWorkingCardPairs().forEach(([button, panel]) => {
+    setDashboardCardExpanded(button, panel, false);
+  });
+}
+
+// DESCRIPTION ITEM 4 - STEP 2B
+// Allow HR to double-click inside an open card to collapse it.
+// Ignore form fields, buttons, links, and tables so normal data entry
+// and record actions are not interrupted.
+function bindDashboardCardDoubleClickCollapse(button, panel) {
+  if (!button || !panel) return;
+
+  const card = panel.closest(".dashboard-section-card");
+  if (!card) return;
+
+  card.addEventListener("dblclick", (event) => {
+    const ignoredTarget = event.target.closest(
+      "button, a, input, select, textarea, label, table, [contenteditable='true']",
+    );
+
+    if (ignoredTarget) return;
+
+    const isExpanded = !panel.classList.contains("d-none");
+    if (!isExpanded) return;
+
+    setDashboardCardExpanded(button, panel, false);
+  });
+}
+
+// DESCRIPTION ITEM 4 - STEP 2B
+// Bind double-click collapse to all long HR/payroll working cards.
+function bindDashboardCardDoubleClickCollapseShortcuts() {
+  getDashboardWorkingCardPairs().forEach(([button, panel]) => {
+    bindDashboardCardDoubleClickCollapse(button, panel);
+  });
 }
 
 // REMOVE GRADE LEVEL FIELD FROM EMPLOYEE DATA - STEP 3
@@ -1194,6 +1402,31 @@ function redirectToPayrollAllowanceRecordsAfterSave() {
   );
 }
 
+// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+// Statutory Deductions has its form and records inside one collapsible card.
+// After create/update, keep the card open and land on the records section.
+function openPayrollStatutoryCard() {
+  setDashboardCardExpanded(
+    state.dom.togglePayrollStatutoryCardBtn,
+    state.dom.payrollStatutoryCardCollapse,
+    true,
+  );
+}
+
+// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+// Redirect to Statutory Deduction Records after create/update without
+// cutting off the records heading.
+function redirectToPayrollStatutoryRecordsAfterSave() {
+  openPayrollStatutoryCard();
+
+  scrollToDashboardTarget(
+    state.dom.payrollStatutoryRecordsHeader ||
+    state.dom.payrollStatutoryRecordsTableWrapper ||
+    state.dom.payrollStatutoryCardCollapse,
+    16,
+  );
+}
+
 // HR SAVE/EDIT BEHAVIOUR - ALLOWANCE COMPONENTS STEP 2 FIX
 // Stable key used to identify the allowance that was just saved/updated.
 function buildPayrollAllowanceSortKey(record = {}) {
@@ -1391,6 +1624,17 @@ function closePayrollRecordCard() {
   );
 }
 
+// DESCRIPTION ITEM 4 - STEP 2C
+// Payroll Records is collapsed by default, but must auto-open after
+// payroll submit/update so HR can immediately review the saved record.
+function openPayrollRecordsCard() {
+  setDashboardCardExpanded(
+    state.dom.togglePayrollRecordsCardBtn,
+    state.dom.payrollRecordsCardCollapse,
+    true,
+  );
+}
+
 // BATCH PAYROLL DEFAULT - STEP 6A
 // Show the normal payroll toolbar when HR is using the individual
 // Create Payroll Record form.
@@ -1436,6 +1680,11 @@ function clearPayrollRecordsFiltersBeforeRedirect() {
 // Redirect to Payroll Records after submit/update.
 function redirectToPayrollRecordsAfterSave() {
   closePayrollRecordCard();
+
+  // DESCRIPTION ITEM 4 - STEP 2C
+  // Because Payroll Records now collapses by default, reopen it after
+  // submit/update so the newly saved payroll record remains visible.
+  openPayrollRecordsCard();
 
   // BATCH PAYROLL DEFAULT - STEP 7B
   // Land on the full Payroll Records card instead of the inner header.
@@ -1659,10 +1908,22 @@ function bindEvents() {
     continueRunPayrollToPayrollWorkspace();
   });
 
-  state.dom.hrProfileForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await saveHrOwnProfile();
-  });
+state.dom.hrProfileForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveHrOwnProfile();
+});
+
+// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+// Profile save button should stay grey until Full Name or Department changes.
+[
+  state.dom.hrProfileFullName,
+  state.dom.hrProfileDepartment,
+].forEach((field) => {
+  field?.addEventListener("input", updateHrProfileSaveButtonState);
+  field?.addEventListener("change", updateHrProfileSaveButtonState);
+});
+
+updateHrProfileSaveButtonState();
 
   state.dom.hrProfileImageInput?.addEventListener("change", (event) => {
     const file = event.target.files?.[0] || null;
@@ -1741,12 +2002,10 @@ function bindEvents() {
     state.dom.employmentStatus,
     state.dom.systemRole,
 
-    // ASSIGN LINE MANAGER - STEP 1E
-    // Clear custom role validation/state when the form resets.
-    state.dom.customSystemRole,
-
-    // ASSIGN LINE MANAGER - STEP 1E
-    // Custom role is optional but should still trigger save-state refresh.
+    // DESCRIPTION ITEM 3 - STEP 2B CLEANUP
+    // Keep Custom System Role only once in this listener array.
+    // One listener is enough to refresh the Employee save button when HR types
+    // a custom role, and avoids duplicate event bindings.
     state.dom.customSystemRole,
   ].forEach((field) => {
     field?.addEventListener("input", updateEmployeeSaveButtonState);
@@ -2011,6 +2270,12 @@ function bindEvents() {
   // The save button now depends only on the active payroll master fields.
   [
     state.dom.payrollMasterEmployeeId,
+
+    // DESCRIPTION ITEM 3 - STEP 2A-2
+    // Payroll Grade / Level is optional, but changes to it should still refresh
+    // the Payroll Master save button state when the required fields are complete.
+    state.dom.payrollMasterGradeLevel,
+
     state.dom.payrollMasterBasicSalary,
     state.dom.payrollMasterEffectiveDate,
     state.dom.payrollMasterPayCycle,
@@ -2113,12 +2378,107 @@ function bindEvents() {
     applyPayrollAllowanceSearch();
   });
 
+  // DESCRIPTION ITEM 3 - STEP 2A-5
+  // When HR selects a Payroll Master Record, show the connected Payroll Grade / Level
+  // for statutory deduction inheritance context.
+  state.dom.payrollStatutoryMasterRecordId?.addEventListener("change", () => {
+    syncPayrollStatutorySelectedMasterContext();
+  });
+
+  // DESCRIPTION ITEM 3 - STEP 2B WIRING CLEANUP
+  // Configuration Source must immediately refresh the grade/rule warning
+  // when HR switches between Employee Specific and Inherited setup.
+  state.dom.payrollStatutoryConfigSource?.addEventListener("change", () => {
+    syncPayrollStatutoryConfigSourceUi();
+    updatePayrollStatutorySaveButtonState();
+  });
+
+  // DESCRIPTION ITEM 3 - STEP 2A-5
+  // Calculation Method controls whether Deduction Value is rule-derived,
+  // percentage-based, or fixed-amount based.
+  state.dom.payrollStatutoryCalculationMethod?.addEventListener("change", () => {
+    syncPayrollStatutoryCalculationMethodUi();
+  });
+
+  // DESCRIPTION ITEM 3 - STEP 2B
+  // Submit Statutory Deductions to Supabase.
+  // This is create-only for now; edit mode comes later.
+  state.dom.payrollStatutoryCreateForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await handlePayrollStatutorySave();
+  });
+
+  // DESCRIPTION ITEM 3 - STEP 2B
+  // Clear the statutory form without affecting saved records.
+  state.dom.resetPayrollStatutoryFormBtn?.addEventListener("click", () => {
+    resetPayrollStatutoryForm();
+  });
+
+  // DESCRIPTION ITEM 3 - STEP 2D
+// Cancel Statutory Deduction edit and return the form to clean create mode.
+state.dom.cancelPayrollStatutoryEditBtn?.addEventListener("click", () => {
+  exitPayrollStatutoryEditMode();
+});
+
+  // DESCRIPTION ITEM 3 - STEP 2B
+  // Keep create button disabled until the statutory deduction form is valid.
+  [
+    state.dom.payrollStatutoryMasterRecordId,
+    state.dom.payrollStatutoryDeductionType,
+    state.dom.payrollStatutoryCalculationMethod,
+    state.dom.payrollStatutoryDeductionValue,
+    state.dom.payrollStatutoryEffectiveDate,
+    state.dom.payrollStatutoryConfigSource,
+    state.dom.payrollStatutoryStatus,
+    state.dom.payrollStatutoryNotes,
+  ].forEach((field) => {
+    field?.addEventListener("input", updatePayrollStatutorySaveButtonState);
+    field?.addEventListener("change", updatePayrollStatutorySaveButtonState);
+  });
+
+  syncPayrollStatutoryCalculationMethodUi();
+  updatePayrollStatutorySaveButtonState();
+
+  // DESCRIPTION ITEM 3 - STEP 2C
+  // Make the Statutory Deductions card collapsible now that it contains
+  // both setup form and records list.
+  bindCardCollapseToggle(
+    state.dom.togglePayrollStatutoryCardBtn,
+    state.dom.payrollStatutoryCardCollapse,
+  );
+
+  // DESCRIPTION ITEM 3 - STEP 2C
+  // Filter saved statutory deduction records as HR types.
+  state.dom.payrollStatutorySearchInput?.addEventListener("input", () => {
+    applyPayrollStatutorySearch();
+  });
+
+  // DESCRIPTION ITEM 3 - STEP 2C
+  // Refresh saved statutory deduction records without affecting the form.
+  state.dom.refreshPayrollStatutoryRecordsBtn?.addEventListener("click", async () => {
+    await handlePayrollStatutoryRecordsRefresh();
+  });
+
+  // DESCRIPTION ITEM 4 - STEP 2
+  // Make the Other Deductions card collapsible like Payroll Master,
+  // Allowance Components, and Statutory Deductions.
+  // Save/load behaviour is intentionally not added in this UI shell step.
+  bindCardCollapseToggle(
+    state.dom.togglePayrollOtherDeductionCardBtn,
+    state.dom.payrollOtherDeductionCardCollapse,
+  );
+
   // DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 4
   // Bind collapsible behavior for the Allowance Components card.
   bindCardCollapseToggle(
     state.dom.togglePayrollAllowanceCardBtn,
     state.dom.payrollAllowanceCardCollapse,
   );
+
+  // DESCRIPTION ITEM 4 - STEP 2B
+  // Add double-click collapse shortcuts after normal collapse buttons
+  // have been bound. This is a helper only and does not change save logic.
+  bindDashboardCardDoubleClickCollapseShortcuts();
 
   state.dom.payrollSearchInput?.addEventListener("input", () => {
     applyPayrollSearch();
@@ -2224,10 +2584,22 @@ function bindEvents() {
     state.dom.payrollRecordCardCollapse,
   );
 
+  // DESCRIPTION ITEM 4 - STEP 2C
+  // Bind collapsible behaviour for Payroll Records.
+  // This does not affect payroll search, export, preview, or send payslip logic.
+  bindCardCollapseToggle(
+    state.dom.togglePayrollRecordsCardBtn,
+    state.dom.payrollRecordsCardCollapse,
+  );
+
   // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 5
   // When HR selects a pay cycle, default the pay date to that month end.
   state.dom.payrollPayCycle?.addEventListener("change", () => {
     updatePayDateFromPayCycle();
+
+    // DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+    // Pay Cycle updates Pay Date, and Pay Date controls statutory deductions.
+    recalculatePayrollFormTotals();
   });
 
   // BATCH PAYROLL CSV IMPORT - STEP 1
@@ -2268,6 +2640,18 @@ function bindEvents() {
   // Keep the batch pay date aligned with the selected batch pay period.
   state.dom.batchPayrollPayCycle?.addEventListener("change", () => {
     updateBatchPayDateFromPayCycle();
+
+    // DESCRIPTION ITEM 3 - STEP 2E-2A
+    // Pay period changes the batch pay date, and pay date controls which
+    // statutory deduction setup is active.
+    refreshRunPayrollBatchReviewForSelectedEmployees();
+  });
+
+  // DESCRIPTION ITEM 3 - STEP 2E-2A
+  // If HR manually adjusts Batch Pay Date, rebuild the prepared rows so
+  // PAYE/Pension/Other Deductions respect statutory effective dates.
+  state.dom.batchPayrollPayDate?.addEventListener("change", () => {
+    refreshRunPayrollBatchReviewForSelectedEmployees();
   });
 
   state.dom.payrollEmployeeGroup?.addEventListener("change", () => {
@@ -3779,11 +4163,91 @@ async function handlePayrollMasterFormClear() {
   }
 }
 
+// DESCRIPTION ITEM 3 - STEP 2A-4
+// Build the user-facing Payroll Grade / Level label.
+// Example: GL-01 — Junior Level
+function getPayrollGradeLevelLabel(grade = {}) {
+  const code = String(grade.grade_code || "").trim();
+  const name = String(grade.grade_name || "").trim();
+
+  if (code && name) return `${code} — ${name}`;
+  return code || name || "";
+}
+
+// DESCRIPTION ITEM 3 - STEP 2A-4
+// Load active Payroll Grade / Level setup records from Supabase.
+// These are controlled setup records, not hardcoded dropdown values.
+async function loadPayrollGradeLevels() {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from("payroll_grade_levels")
+    .select("id, grade_code, grade_name, grade_description, salary_band_min, salary_band_max, status")
+    .eq("status", "Active")
+    .order("grade_code", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message || "Payroll grade levels could not be loaded.");
+  }
+
+  state.payrollGradeLevels = Array.isArray(data) ? data : [];
+  populatePayrollGradeLevelOptions();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2A-4
+// Populate Payroll Master Data dropdown from active setup records.
+// The dropdown stores the grade id, while the visible label is kept as a
+// snapshot when saving payroll master records.
+function populatePayrollGradeLevelOptions(preferredGradeLevelId = "") {
+  const select = state.dom.payrollMasterGradeLevel;
+  if (!select) return;
+
+  const currentValue = String(preferredGradeLevelId || select.value || "").trim();
+
+  select.innerHTML = `<option value="">Select payroll grade / level</option>`;
+
+  state.payrollGradeLevels.forEach((grade) => {
+    const label = getPayrollGradeLevelLabel(grade);
+    const option = document.createElement("option");
+
+    option.value = grade.id;
+    option.textContent = label;
+    option.dataset.gradeLabel = label;
+
+    select.appendChild(option);
+  });
+
+  if (currentValue) {
+    const stillExists = Array.from(select.options).some(
+      (option) => option.value === currentValue,
+    );
+
+    if (stillExists) {
+      select.value = currentValue;
+    }
+  }
+}
+
+// DESCRIPTION ITEM 3 - STEP 2A-4
+// Resolve a Payroll Master grade label using the linked grade record first,
+// then fall back to the saved text snapshot for older records.
+function getPayrollMasterGradeDisplay(record = {}) {
+  return (
+    getPayrollGradeLevelLabel(record.payroll_grade_levels || {}) ||
+    String(record.payroll_grade_level || "").trim() ||
+    "--"
+  );
+}
+
 async function refreshPayrollMasterWorkspace() {
   renderPayrollMasterRecordsLoadingState();
 
   // Rebuild employee dropdown from the employee list already loaded for HR.
   populatePayrollMasterEmployeeOptions();
+
+  // DESCRIPTION ITEM 3 - STEP 2A-4
+  // Rebuild Payroll Grade / Level dropdown from controlled setup records.
+  populatePayrollGradeLevelOptions();
 
   // Load payroll master records from the database, then apply client-side search.
   await loadPayrollMasterRecords();
@@ -3834,12 +4298,29 @@ function validatePayrollMasterForm() {
 }
 
 function buildPayrollMasterPayload(isEditMode = false) {
+  // DESCRIPTION ITEM 3 - STEP 2A-4
+  // Save both the connected grade id and a readable text snapshot.
+  // The id provides the real relationship; the text keeps records readable
+  // if a grade label changes later.
+  const selectedGradeOption =
+    state.dom.payrollMasterGradeLevel?.selectedOptions?.[0] || null;
+
+  const selectedGradeLevelId =
+    String(state.dom.payrollMasterGradeLevel?.value || "").trim();
+
+  const selectedGradeLevelLabel =
+    String(selectedGradeOption?.dataset?.gradeLabel || "").trim();
+
   const payload = {
     employee_id: String(state.dom.payrollMasterEmployeeId?.value || "").trim(),
 
-    // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-    // Grade removed from active Payroll Master save payload.
-    // Existing database grade values are left untouched for historical records.
+    // DESCRIPTION ITEM 3 - STEP 2B DUPLICATE CLEANUP
+    // Keep only one payroll_grade_level assignment.
+    // payroll_grade_level_id stores the real connected dropdown id.
+    // payroll_grade_level stores the readable label snapshot, not the id.
+    payroll_grade_level_id: selectedGradeLevelId || null,
+    payroll_grade_level: selectedGradeLevelLabel || null,
+
     basic_salary: Number(state.dom.payrollMasterBasicSalary?.value || 0),
     salary_effective_date: state.dom.payrollMasterEffectiveDate?.value || null,
     pay_cycle: String(state.dom.payrollMasterPayCycle?.value || "").trim(),
@@ -3975,10 +4456,12 @@ function resetPayrollMasterForm() {
   state.dom.payrollMasterCreateForm.reset();
   state.currentEditingPayrollMaster = null;
 
-  // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-  // Grade removed from Payroll Master reset handling.
+  // DESCRIPTION ITEM 3 - STEP 2A-2
+  // Include Payroll Grade / Level in reset cleanup.
+  // It remains optional, so this only clears validation styling if any is added later.
   const fieldsToReset = [
     state.dom.payrollMasterEmployeeId,
+    state.dom.payrollMasterGradeLevel,
     state.dom.payrollMasterBasicSalary,
     state.dom.payrollMasterEffectiveDate,
     state.dom.payrollMasterPayCycle,
@@ -4036,11 +4519,11 @@ function renderPayrollMasterRecordsLoadingState() {
     state.dom.payrollMasterRecordsTableWrapper.classList.remove("d-none");
   }
 
-  // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-  // Grade column removed, so Payroll Master table now has 7 columns.
+  // DESCRIPTION ITEM 3 - STEP 2A-2
+  // Payroll Master Records now has 8 columns because Grade / Level is visible.
   state.dom.payrollMasterRecordsTableBody.innerHTML = `
     <tr>
-      <td colspan="7" class="text-center text-secondary py-4">
+      <td colspan="8" class="text-center text-secondary py-4">
         Loading payroll master records.
       </td>
     </tr>
@@ -4057,6 +4540,11 @@ function renderPayrollMasterRecords(records) {
   // with the latest loaded payroll master records.
   // =========================================================
   populatePayrollAllowanceMasterOptions();
+
+  // DESCRIPTION ITEM 3 - STEP 2B WIRING CLEANUP
+  // Keep Statutory Deductions connected whenever Payroll Master Records
+  // are re-rendered, including after a Payroll Master create/update.
+  populatePayrollStatutoryMasterOptions();
 
   tbody.innerHTML = "";
 
@@ -4102,9 +4590,13 @@ function renderPayrollMasterRecords(records) {
   </td>
 
   <td class="text-nowrap">
-    <!-- EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-         Grade removed from Payroll Master Records table.
-         Salary now follows employee identity directly. -->
+    <!-- DESCRIPTION ITEM 3 - STEP 2A-2
+         Show the saved Payroll Grade / Level so HR can confirm
+         which deduction rule group this payroll master record belongs to. -->
+${escapeHtml(getPayrollMasterGradeDisplay(record))}
+  </td>
+
+  <td class="text-nowrap">
     ${formatCurrency(record.basic_salary, "NGN")}
   </td>
 
@@ -4172,9 +4664,12 @@ function startPayrollMasterEdit(payrollMasterId) {
     state.dom.payrollMasterEmployeeId.value = record.employee_id || "";
   }
 
-  // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-  // Grade removed from Payroll Master edit mode.
-  // Existing saved grade values are ignored by the active UI.
+  // DESCRIPTION ITEM 3 - STEP 2A-4
+  // Edit mode selects the connected grade id, not the old text value.
+  // This keeps Payroll Master Data properly linked to payroll_grade_levels.
+  if (state.dom.payrollMasterGradeLevel) {
+    populatePayrollGradeLevelOptions(record.payroll_grade_level_id || "");
+  }
 
   if (state.dom.payrollMasterBasicSalary) {
     state.dom.payrollMasterBasicSalary.value = record.basic_salary ?? "";
@@ -4248,9 +4743,10 @@ function populatePayrollAllowanceMasterOptions() {
     return;
   }
 
-  // HR SAVE/EDIT BEHAVIOUR - ALLOWANCE COMPONENTS STEP 2
-  // Render newest/most recently updated allowance records first.
-  const recordsToRender = sortPayrollAllowanceRecordsByLatestActivity(records);
+  // DESCRIPTION ITEM 3 - STEP 2B WIRING CLEANUP
+  // These are Payroll Master records, not Allowance records.
+  // Use the Payroll Master sort helper so dropdown order remains correct.
+  const recordsToRender = sortPayrollMasterRecordsByLatestActivity(records);
 
   recordsToRender.forEach((record) => {
     const option = document.createElement("option");
@@ -4260,9 +4756,16 @@ function populatePayrollAllowanceMasterOptions() {
       "Unknown Employee";
 
     option.value = record.id;
-    // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-    // Grade removed from Payroll Master dropdown labels.
-    option.textContent = `${fullName} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+
+    // DESCRIPTION ITEM 3 - STEP 2A-4A
+    // Only show Grade / Level in the Allowance dropdown when a real grade exists.
+    // This prevents awkward labels like "Employee — -- — ₦300,000.00".
+    const gradeLabel = getPayrollMasterGradeDisplay(record);
+    const gradeSegment = gradeLabel && gradeLabel !== "--"
+      ? ` — ${gradeLabel}`
+      : "";
+
+    option.textContent = `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
     select.appendChild(option);
   });
 
@@ -4280,6 +4783,979 @@ function populatePayrollAllowanceMasterOptions() {
   // Keep the payroll employee reference panel synced after rebuilding options.
   renderPayrollSelectedEmployeeReference(select.value);
 }
+
+// DESCRIPTION ITEM 3 - STEP 2A-5
+// Find the selected Payroll Master Record by id.
+// Statutory Deductions use this to inherit the connected Payroll Grade / Level.
+function getPayrollMasterRecordById(payrollMasterRecordId = "") {
+  const id = String(payrollMasterRecordId || "").trim();
+
+  if (!id) return null;
+
+  return (state.payrollMasterRecords || []).find(
+    (record) => String(record.id || "").trim() === id,
+  ) || null;
+}
+
+// DESCRIPTION ITEM 3 - STEP 2A-5
+// Populate the Statutory Deductions Payroll Master dropdown from the same
+// Payroll Master Records already used by Allowance Components.
+// This keeps statutory deductions attached to a real employee payroll profile.
+function populatePayrollStatutoryMasterOptions() {
+  const select = state.dom.payrollStatutoryMasterRecordId;
+  if (!select) return;
+
+  const currentValue = String(select.value || "").trim();
+  const records = Array.isArray(state.payrollMasterRecords)
+    ? [...state.payrollMasterRecords]
+    : [];
+
+  select.innerHTML = `<option value="">Select payroll master record</option>`;
+
+  if (!records.length) {
+    select.innerHTML = `<option value="">Create payroll master record first</option>`;
+    syncPayrollStatutorySelectedMasterContext();
+    return;
+  }
+
+  const recordsToRender = sortPayrollMasterRecordsByLatestActivity(records);
+
+  recordsToRender.forEach((record) => {
+    const option = document.createElement("option");
+
+    const fullName =
+      `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
+      record.work_email ||
+      "Unknown Employee";
+
+    const gradeLabel = getPayrollMasterGradeDisplay(record);
+    const gradeSegment = gradeLabel && gradeLabel !== "--"
+      ? ` — ${gradeLabel}`
+      : "";
+
+    option.value = record.id;
+
+    // DESCRIPTION ITEM 3 - STEP 2A-5
+    // Show employee, grade context, salary, and effective date so HR selects
+    // the correct payroll profile before configuring statutory deductions.
+    option.textContent =
+      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+
+    select.appendChild(option);
+  });
+
+  if (currentValue) {
+    const stillExists = Array.from(select.options).some(
+      (option) => option.value === currentValue,
+    );
+
+    if (stillExists) {
+      select.value = currentValue;
+    }
+  }
+
+  syncPayrollStatutorySelectedMasterContext();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2A-5
+// Keep the read-only Payroll Grade / Level context in sync with the selected
+// Payroll Master Record. This is UI-only wiring; it does not save records yet.
+function syncPayrollStatutorySelectedMasterContext() {
+  const selectedMasterId = String(
+    state.dom.payrollStatutoryMasterRecordId?.value || "",
+  ).trim();
+
+  const selectedMaster = getPayrollMasterRecordById(selectedMasterId);
+  const gradeLabel = selectedMaster ? getPayrollMasterGradeDisplay(selectedMaster) : "";
+  const hasRealGrade = Boolean(gradeLabel && gradeLabel !== "--");
+
+  if (state.dom.payrollStatutoryGradeLevelDisplay) {
+    state.dom.payrollStatutoryGradeLevelDisplay.value = hasRealGrade ? gradeLabel : "";
+    state.dom.payrollStatutoryGradeLevelDisplay.placeholder = selectedMaster
+      ? "No Payroll Grade / Level assigned"
+      : "Select payroll master record first";
+  }
+
+  if (state.dom.payrollStatutoryGradeLevelId) {
+    state.dom.payrollStatutoryGradeLevelId.value =
+      selectedMaster?.payroll_grade_level_id || "";
+  }
+
+  if (state.dom.payrollStatutoryGradeLevelSnapshot) {
+    state.dom.payrollStatutoryGradeLevelSnapshot.value = hasRealGrade ? gradeLabel : "";
+  }
+
+  syncPayrollStatutoryConfigSourceUi();
+
+  // DESCRIPTION ITEM 3 - STEP 2B DUPLICATE CLEANUP
+  // Refresh save readiness once after the selected Payroll Master / grade
+  // context has been synced.
+  updatePayrollStatutorySaveButtonState();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2B
+// Statutory Deduction form readiness check.
+// Rule Based deductions do not require a manual value.
+// Percentage and Amount deductions must have a manual value.
+// Inherited Grade / Rule requires the selected Payroll Master to have a grade.
+function isPayrollStatutoryFormReadyForSubmit() {
+  const method = String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
+  const configSource = String(state.dom.payrollStatutoryConfigSource?.value || "").trim();
+  const deductionValue = String(state.dom.payrollStatutoryDeductionValue?.value || "").trim();
+  const gradeSnapshot = String(state.dom.payrollStatutoryGradeLevelSnapshot?.value || "").trim();
+
+  const hasRequiredFields = [
+    state.dom.payrollStatutoryMasterRecordId,
+    state.dom.payrollStatutoryDeductionType,
+    state.dom.payrollStatutoryCalculationMethod,
+    state.dom.payrollStatutoryEffectiveDate,
+    state.dom.payrollStatutoryConfigSource,
+    state.dom.payrollStatutoryStatus,
+  ].every((field) => Boolean(String(field?.value || "").trim()));
+
+  const manualValueIsValid =
+    method === "RULE_BASED" ||
+    (deductionValue !== "" && Number.isFinite(Number(deductionValue)) && Number(deductionValue) >= 0);
+
+  const inheritedSetupIsValid =
+    configSource !== "GRADE_RULE" || Boolean(gradeSnapshot);
+
+  return hasRequiredFields && manualValueIsValid && inheritedSetupIsValid;
+}
+
+// DESCRIPTION ITEM 3 - STEP 2B
+// Keep the create button grey/disabled until the statutory deduction shell is valid.
+function updatePayrollStatutorySaveButtonState() {
+  setPrimaryActionButtonReadyState(
+    state.dom.savePayrollStatutoryBtn,
+    isPayrollStatutoryFormReadyForSubmit(),
+  );
+}
+
+// DESCRIPTION ITEM 3 - STEP 2B
+// Validate fields before saving and focus the first invalid field.
+// This mirrors existing HR/payroll form behaviour without adding edit logic yet.
+function validatePayrollStatutoryForm() {
+  let isValid = true;
+  let firstInvalidField = null;
+
+  const requiredFields = [
+    state.dom.payrollStatutoryMasterRecordId,
+    state.dom.payrollStatutoryDeductionType,
+    state.dom.payrollStatutoryCalculationMethod,
+    state.dom.payrollStatutoryEffectiveDate,
+    state.dom.payrollStatutoryConfigSource,
+    state.dom.payrollStatutoryStatus,
+  ];
+
+  requiredFields.forEach((field) => {
+    const hasValue = Boolean(String(field?.value || "").trim());
+
+    field?.classList.toggle("is-invalid", !hasValue);
+
+    if (!hasValue) {
+      isValid = false;
+      if (!firstInvalidField) firstInvalidField = field;
+    }
+  });
+
+  const method = String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
+  const deductionValue = String(state.dom.payrollStatutoryDeductionValue?.value || "").trim();
+
+  if (method !== "RULE_BASED") {
+    const numericValue = Number(deductionValue);
+    const hasValidManualValue =
+      deductionValue !== "" && Number.isFinite(numericValue) && numericValue >= 0;
+
+    state.dom.payrollStatutoryDeductionValue?.classList.toggle(
+      "is-invalid",
+      !hasValidManualValue,
+    );
+
+    if (!hasValidManualValue) {
+      isValid = false;
+      if (!firstInvalidField) {
+        firstInvalidField = state.dom.payrollStatutoryDeductionValue;
+      }
+    }
+  }
+
+  const configSource = String(state.dom.payrollStatutoryConfigSource?.value || "").trim();
+  const gradeSnapshot = String(state.dom.payrollStatutoryGradeLevelSnapshot?.value || "").trim();
+
+  if (configSource === "GRADE_RULE" && !gradeSnapshot) {
+    state.dom.payrollStatutoryGradeLevelDisplay?.classList.add("is-invalid");
+    isValid = false;
+
+    if (!firstInvalidField) {
+      firstInvalidField = state.dom.payrollStatutoryMasterRecordId;
+    }
+  }
+
+  if (!isValid && firstInvalidField?.focus) {
+    firstInvalidField.focus();
+  }
+
+  return isValid;
+}
+
+// DESCRIPTION ITEM 3 - STEP 2B
+// Build the insert payload for payroll_statutory_deductions.
+// This stores the real Payroll Master link plus the connected grade id/snapshot.
+// Rule Based deductions intentionally save null deduction_value because the
+// value will be calculated from configured statutory rules later.
+function buildPayrollStatutoryPayload(isEditMode = false) {
+  const method = String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
+  const isRuleBased = method === "RULE_BASED";
+
+  return {
+    payroll_master_record_id:
+      String(state.dom.payrollStatutoryMasterRecordId?.value || "").trim(),
+
+    deduction_type:
+      String(state.dom.payrollStatutoryDeductionType?.value || "").trim(),
+
+    calculation_method: method,
+
+    deduction_value: isRuleBased
+      ? null
+      : Number(state.dom.payrollStatutoryDeductionValue?.value || 0),
+
+    effective_date: state.dom.payrollStatutoryEffectiveDate?.value || null,
+
+    configuration_source:
+      String(state.dom.payrollStatutoryConfigSource?.value || "").trim(),
+
+    payroll_grade_level_id:
+      String(state.dom.payrollStatutoryGradeLevelId?.value || "").trim() || null,
+
+    payroll_grade_level_snapshot:
+      String(state.dom.payrollStatutoryGradeLevelSnapshot?.value || "").trim() || null,
+
+    status:
+      String(state.dom.payrollStatutoryStatus?.value || "Active").trim(),
+
+notes:
+  String(state.dom.payrollStatutoryNotes?.value || "").trim() || null,
+
+// DESCRIPTION ITEM 3 - STEP 2D
+// For updates, preserve the original creator and only change updated_by.
+// For creates, set both created_by and updated_by.
+...(isEditMode ? {} : { created_by: state.currentUser?.id || null }),
+updated_by: state.currentUser?.id || null,
+  };
+}
+
+// DESCRIPTION ITEM 3 - STEP 2B
+// Spinner feedback for Statutory Deduction create action.
+function setPayrollStatutorySaveLoading(isLoading) {
+  const button = state.dom.savePayrollStatutoryBtn;
+  if (!button) return;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Saving Statutory Deduction...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+
+  updatePayrollStatutorySaveButtonState();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2B
+// Reset only the Statutory Deductions shell.
+// This does not touch Payroll Master, Allowance Components, or Payroll Records.
+function resetPayrollStatutoryForm() {
+  // DESCRIPTION ITEM 3 - STEP 2D
+  // Reset returns Statutory Deductions to create mode.
+  state.currentEditingPayrollStatutory = null;
+  state.dom.editingPayrollStatutoryId && (state.dom.editingPayrollStatutoryId.value = "");
+
+  [
+    state.dom.payrollStatutoryMasterRecordId,
+    state.dom.payrollStatutoryDeductionType,
+    state.dom.payrollStatutoryDeductionValue,
+    state.dom.payrollStatutoryEffectiveDate,
+    state.dom.payrollStatutoryNotes,
+  ].forEach((field) => {
+    if (field) {
+      field.value = "";
+      field.classList.remove("is-invalid");
+    }
+  });
+
+  if (state.dom.payrollStatutoryCalculationMethod) {
+    state.dom.payrollStatutoryCalculationMethod.value = "RULE_BASED";
+    state.dom.payrollStatutoryCalculationMethod.classList.remove("is-invalid");
+  }
+
+  if (state.dom.payrollStatutoryConfigSource) {
+    state.dom.payrollStatutoryConfigSource.value = "EMPLOYEE";
+    state.dom.payrollStatutoryConfigSource.classList.remove("is-invalid");
+  }
+
+  if (state.dom.payrollStatutoryStatus) {
+    state.dom.payrollStatutoryStatus.value = "Active";
+    state.dom.payrollStatutoryStatus.classList.remove("is-invalid");
+  }
+
+  if (state.dom.payrollStatutoryGradeLevelId) {
+    state.dom.payrollStatutoryGradeLevelId.value = "";
+  }
+
+  if (state.dom.payrollStatutoryGradeLevelSnapshot) {
+    state.dom.payrollStatutoryGradeLevelSnapshot.value = "";
+  }
+// DESCRIPTION ITEM 3 - STEP 2D
+// Restore create-mode controls after save, clear, or cancel edit.
+if (state.dom.cancelPayrollStatutoryEditBtn) {
+  state.dom.cancelPayrollStatutoryEditBtn.classList.add("d-none");
+}
+
+if (state.dom.savePayrollStatutoryBtn) {
+  state.dom.savePayrollStatutoryBtn.innerHTML = `
+    <i class="bi bi-save me-2"></i>
+    <span id="savePayrollStatutoryBtnText">Create Statutory Deduction</span>
+  `;
+  state.dom.savePayrollStatutoryBtnText = document.getElementById("savePayrollStatutoryBtnText");
+}
+  syncPayrollStatutorySelectedMasterContext();
+  syncPayrollStatutoryCalculationMethodUi();
+  updatePayrollStatutorySaveButtonState();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2D
+// Exit edit mode without touching any saved statutory deduction record.
+function exitPayrollStatutoryEditMode() {
+  resetPayrollStatutoryForm();
+
+  showPageAlert(
+    "info",
+    "Statutory deduction edit was cancelled.",
+  );
+}
+
+// DESCRIPTION ITEM 3 - STEP 2D
+// Find a statutory deduction record from the records already loaded in memory.
+function getPayrollStatutoryDeductionById(statutoryDeductionId = "") {
+  const id = String(statutoryDeductionId || "").trim();
+
+  if (!id) return null;
+
+  return (state.payrollStatutoryDeductions || []).find(
+    (record) => String(record.id || "").trim() === id,
+  ) || null;
+}
+
+// DESCRIPTION ITEM 3 - STEP 2D
+// Load an existing statutory deduction into the same form for maintenance.
+// This prevents HR from creating duplicate rows just to change method/value/status.
+function startPayrollStatutoryEdit(statutoryDeductionId) {
+  const record = getPayrollStatutoryDeductionById(statutoryDeductionId);
+
+  if (!record) {
+    showPageAlert(
+      "warning",
+      "The selected statutory deduction record could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  clearPageAlert();
+
+  state.currentEditingPayrollStatutory = record;
+
+  if (state.dom.editingPayrollStatutoryId) {
+    state.dom.editingPayrollStatutoryId.value = record.id || "";
+  }
+
+  if (state.dom.payrollStatutoryMasterRecordId) {
+    state.dom.payrollStatutoryMasterRecordId.value = record.payroll_master_record_id || "";
+  }
+
+  syncPayrollStatutorySelectedMasterContext();
+
+  if (state.dom.payrollStatutoryDeductionType) {
+    state.dom.payrollStatutoryDeductionType.value = record.deduction_type || "";
+  }
+
+  if (state.dom.payrollStatutoryCalculationMethod) {
+    state.dom.payrollStatutoryCalculationMethod.value = record.calculation_method || "RULE_BASED";
+  }
+
+  syncPayrollStatutoryCalculationMethodUi();
+
+  if (
+    state.dom.payrollStatutoryDeductionValue &&
+    record.calculation_method !== "RULE_BASED"
+  ) {
+    state.dom.payrollStatutoryDeductionValue.value =
+      record.deduction_value ?? "";
+  }
+
+  if (state.dom.payrollStatutoryEffectiveDate) {
+    state.dom.payrollStatutoryEffectiveDate.value = record.effective_date || "";
+  }
+
+  if (state.dom.payrollStatutoryConfigSource) {
+    state.dom.payrollStatutoryConfigSource.value = record.configuration_source || "EMPLOYEE";
+  }
+
+  if (state.dom.payrollStatutoryGradeLevelId) {
+    state.dom.payrollStatutoryGradeLevelId.value = record.payroll_grade_level_id || "";
+  }
+
+  if (state.dom.payrollStatutoryGradeLevelSnapshot) {
+    state.dom.payrollStatutoryGradeLevelSnapshot.value =
+      record.payroll_grade_level_snapshot || "";
+  }
+
+  if (
+    state.dom.payrollStatutoryGradeLevelDisplay &&
+    record.payroll_grade_level_snapshot
+  ) {
+    state.dom.payrollStatutoryGradeLevelDisplay.value =
+      record.payroll_grade_level_snapshot;
+  }
+
+  if (state.dom.payrollStatutoryStatus) {
+    state.dom.payrollStatutoryStatus.value = record.status || "Active";
+  }
+
+  if (state.dom.payrollStatutoryNotes) {
+    state.dom.payrollStatutoryNotes.value = record.notes || "";
+  }
+
+  if (state.dom.cancelPayrollStatutoryEditBtn) {
+    state.dom.cancelPayrollStatutoryEditBtn.classList.remove("d-none");
+  }
+
+  if (state.dom.savePayrollStatutoryBtn) {
+    state.dom.savePayrollStatutoryBtn.innerHTML = `
+      <i class="bi bi-save me-2"></i>
+      <span id="savePayrollStatutoryBtnText">Update Statutory Deduction</span>
+    `;
+    state.dom.savePayrollStatutoryBtnText = document.getElementById("savePayrollStatutoryBtnText");
+  }
+
+  syncPayrollStatutoryConfigSourceUi();
+  updatePayrollStatutorySaveButtonState();
+
+  scrollToDashboardTarget(
+    state.dom.payrollStatutoryCreateForm?.closest(".dashboard-section-card") ||
+    state.dom.payrollStatutoryCreateForm,
+    16,
+  );
+}
+
+// DESCRIPTION ITEM 3 - STEP 2B
+// Create a statutory deduction record in Supabase.
+// Edit/update is deliberately not added in this step.
+async function handlePayrollStatutorySave() {
+  clearPageAlert();
+
+  if (!validatePayrollStatutoryForm()) {
+    showPageAlert(
+      "warning",
+      "Please complete the required statutory deduction fields before saving.",
+    );
+    return;
+  }
+
+  const startedAt = Date.now();
+
+  try {
+    setPayrollStatutorySaveLoading(true);
+    await waitForNextPaint();
+
+const supabase = getSupabaseClient();
+
+const editingId = String(
+  state.currentEditingPayrollStatutory?.id ||
+  state.dom.editingPayrollStatutoryId?.value ||
+  "",
+).trim();
+
+const isEditMode = Boolean(editingId);
+const payload = buildPayrollStatutoryPayload(isEditMode);
+
+let error = null;
+
+if (isEditMode) {
+  // DESCRIPTION ITEM 3 - STEP 2D
+  // Update the selected statutory deduction instead of creating a duplicate.
+  // The unique master/type/effective-date rule remains protected by Supabase.
+  const response = await supabase
+    .from("payroll_statutory_deductions")
+    .update(payload)
+    .eq("id", editingId);
+
+  error = response.error;
+} else {
+  // DESCRIPTION ITEM 3 - STEP 2D
+  // Create mode remains unchanged for new statutory deduction setup records.
+  const response = await supabase
+    .from("payroll_statutory_deductions")
+    .insert(payload);
+
+  error = response.error;
+}
+
+if (error) {
+  throw new Error(error.message || "Statutory deduction could not be saved.");
+}
+
+    // DESCRIPTION ITEM 3 - STEP 2C
+    // Clear records search and refresh the Statutory Deduction Records table
+    // immediately after create, so HR can see the saved setup in the app.
+    if (state.dom.payrollStatutorySearchInput) {
+      state.dom.payrollStatutorySearchInput.value = "";
+    }
+
+await refreshPayrollStatutoryWorkspace();
+
+resetPayrollStatutoryForm();
+
+// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+// After create/update, land on Statutory Deduction Records so HR can
+// immediately verify the saved row without the heading being cut off.
+setTimeout(() => {
+  redirectToPayrollStatutoryRecordsAfterSave();
+}, 250);
+
+showPageAlert(
+  "success",
+  isEditMode
+    ? "Statutory deduction was updated successfully."
+    : "Statutory deduction was created successfully.",
+);
+
+showDashboardToast(
+  "success",
+  isEditMode ? "Statutory deduction updated" : "Statutory deduction created",
+  isEditMode
+    ? "The statutory deduction setup has been updated."
+    : "The statutory deduction setup has been saved against the selected Payroll Master Record.",
+);
+  } catch (error) {
+    console.error("Error saving statutory deduction:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Statutory deduction could not be saved.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Statutory deduction save failed",
+      error.message || "The statutory deduction setup could not be saved.",
+    );
+  } finally {
+    await waitForMinimumLoadingFeedback(startedAt, 600);
+    setPayrollStatutorySaveLoading(false);
+  }
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Refresh button handler for Statutory Deduction Records.
+// It only reloads saved statutory setup records; it does not touch the form.
+async function handlePayrollStatutoryRecordsRefresh() {
+  const button = state.dom.refreshPayrollStatutoryRecordsBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Refreshing...");
+    await waitForNextPaint();
+    await refreshPayrollStatutoryWorkspace();
+    await waitForMinimumLoadingFeedback(startedAt);
+  } finally {
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Render loading row for the Statutory Deduction Records table.
+function renderPayrollStatutoryRecordsLoadingState() {
+  if (!state.dom.payrollStatutoryRecordsTableBody) return;
+
+  state.dom.payrollStatutoryRecordsEmptyState?.classList.add("d-none");
+  state.dom.payrollStatutoryRecordsTableWrapper?.classList.remove("d-none");
+
+  state.dom.payrollStatutoryRecordsTableBody.innerHTML = `
+    <tr>
+<td colspan="9" class="text-center text-secondary py-4">
+  Loading statutory deduction records.
+</td>
+    </tr>
+  `;
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Sort saved statutory deduction records with newest or recently updated first.
+function sortPayrollStatutoryRecordsByLatestActivity(records = []) {
+  return [...records].sort((a, b) => {
+    const aTime = new Date(a.updated_at || a.created_at || a.effective_date || 0).getTime() || 0;
+    const bTime = new Date(b.updated_at || b.created_at || b.effective_date || 0).getTime() || 0;
+
+    if (bTime !== aTime) {
+      return bTime - aTime;
+    }
+
+    const aEffective = new Date(a.effective_date || 0).getTime() || 0;
+    const bEffective = new Date(b.effective_date || 0).getTime() || 0;
+
+    return bEffective - aEffective;
+  });
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Resolve HR-facing Payroll Master context for a statutory deduction row.
+// We use already-loaded Payroll Master Records instead of adding another
+// database relationship query, which avoids FK/schema-cache issues.
+function getPayrollStatutoryMasterContext(record = {}) {
+  const master = getPayrollMasterRecordById(record.payroll_master_record_id) || {};
+
+  const fullName =
+    `${master.first_name || ""} ${master.last_name || ""}`.trim() ||
+    master.work_email ||
+    "Unknown Employee";
+
+  return {
+    fullName,
+    workEmail: master.work_email || "",
+    gradeLabel:
+      getPayrollMasterGradeDisplay(master) !== "--"
+        ? getPayrollMasterGradeDisplay(master)
+        : String(record.payroll_grade_level_snapshot || "").trim(),
+    basicSalary: master.basic_salary,
+    masterEffectiveDate: master.salary_effective_date || "",
+  };
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Convert saved deduction type codes into readable HR labels.
+function formatPayrollStatutoryDeductionType(value = "") {
+  const labels = {
+    PAYE: "PAYE",
+    EMPLOYEE_PENSION: "Employee Pension",
+    EMPLOYER_PENSION: "Employer Pension",
+    NHF: "NHF",
+  };
+
+  return labels[value] || formatStatusLabel(value || "--");
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Convert calculation method codes into readable HR labels.
+function formatPayrollStatutoryCalculationMethod(value = "") {
+  const labels = {
+    RULE_BASED: "Rule Based",
+    PERCENTAGE: "Percentage",
+    AMOUNT: "Amount",
+  };
+
+  return labels[value] || formatStatusLabel(value || "--");
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Convert configuration source codes into readable HR labels.
+function formatPayrollStatutoryConfigSource(value = "") {
+  const labels = {
+    EMPLOYEE: "Employee Specific",
+
+    // DESCRIPTION ITEM 3 - STEP 2C
+    // Keep source wording aligned with the connected Payroll Grade / Level model.
+    // Statutory deductions inherit from Payroll Grade / Rule, not a loose grade field.
+    GRADE_RULE: "Inherited Payroll Grade / Rule",
+  };
+
+  return labels[value] || formatStatusLabel(value || "--");
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Format the saved deduction value based on the selected calculation method.
+// Rule Based records correctly show no manual value.
+function formatPayrollStatutoryDeductionValue(record = {}) {
+  const method = String(record.calculation_method || "").trim();
+  const rawValue = record.deduction_value;
+  const numericValue = Number(rawValue);
+
+  if (method === "RULE_BASED") {
+    return "Rule Based";
+  }
+
+  if (rawValue === null || rawValue === undefined || rawValue === "" || !Number.isFinite(numericValue)) {
+    return "--";
+  }
+
+  if (method === "PERCENTAGE") {
+    return `${numericValue}%`;
+  }
+
+  if (method === "AMOUNT") {
+    return formatCurrency(numericValue, "NGN");
+  }
+
+  return String(rawValue);
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Load saved statutory deduction setup records from Supabase.
+// This reads the statutory table only, then enriches display using
+// already-loaded Payroll Master Records.
+async function loadPayrollStatutoryDeductions() {
+  const supabase = getSupabaseClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("payroll_statutory_deductions")
+      .select("*")
+      .order("effective_date", { ascending: false })
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    state.payrollStatutoryDeductions = Array.isArray(data) ? data : [];
+    applyPayrollStatutorySearch();
+  } catch (error) {
+    console.error("Error loading statutory deductions:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Statutory deduction records could not be loaded.",
+    );
+
+    state.payrollStatutoryDeductions = [];
+    state.filteredPayrollStatutoryDeductions = [];
+    renderPayrollStatutoryRecords([]);
+  }
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Workspace refresh wrapper for the Statutory Deduction Records table.
+async function refreshPayrollStatutoryWorkspace() {
+  renderPayrollStatutoryRecordsLoadingState();
+  await loadPayrollStatutoryDeductions();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Client-side search for saved statutory deduction setup records.
+function applyPayrollStatutorySearch() {
+  const searchTerm = normalizeText(state.dom.payrollStatutorySearchInput?.value || "");
+
+  let rows = [...state.payrollStatutoryDeductions];
+
+  if (searchTerm) {
+    rows = rows.filter((record) => {
+      const masterContext = getPayrollStatutoryMasterContext(record);
+
+      const searchableText = [
+        masterContext.fullName,
+        masterContext.workEmail,
+        masterContext.gradeLabel,
+        formatPayrollStatutoryDeductionType(record.deduction_type),
+        formatPayrollStatutoryCalculationMethod(record.calculation_method),
+        formatPayrollStatutoryConfigSource(record.configuration_source),
+        record.effective_date,
+        record.status,
+        record.notes,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(searchTerm);
+    });
+  }
+
+  state.filteredPayrollStatutoryDeductions = rows;
+  renderPayrollStatutoryRecords(rows);
+}
+
+// DESCRIPTION ITEM 3 - STEP 2C
+// Render saved statutory deduction setup records in the HR dashboard.
+// This is view-only; edit action will be added in a later controlled step.
+function renderPayrollStatutoryRecords(records = []) {
+  const tbody = state.dom.payrollStatutoryRecordsTableBody;
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  if (!records.length) {
+    state.dom.payrollStatutoryRecordsEmptyState?.classList.remove("d-none");
+    state.dom.payrollStatutoryRecordsTableWrapper?.classList.add("d-none");
+    return;
+  }
+
+  state.dom.payrollStatutoryRecordsEmptyState?.classList.add("d-none");
+  state.dom.payrollStatutoryRecordsTableWrapper?.classList.remove("d-none");
+
+  const recordsToRender = sortPayrollStatutoryRecordsByLatestActivity(records);
+
+recordsToRender.forEach((record) => {
+  const masterContext = getPayrollStatutoryMasterContext(record);
+
+  // DESCRIPTION ITEM 3 - STEP 2D
+  // Safe id used by the inline Edit button for this statutory deduction row.
+  const safeStatutoryDeductionId = String(record.id || "").replaceAll("'", "\\'");
+    const gradeLine = masterContext.gradeLabel
+      ? `<div class="text-secondary small">${escapeHtml(masterContext.gradeLabel)}</div>`
+      : "";
+
+    const salaryLine = Number.isFinite(Number(masterContext.basicSalary))
+      ? `<div class="text-secondary small">${formatCurrency(masterContext.basicSalary, "NGN")} • Effective: ${formatDate(masterContext.masterEffectiveDate)}</div>`
+      : "";
+
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>
+        <div class="fw-semibold">${escapeHtml(masterContext.fullName)}</div>
+        ${gradeLine}
+        ${salaryLine}
+        <div class="text-secondary small text-break">
+          ${escapeHtml(masterContext.workEmail || "--")}
+        </div>
+      </td>
+
+      <td>${escapeHtml(formatPayrollStatutoryDeductionType(record.deduction_type))}</td>
+
+      <td>${escapeHtml(formatPayrollStatutoryCalculationMethod(record.calculation_method))}</td>
+
+      <td class="text-nowrap">
+        ${escapeHtml(formatPayrollStatutoryDeductionValue(record))}
+      </td>
+
+      <td>${escapeHtml(formatPayrollStatutoryConfigSource(record.configuration_source))}</td>
+
+      <td class="text-nowrap">${formatDate(record.effective_date)}</td>
+
+      <td>
+        <span class="badge ${getStatusBadgeClass(record.status)}">
+          ${escapeHtml(formatStatusLabel(record.status))}
+        </span>
+      </td>
+
+<td class="text-nowrap">
+  ${formatDate(record.updated_at || record.created_at)}
+</td>
+
+<td class="text-center">
+  <!-- DESCRIPTION ITEM 3 - STEP 2D
+       Edit updates the existing statutory deduction record instead of creating
+       a duplicate master/type/effective-date setup row. -->
+  <button
+    type="button"
+    class="btn btn-sm btn-outline-primary"
+    title="Edit statutory deduction"
+    aria-label="Edit statutory deduction"
+    onclick="window.hrEditPayrollStatutoryRecord('${safeStatutoryDeductionId}')"
+  >
+    <i class="bi bi-pencil-square"></i>
+  </button>
+</td>
+    `;
+
+    tbody.appendChild(row);
+  });
+}
+
+// DESCRIPTION ITEM 3 - STEP 2A-5
+// Make Calculation Method control Deduction Value behaviour.
+// HR/payroll standard:
+// - Rule Based: value is calculated later from configured statutory rules.
+// - Percentage: HR must enter a percentage value.
+// - Amount: HR must enter a fixed currency amount.
+function syncPayrollStatutoryCalculationMethodUi() {
+  const method = String(
+    state.dom.payrollStatutoryCalculationMethod?.value || "RULE_BASED",
+  ).trim();
+
+  const valueInput = state.dom.payrollStatutoryDeductionValue;
+  const requiredMarker = state.dom.payrollStatutoryDeductionValueRequiredMarker;
+  const helpText = state.dom.payrollStatutoryDeductionValueHelp;
+
+  if (!valueInput) return;
+
+  const isRuleBased = method === "RULE_BASED";
+  const isPercentage = method === "PERCENTAGE";
+  const isAmount = method === "AMOUNT";
+
+  valueInput.readOnly = isRuleBased;
+  valueInput.required = !isRuleBased;
+  valueInput.classList.toggle("bg-light", isRuleBased);
+
+  requiredMarker?.classList.toggle("d-none", isRuleBased);
+
+  if (isRuleBased) {
+    valueInput.value = "";
+    valueInput.placeholder = "Calculated from statutory rule";
+    valueInput.classList.remove("is-invalid");
+
+    if (helpText) {
+      helpText.textContent =
+        "No manual value is required for rule-based statutory deductions.";
+    }
+
+    return;
+  }
+
+  if (isPercentage) {
+    valueInput.placeholder = "Enter percentage, e.g. 8";
+
+    if (helpText) {
+      helpText.textContent =
+        "Enter the deduction percentage only. Example: enter 8 for 8%.";
+    }
+
+    return;
+  }
+
+  if (isAmount) {
+    valueInput.placeholder = "Enter fixed amount, e.g. 10000";
+
+    if (helpText) {
+      helpText.textContent =
+        "Enter the fixed deduction amount for this payroll master record.";
+    }
+  }
+}
+
+// DESCRIPTION ITEM 3 - STEP 2A-5
+// If HR chooses inherited grade/rule setup, the selected Payroll Master Record
+// must already have a Payroll Grade / Level. This gives immediate UI feedback
+// without blocking or saving anything in this shell step.
+function syncPayrollStatutoryConfigSourceUi() {
+  const source = String(state.dom.payrollStatutoryConfigSource?.value || "").trim();
+  const gradeValue = String(state.dom.payrollStatutoryGradeLevelSnapshot?.value || "").trim();
+  const isInherited = source === "GRADE_RULE";
+  const hasGrade = Boolean(gradeValue);
+
+  state.dom.payrollStatutoryGradeLevelDisplay?.classList.toggle(
+    "is-invalid",
+    isInherited && !hasGrade,
+  );
+
+  if (state.dom.payrollStatutoryGradeLevelHelp) {
+    state.dom.payrollStatutoryGradeLevelHelp.textContent =
+      isInherited && !hasGrade
+        ? "Select a Payroll Master Record with a Payroll Grade / Level before using inherited rule setup."
+        : "This is pulled from the selected Payroll Master Record.";
+  }
+}
+
 function applyPayrollMasterSearch() {
   const searchTerm = normalizeText(state.dom.payrollMasterSearchInput?.value || "");
 
@@ -4287,12 +5763,14 @@ function applyPayrollMasterSearch() {
 
   if (searchTerm) {
     rows = rows.filter((record) => {
-      // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-      // Grade removed from Payroll Master search.
+      // DESCRIPTION ITEM 3 - STEP 2A-2
+      // Include Payroll Grade / Level in Payroll Master search so HR can
+      // filter records by grade/level when maintaining payroll setup.
       const searchableText = [
         record.first_name,
         record.last_name,
         record.work_email,
+        getPayrollMasterGradeDisplay(record),
         record.pay_cycle,
         record.payroll_status,
         record.salary_effective_date,
@@ -4350,6 +5828,11 @@ async function refreshPayrollAllowanceWorkspace() {
 
   // Keep the parent payroll master dropdown in sync.
   populatePayrollAllowanceMasterOptions();
+
+  // DESCRIPTION ITEM 3 - STEP 2A-5
+  // Keep Statutory Deductions connected to the latest Payroll Master Records.
+  // This makes the statutory shell use the same source payroll profiles as allowances.
+  populatePayrollStatutoryMasterOptions();
 
   // Load allowance rows from the database, then apply search.
   await loadPayrollAllowanceComponents();
@@ -5624,6 +7107,11 @@ function continueRunPayrollToPayrollWorkspace() {
   // Prepare the batch pay period controls before showing the review table.
   populateBatchPayrollPayCycleOptions();
 
+  // DESCRIPTION ITEM 3 - STEP 2E-2A
+  // Batch statutory deductions are effective-dated, so the batch pay date
+  // must be set before prepared payroll rows are calculated.
+  updateBatchPayDateFromPayCycle();
+
   renderBatchPayrollReviewTable(selectedEmployeeIds);
 
   // BATCH PAYROLL DEFAULT - STEP 2
@@ -6233,23 +7721,11 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     getBatchPayrollCsvValue(row, headerMap, ["BHT"]),
   ) || basicPay + housingAllowance + transportAllowance;
 
-  const payeTax = parseBatchPayrollCsvAmount(
-    getBatchPayrollCsvValue(row, headerMap, ["PAYE (Tax)", "PAYE Tax"]),
-  );
-
-  const employeePension = parseBatchPayrollCsvAmount(
-    getBatchPayrollCsvValue(row, headerMap, [
-      "Employee Pension Contribution",
-    ]),
-  );
-
-  const employerPension = parseBatchPayrollCsvAmount(
-    getBatchPayrollCsvValue(row, headerMap, [
-      "Employer Pension Contribution",
-    ]),
-  );
-
-  const netSalaryBeforeLogistics = parseBatchPayrollCsvAmount(
+  // DESCRIPTION ITEM 3 - STEP 2E-2B
+// PAYE and Pension values in the imported CSV are no longer trusted as
+// payroll deductions. Deductions must come from active Statutory Deduction
+// setup so manual payroll, Run Payroll batch, and CSV batch behave the same.
+const netSalaryBeforeLogistics = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["NET SALARY", "Net Salary"]),
   );
 
@@ -6267,19 +7743,54 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     getBatchPayrollCsvValue(row, headerMap, ["Data & Airtime"]),
   );
 
-  // BATCH PAYROLL CSV IMPORT - STEP 5C
-  // Final gross/net for CSV batch payroll should preserve optional extra earnings.
-  const grossPay =
-    newBaseSalary +
-    bonus +
-    overtime +
-    logisticsAllowance +
-    dataAirtimeAllowance;
+// BATCH PAYROLL CSV IMPORT - STEP 5C
+// Final gross/net for CSV batch payroll should preserve optional extra earnings.
+const grossPay =
+  newBaseSalary +
+  bonus +
+  overtime +
+  logisticsAllowance +
+  dataAirtimeAllowance;
 
-  const totalDeductions = payeTax + employeePension;
-  const netPay = monthlySalaryPlusLogistics + dataAirtimeAllowance;
+// DESCRIPTION ITEM 3 - STEP 2E-2B
+// Recalculate imported CSV deductions from active statutory setup.
+// This keeps CSV batch aligned with manual payroll and Run Payroll batch.
+// Employer Pension is stored separately and is not part of employee Total Deductions.
+const statutoryTotals = calculateBatchStatutoryDeductionTotals({
+  payrollMasterRecordId: activePayrollMaster?.id || "",
+  payrollDate: getCurrentBatchPayrollCalculationDate(),
 
-  return {
+  basicPay,
+  housingAllowance,
+  transportAllowance,
+  utilityAllowance,
+  otherAllowance,
+  medicalAllowance: 0,
+  bonus,
+  overtime,
+  logisticsAllowance,
+  dataAirtimeAllowance,
+
+  bht,
+  grossPay,
+});
+
+const payeTax = statutoryTotals.payeTax;
+const employeePension = statutoryTotals.employeePension;
+const employerPension = statutoryTotals.employerPension;
+const otherDeductions = statutoryTotals.otherDeductions;
+const totalDeductions = statutoryTotals.totalDeductions;
+const netPay = statutoryTotals.netPay;
+
+// DESCRIPTION ITEM 3 - STEP 2E-2B
+// Keep this field consistent with the recalculated net pay instead of
+// preserving stale CSV net values after statutory deductions are applied.
+const recalculatedMonthlySalaryPlusLogistics =
+  logisticsAllowance > 0 || monthlySalaryPlusLogistics > 0
+    ? Math.max(netPay - dataAirtimeAllowance, 0)
+    : null;
+
+return {
     employee_id: employee.id,
     payroll_master_record_id: activePayrollMaster?.id || null,
     pay_cycle: String(state.dom.batchPayrollPayCycle?.value || "").trim(),
@@ -6306,15 +7817,23 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     bonus,
     overtime,
 
-    logistics_allowance: logisticsAllowance || null,
-    data_airtime_allowance: dataAirtimeAllowance || null,
-    monthly_salary_plus_logistics: monthlySalaryPlusLogistics || null,
+logistics_allowance: logisticsAllowance || null,
+data_airtime_allowance: dataAirtimeAllowance || null,
 
-    employee_pension: employeePension,
-    employer_pension: employerPension,
-    paye_tax: payeTax,
-    wht_tax: 0,
-    other_deductions: 0,
+// DESCRIPTION ITEM 3 - STEP 2E-2B
+// Store the recalculated monthly salary plus logistics after statutory
+// deductions have been applied.
+monthly_salary_plus_logistics: recalculatedMonthlySalaryPlusLogistics,
+
+employee_pension: employeePension,
+employer_pension: employerPension,
+paye_tax: payeTax,
+wht_tax: 0,
+
+// DESCRIPTION ITEM 3 - STEP 2E-2B
+// NHF and future statutory deductions without their own payroll column
+// are saved under Other Deductions, same as manual payroll.
+other_deductions: otherDeductions,
 
     bht,
     gross_pay: grossPay,
@@ -6395,9 +7914,12 @@ function renderImportedBatchPayrollCsvRows(preparedRows = [], skippedRows = []) 
         <div class="text-secondary small">
           CSV Base: ${formatCurrency(preparedRow.base_salary, "NGN")}
         </div>
-        <div class="text-secondary small">
-          CSV Net Pay: ${formatCurrency(preparedRow.net_pay, "NGN")}
-        </div>
+<div class="text-secondary small">
+  <!-- DESCRIPTION ITEM 3 - STEP 2E-2B
+       Imported CSV rows are recalculated using active statutory deductions,
+       so this is now the prepared/system net pay, not the raw CSV net pay. -->
+  Prepared Net Pay: ${formatCurrency(preparedRow.net_pay, "NGN")}
+</div>
       </td>
 
       <td>
@@ -6500,11 +8022,18 @@ async function handleBatchPayrollCsvImport() {
       .slice(headerRowIndex + 1)
       .filter((row) => row.some((cell) => String(cell || "").trim()));
 
-    const preparedRows = [];
-    const skippedRows = [];
+const preparedRows = [];
+const skippedRows = [];
 
-    dataRows.forEach((row) => {
-      const preparedRow = buildBatchPayrollPreparedRowFromCsv(row, headerMap);
+// DESCRIPTION ITEM 3 - STEP 2E-2B
+// CSV import must set the batch pay period/date before preparing rows.
+// Statutory deductions are effective-dated, so each imported row must be
+// calculated against the selected Batch Pay Date.
+populateBatchPayrollPayCycleOptions();
+updateBatchPayDateFromPayCycle();
+
+dataRows.forEach((row) => {
+  const preparedRow = buildBatchPayrollPreparedRowFromCsv(row, headerMap);
 
       if (preparedRow.skipped) {
         skippedRows.push(preparedRow);
@@ -6523,12 +8052,10 @@ async function handleBatchPayrollCsvImport() {
     );
 
     renderImportedBatchPayrollCsvRows(preparedRows, skippedRows);
-    // BATCH PAYROLL CSV IMPORT - STEP 5F
-    // CSV import opens the Batch Payroll Review panel directly.
-    // Rebuild the batch Pay Period dropdown here so HR can select the payroll month
-    // without needing to use the Run Payroll flow first.
-    populateBatchPayrollPayCycleOptions();
-    updateBatchPayDateFromPayCycle();
+// DESCRIPTION ITEM 3 - STEP 2E-2B
+// Batch Pay Period/Date was already rebuilt before CSV rows were prepared,
+// so do not rebuild it again here. Rebuilding after preparation can make
+// statutory effective-date calculations use a stale date.
 
     // BATCH PAYROLL CSV IMPORT - STEP 5
     // CSV import is a batch flow, so hide the manual single payroll form
@@ -7423,6 +8950,12 @@ function renderHrProfile(profile, user) {
   }
 
   void loadHrProfileImages(profile?.profile_image_path, initials);
+
+  // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+  // After profile data is rendered, store the clean baseline and keep
+  // Save Profile Changes grey until HR edits an editable field.
+  state.currentProfileEditableBaseline = getHrProfileEditableSnapshot();
+  updateHrProfileSaveButtonState();
 }
 
 async function loadHrProfileImages(profileImagePath, initials) {
@@ -7469,6 +9002,43 @@ async function loadHrProfileImages(profileImagePath, initials) {
   } catch (error) {
     console.error("Error lazy-loading HR profile image:", error);
   }
+}
+
+// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+// Capture only editable My Profile fields.
+function getHrProfileEditableSnapshot() {
+  return {
+    full_name: String(state.dom.hrProfileFullName?.value || "").trim(),
+    department: String(state.dom.hrProfileDepartment?.value || "").trim(),
+  };
+}
+
+// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+// Save Profile Changes should only activate when HR changes profile values.
+function hasHrProfileEditableChanges() {
+  const currentSnapshot = getHrProfileEditableSnapshot();
+  const baselineSnapshot = state.currentProfileEditableBaseline || {};
+
+  return Object.keys(currentSnapshot).some(
+    (key) => currentSnapshot[key] !== String(baselineSnapshot[key] || ""),
+  );
+}
+
+// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+// Full Name remains required; Department is optional.
+function isHrProfileFormReadyForSubmit() {
+  const hasFullName = Boolean(String(state.dom.hrProfileFullName?.value || "").trim());
+
+  return hasFullName && hasHrProfileEditableChanges();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+// Keep My Profile button behaviour aligned with the rest of the HR/payroll system.
+function updateHrProfileSaveButtonState() {
+  setPrimaryActionButtonReadyState(
+    state.dom.saveHrProfileBtn,
+    isHrProfileFormReadyForSubmit(),
+  );
 }
 
 async function saveHrOwnProfile() {
@@ -7521,18 +9091,27 @@ function setProfileSaveLoading(isLoading) {
   const button = state.dom.saveHrProfileBtn;
   if (!button) return;
 
-  button.disabled = isLoading;
-
   if (isLoading) {
-    button.dataset.originalHtml = button.innerHTML;
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       Saving...
     `;
-  } else if (button.dataset.originalHtml) {
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
     delete button.dataset.originalHtml;
   }
+
+  // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+  // After loading ends, recalculate whether profile changes still exist.
+  updateHrProfileSaveButtonState();
 }
 
 function setProfileImageSaveLoading(isLoading) {
@@ -9471,6 +11050,194 @@ function updateSubmitBatchPayrollButtonState() {
   button.disabled = !(hasPreparedRows && hasPayCycle && hasPayDate);
 }
 
+// DESCRIPTION ITEM 3 - STEP 2E-2A
+// Rebuild the Run Payroll batch review when the batch pay period/date changes.
+// This is only for selected-employees batch mode. It does not touch CSV import rows.
+function refreshRunPayrollBatchReviewForSelectedEmployees() {
+  const selectedEmployeeIds = Array.from(state.selectedEmployeesForPayroll || [])
+    .map((employeeId) => String(employeeId || "").trim())
+    .filter(Boolean);
+
+  if (!state.isRunPayrollSelectionMode || !selectedEmployeeIds.length) {
+    updateSubmitBatchPayrollButtonState();
+    return;
+  }
+
+  renderBatchPayrollReviewTable(selectedEmployeeIds);
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-2A
+// Batch payroll uses its own pay date control. That date decides whether
+// an active statutory deduction setup applies to each selected employee.
+function getCurrentBatchPayrollCalculationDate() {
+  return String(state.dom.batchPayrollPayDate?.value || "").trim() ||
+    new Date().toISOString().slice(0, 10);
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-2A
+// Return the latest active statutory deduction per type for one Payroll Master.
+// A statutory deduction only applies when effective_date <= Batch Pay Date.
+function getActiveStatutoryDeductionsForBatchPayrollMaster(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  const masterId = String(payrollMasterRecordId || "").trim();
+  if (!masterId) return [];
+
+  const payrollDateTime = parsePayrollEffectiveDateToTime(
+    payrollDateValue || getCurrentBatchPayrollCalculationDate(),
+  );
+
+  if (!Number.isFinite(payrollDateTime)) return [];
+
+  const validRows = (state.payrollStatutoryDeductions || []).filter((record) => {
+    const isSamePayrollMaster =
+      String(record.payroll_master_record_id || "").trim() === masterId;
+
+    const isActive = normalizeText(record.status) === "active";
+    const effectiveDateTime = parsePayrollEffectiveDateToTime(record.effective_date);
+
+    return (
+      isSamePayrollMaster &&
+      isActive &&
+      Number.isFinite(effectiveDateTime) &&
+      effectiveDateTime <= payrollDateTime
+    );
+  });
+
+  const latestByType = new Map();
+
+  validRows.forEach((record) => {
+    const type = String(record.deduction_type || "").trim();
+    if (!type) return;
+
+    const existing = latestByType.get(type);
+    const recordTime = parsePayrollEffectiveDateToTime(record.effective_date);
+    const existingTime = parsePayrollEffectiveDateToTime(existing?.effective_date);
+
+    if (!existing || recordTime >= existingTime) {
+      latestByType.set(type, record);
+    }
+  });
+
+  return Array.from(latestByType.values());
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-2A
+// Resolve a batch statutory deduction amount from its method.
+// Rule Based uses the same standard payroll formula as manual payroll.
+// Percentage and Amount use the saved statutory deduction configuration.
+function calculateBatchStatutoryDeductionAmount(record = {}, context = {}) {
+  const type = String(record.deduction_type || "").trim();
+  const method = String(record.calculation_method || "").trim();
+  const configuredValue = Number(record.deduction_value || 0);
+
+  if (method === "AMOUNT") {
+    return Number.isFinite(configuredValue) ? configuredValue : 0;
+  }
+
+  if (method === "PERCENTAGE") {
+    let baseAmount = Number(context.grossPay || 0);
+
+    if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
+      baseAmount = Number(context.bht || 0);
+    }
+
+    if (type === "NHF") {
+      baseAmount = Number(context.basicPay || 0);
+    }
+
+    return Number.isFinite(configuredValue)
+      ? baseAmount * (configuredValue / 100)
+      : 0;
+  }
+
+  if (type === "PAYE") {
+    return calculateNta2025MonthlyPayeTaxFromComponents({
+      basicPay: context.basicPay,
+      housingAllowance: context.housingAllowance,
+      transportAllowance: context.transportAllowance,
+      utilityAllowance: context.utilityAllowance,
+      otherAllowance: context.otherAllowance,
+      medicalAllowance: context.medicalAllowance,
+      bonus: context.bonus,
+      overtime: context.overtime,
+      logisticsAllowance: context.logisticsAllowance,
+      dataAirtimeAllowance: context.dataAirtimeAllowance,
+    });
+  }
+
+  if (type === "EMPLOYEE_PENSION") {
+    return Number(context.bht || 0) * 0.08;
+  }
+
+  if (type === "EMPLOYER_PENSION") {
+    return Number(context.bht || 0) * 0.1;
+  }
+
+  if (type === "NHF") {
+    return Number(context.basicPay || 0) * 0.025;
+  }
+
+  return 0;
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-2A
+// Calculate statutory-controlled deduction totals for one prepared batch row.
+// If no active statutory deduction exists for the batch pay date, statutory
+// values remain zero, matching the manual payroll behaviour from Step 2E-1.
+function calculateBatchStatutoryDeductionTotals(context = {}) {
+  const activeDeductions = getActiveStatutoryDeductionsForBatchPayrollMaster(
+    context.payrollMasterRecordId,
+    context.payrollDate,
+  );
+
+  let payeTax = 0;
+  let employeePension = 0;
+  let employerPension = 0;
+  let otherDeductions = 0;
+
+  activeDeductions.forEach((record) => {
+    const type = String(record.deduction_type || "").trim();
+    const amount = calculateBatchStatutoryDeductionAmount(record, context);
+
+    if (!Number.isFinite(amount) || amount < 0) return;
+
+    if (type === "PAYE") {
+      payeTax = amount;
+      return;
+    }
+
+    if (type === "EMPLOYEE_PENSION") {
+      employeePension = amount;
+      return;
+    }
+
+    if (type === "EMPLOYER_PENSION") {
+      employerPension = amount;
+      return;
+    }
+
+    // NHF and future statutory deductions without a dedicated payroll field
+    // are grouped under Other Deductions, same as manual payroll.
+    otherDeductions += amount;
+  });
+
+  const whtTax = 0;
+  const totalDeductions = payeTax + whtTax + employeePension + otherDeductions;
+  const netPay = Number(context.grossPay || 0) - totalDeductions;
+
+  return {
+    payeTax,
+    whtTax,
+    employeePension,
+    employerPension,
+    otherDeductions,
+    totalDeductions,
+    netPay,
+  };
+}
+
 // BATCH PAYROLL CSV IMPORT - STEP 5C
 // Prepare one batch payroll row directly from the latest HR/payroll setup.
 // This route is used by Run Payroll selected employees, so it must also
@@ -9510,8 +11277,6 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
   const medicalAllowance = extras.medicalAllowance;
 
   const bht = basicPay + housingAllowance + transportAllowance;
-  const employeePension = bht * 0.08;
-  const employerPension = bht * 0.1;
 
   const grossPay =
     basicPay +
@@ -9525,7 +11290,15 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     logisticsAllowance +
     dataAirtimeAllowance;
 
-  const payeTax = calculateNta2025MonthlyPayeTaxFromComponents({
+  // DESCRIPTION ITEM 3 - STEP 2E-2A
+  // Batch payroll deductions now come from active statutory deduction setup,
+  // using the selected Batch Pay Date as the effective-date cut-off.
+  // Employer Pension is calculated/stored separately and is not part of
+  // employee Total Deductions.
+  const statutoryTotals = calculateBatchStatutoryDeductionTotals({
+    payrollMasterRecordId: activePayrollMaster.id,
+    payrollDate: getCurrentBatchPayrollCalculationDate(),
+
     basicPay,
     housingAllowance,
     transportAllowance,
@@ -9536,13 +11309,18 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
     overtime,
     logisticsAllowance,
     dataAirtimeAllowance,
+
+    bht,
+    grossPay,
   });
 
-  const whtTax = 0;
-  const otherDeductions = 0;
-
-  const totalDeductions = employeePension + payeTax + whtTax + otherDeductions;
-  const netPay = grossPay - totalDeductions;
+  const payeTax = statutoryTotals.payeTax;
+  const whtTax = statutoryTotals.whtTax;
+  const employeePension = statutoryTotals.employeePension;
+  const employerPension = statutoryTotals.employerPension;
+  const otherDeductions = statutoryTotals.otherDeductions;
+  const totalDeductions = statutoryTotals.totalDeductions;
+  const netPay = statutoryTotals.netPay;
 
   return {
     employee_id: employee.id,
@@ -12183,6 +13961,12 @@ async function loadPayrollMasterRecords() {
           first_name,
           last_name,
           work_email
+        ),
+        payroll_grade_levels (
+          id,
+          grade_code,
+          grade_name,
+          status
         )
       `)
       .order("salary_effective_date", { ascending: false })
@@ -14189,27 +15973,404 @@ function calculatePayrollGrossPay() {
   );
 }
 
-function calculatePayrollTotalDeductions() {
-  // EMERGENCY PAYROLL CALCULATION REPAIR
-  // Employee Pension is an employee deduction.
-  // Employer Pension is an employer cost, so it is not deducted from Net Pay.
-  //
-  // If the visible Employee Pension field has not refreshed yet but the
-  // Regular payroll model is selected, fall back to the calculated employee
-  // pension value so Total Deductions does not stay at 0.00 incorrectly.
-  const employeePensionValue = toNullableNumber(
-    state.dom.payrollEmployeePension?.value,
+// DESCRIPTION ITEM 3 - STEP 2E-1
+// Get the payroll date used to decide whether a statutory deduction is active.
+// The payroll pay date is preferred because statutory deductions are effective-dated.
+function getCurrentPayrollCalculationDate() {
+  const payDateValue = String(state.dom.payrollPayDate?.value || "").trim();
+
+  if (payDateValue) {
+    return payDateValue;
+  }
+
+  return new Date().toISOString().slice(0, 10);
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1
+// Return active statutory deductions for the selected employee's active Payroll Master.
+// If multiple records exist for the same deduction type, use the latest effective
+// record that is valid for the payroll date.
+function getActiveStatutoryDeductionsForCurrentPayroll() {
+  const employeeId = String(state.dom.payrollEmployeeId?.value || "").trim();
+
+  if (!employeeId) return [];
+
+  const activePayrollMaster =
+    getLatestActivePayrollMasterProfileForEmployee(employeeId);
+
+  if (!activePayrollMaster?.id) return [];
+
+  const payrollDate = new Date(getCurrentPayrollCalculationDate()).getTime();
+
+  const validRows = (state.payrollStatutoryDeductions || []).filter((record) => {
+    const isSameMaster =
+      String(record.payroll_master_record_id || "").trim() ===
+      String(activePayrollMaster.id || "").trim();
+
+    const isActive = normalizeText(record.status) === "active";
+    const effectiveTime = new Date(record.effective_date || 0).getTime();
+    const isEffective =
+      Number.isFinite(effectiveTime) &&
+      Number.isFinite(payrollDate) &&
+      effectiveTime <= payrollDate;
+
+    return isSameMaster && isActive && isEffective;
+  });
+
+  const latestByType = new Map();
+
+  validRows.forEach((record) => {
+    const type = String(record.deduction_type || "").trim();
+    if (!type) return;
+
+    const existing = latestByType.get(type);
+    const recordTime = new Date(record.effective_date || 0).getTime() || 0;
+    const existingTime = new Date(existing?.effective_date || 0).getTime() || 0;
+
+    if (!existing || recordTime >= existingTime) {
+      latestByType.set(type, record);
+    }
+  });
+
+  return Array.from(latestByType.values());
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1
+// Payroll percentage bases by deduction type.
+// Pension uses BHT. NHF uses Basic Pay. PAYE manual percentage uses Gross Pay.
+// Rule Based PAYE and Pension reuse the existing payroll calculation functions.
+function getStatutoryDeductionBaseAmount(deductionType = "") {
+  const type = String(deductionType || "").trim();
+
+  if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
+    return calculateRegularBht();
+  }
+
+  if (type === "NHF") {
+    return calculateRegularBasicPay();
+  }
+
+  return calculatePayrollGrossPay();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1
+// Resolve one statutory deduction amount from its calculation method.
+// Rule Based uses the existing standard calculation logic.
+// Percentage and Amount use the configured statutory deduction value.
+function calculateStatutoryDeductionAmount(record = {}) {
+  const type = String(record.deduction_type || "").trim();
+  const method = String(record.calculation_method || "").trim();
+  const configuredValue = Number(record.deduction_value || 0);
+
+  if (method === "AMOUNT") {
+    return Number.isFinite(configuredValue) ? configuredValue : 0;
+  }
+
+  if (method === "PERCENTAGE") {
+    const baseAmount = getStatutoryDeductionBaseAmount(type);
+    return Number.isFinite(configuredValue)
+      ? baseAmount * (configuredValue / 100)
+      : 0;
+  }
+
+  if (type === "PAYE") {
+    return calculateRegularPayeTax();
+  }
+
+  if (type === "EMPLOYEE_PENSION") {
+    return calculateRegularEmployeePension();
+  }
+
+  if (type === "EMPLOYER_PENSION") {
+    return calculateRegularEmployerPension();
+  }
+
+  if (type === "NHF") {
+    return calculateRegularBasicPay() * 0.025;
+  }
+
+  return 0;
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1
+// Apply active statutory deductions to the visible Payroll Record form.
+// This connects saved statutory setup into payroll preview and therefore into
+// the eventual Payroll Record payload because payroll save uses these fields.
+function applyActivePayrollStatutoryDeductionsToPayrollForm() {
+  const activeDeductions = getActiveStatutoryDeductionsForCurrentPayroll();
+
+  if (!activeDeductions.length) {
+    return;
+  }
+
+  let otherStatutoryDeductions = 0;
+
+  activeDeductions.forEach((record) => {
+    const type = String(record.deduction_type || "").trim();
+    const amount = calculateStatutoryDeductionAmount(record);
+
+    if (!Number.isFinite(amount) || amount < 0) {
+      return;
+    }
+
+    if (type === "PAYE") {
+      setNumericFieldValue(state.dom.payrollPayeTax, amount);
+      return;
+    }
+
+    if (type === "EMPLOYEE_PENSION") {
+      setNumericFieldValue(state.dom.payrollEmployeePension, amount);
+      return;
+    }
+
+    if (type === "EMPLOYER_PENSION") {
+      setNumericFieldValue(state.dom.payrollEmployerPension, amount);
+      return;
+    }
+
+    // NHF and any future statutory deduction without its own visible field
+    // are grouped under Other Deductions for this payroll record.
+    otherStatutoryDeductions += amount;
+  });
+
+  if (otherStatutoryDeductions > 0) {
+    setNumericFieldValue(
+      state.dom.payrollOtherDeductions,
+      otherStatutoryDeductions,
+    );
+  }
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+// Parse payroll dates safely for statutory deduction effective-date checks.
+// HTML date inputs normally return YYYY-MM-DD, but this also tolerates DD/MM/YYYY.
+function parsePayrollEffectiveDateToTime(value = "") {
+  const rawValue = String(value || "").trim();
+
+  if (!rawValue) return NaN;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+    return new Date(`${rawValue}T00:00:00`).getTime();
+  }
+
+  const slashDateMatch = rawValue.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+  if (slashDateMatch) {
+    const [, day, month, year] = slashDateMatch;
+    return new Date(`${year}-${month}-${day}T00:00:00`).getTime();
+  }
+
+  return new Date(rawValue).getTime();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+// Use Payroll Pay Date to decide which statutory deduction setup is active.
+// This makes statutory deductions effective-dated instead of permanently applied.
+function getCurrentPayrollCalculationDate() {
+  return String(state.dom.payrollPayDate?.value || "").trim() ||
+    new Date().toISOString().slice(0, 10);
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+// Return the latest active statutory deduction per deduction type for the
+// selected employee's active Payroll Master Record.
+// A statutory record only applies when effective_date <= Payroll Pay Date.
+function getActiveStatutoryDeductionsForCurrentPayroll() {
+  const employeeId = String(state.dom.payrollEmployeeId?.value || "").trim();
+
+  if (!employeeId) return [];
+
+  const activePayrollMaster =
+    getLatestActivePayrollMasterProfileForEmployee(employeeId);
+
+  if (!activePayrollMaster?.id) return [];
+
+  const payrollDateTime = parsePayrollEffectiveDateToTime(
+    getCurrentPayrollCalculationDate(),
   );
 
-  const resolvedEmployeePension =
-    employeePensionValue > 0 || !isAlpatechRegularSelected()
-      ? employeePensionValue
-      : calculateRegularEmployeePension();
+  if (!Number.isFinite(payrollDateTime)) return [];
 
+  const validRows = (state.payrollStatutoryDeductions || []).filter((record) => {
+    const isSamePayrollMaster =
+      String(record.payroll_master_record_id || "").trim() ===
+      String(activePayrollMaster.id || "").trim();
+
+    const isActive = normalizeText(record.status) === "active";
+    const effectiveDateTime = parsePayrollEffectiveDateToTime(record.effective_date);
+
+    return (
+      isSamePayrollMaster &&
+      isActive &&
+      Number.isFinite(effectiveDateTime) &&
+      effectiveDateTime <= payrollDateTime
+    );
+  });
+
+  const latestByType = new Map();
+
+  validRows.forEach((record) => {
+    const type = String(record.deduction_type || "").trim();
+    if (!type) return;
+
+    const existing = latestByType.get(type);
+    const recordTime = parsePayrollEffectiveDateToTime(record.effective_date);
+    const existingTime = parsePayrollEffectiveDateToTime(existing?.effective_date);
+
+    if (!existing || recordTime >= existingTime) {
+      latestByType.set(type, record);
+    }
+  });
+
+  return Array.from(latestByType.values());
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+// Choose the percentage base for statutory percentage deductions.
+function getStatutoryDeductionBaseAmount(deductionType = "") {
+  const type = String(deductionType || "").trim();
+
+  if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
+    return calculateRegularBht();
+  }
+
+  if (type === "NHF") {
+    return calculateRegularBasicPay();
+  }
+
+  return calculatePayrollGrossPay();
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+// Convert one active statutory deduction setup row into a payroll amount.
+function calculateStatutoryDeductionAmount(record = {}) {
+  const type = String(record.deduction_type || "").trim();
+  const method = String(record.calculation_method || "").trim();
+  const configuredValue = Number(record.deduction_value || 0);
+
+  if (method === "AMOUNT") {
+    return Number.isFinite(configuredValue) ? configuredValue : 0;
+  }
+
+  if (method === "PERCENTAGE") {
+    const baseAmount = getStatutoryDeductionBaseAmount(type);
+
+    return Number.isFinite(configuredValue)
+      ? baseAmount * (configuredValue / 100)
+      : 0;
+  }
+
+  if (type === "PAYE") {
+    return calculateRegularPayeTax();
+  }
+
+  if (type === "EMPLOYEE_PENSION") {
+    return calculateRegularEmployeePension();
+  }
+
+  if (type === "EMPLOYER_PENSION") {
+    return calculateRegularEmployerPension();
+  }
+
+  if (type === "NHF") {
+    return calculateRegularBasicPay() * 0.025;
+  }
+
+  return 0;
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+// Clear statutory-controlled preview values before applying the latest active setup.
+// This prevents old PAYE/Pension values from staying on the form when HR changes
+// Pay Date to a date before the statutory deduction effective date.
+function clearPayrollStatutoryDeductionPreviewValues() {
+  setNumericFieldValue(state.dom.payrollPayeTax, 0);
+  setNumericFieldValue(state.dom.payrollEmployeePension, 0);
+  setNumericFieldValue(state.dom.payrollEmployerPension, 0);
+
+  const previousStatutoryOther = Number(
+    state.dom.payrollOtherDeductions?.dataset?.statutoryAppliedOtherDeductions || 0,
+  );
+
+  if (state.dom.payrollOtherDeductions && previousStatutoryOther > 0) {
+    const currentOtherDeductions = Number(state.dom.payrollOtherDeductions.value || 0);
+
+    setNumericFieldValue(
+      state.dom.payrollOtherDeductions,
+      Math.max(currentOtherDeductions - previousStatutoryOther, 0),
+    );
+  }
+
+  if (state.dom.payrollOtherDeductions) {
+    state.dom.payrollOtherDeductions.dataset.statutoryAppliedOtherDeductions = "0";
+  }
+}
+
+// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+// Apply active statutory deductions into the manual Payroll Record preview.
+// If no active statutory setup exists for the selected Pay Date, statutory
+// fields remain zero so expired/not-yet-effective deductions do not leak forward.
+function applyActivePayrollStatutoryDeductionsToPayrollForm() {
+  clearPayrollStatutoryDeductionPreviewValues();
+
+  const activeDeductions = getActiveStatutoryDeductionsForCurrentPayroll();
+
+  if (!activeDeductions.length) return;
+
+  let otherStatutoryDeductions = 0;
+
+  activeDeductions.forEach((record) => {
+    const type = String(record.deduction_type || "").trim();
+    const amount = calculateStatutoryDeductionAmount(record);
+
+    if (!Number.isFinite(amount) || amount < 0) return;
+
+    if (type === "PAYE") {
+      setNumericFieldValue(state.dom.payrollPayeTax, amount);
+      return;
+    }
+
+    if (type === "EMPLOYEE_PENSION") {
+      setNumericFieldValue(state.dom.payrollEmployeePension, amount);
+      return;
+    }
+
+    if (type === "EMPLOYER_PENSION") {
+      setNumericFieldValue(state.dom.payrollEmployerPension, amount);
+      return;
+    }
+
+    // NHF and future statutory deductions without a dedicated visible field
+    // are grouped under Other Deductions for the payroll record.
+    otherStatutoryDeductions += amount;
+  });
+
+  if (state.dom.payrollOtherDeductions && otherStatutoryDeductions > 0) {
+    const currentOtherDeductions = Number(state.dom.payrollOtherDeductions.value || 0);
+
+    setNumericFieldValue(
+      state.dom.payrollOtherDeductions,
+      currentOtherDeductions + otherStatutoryDeductions,
+    );
+
+    state.dom.payrollOtherDeductions.dataset.statutoryAppliedOtherDeductions =
+      String(otherStatutoryDeductions);
+  }
+}
+
+function calculatePayrollTotalDeductions() {
+  // DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+  // Total Deductions must use the visible deduction values currently on the form.
+  // Do not fall back to Regular pension when Employee Pension is 0.00 because
+  // statutory deductions are now effective-dated. If no active statutory pension
+  // applies for the Pay Date, the correct employee pension deduction is 0.00.
+  //
+  // Employer Pension remains excluded because it is employer cost, not an
+  // employee net-pay deduction.
   return (
     toNullableNumber(state.dom.payrollPayeTax?.value) +
     toNullableNumber(state.dom.payrollWhtTax?.value) +
-    resolvedEmployeePension +
+    toNullableNumber(state.dom.payrollEmployeePension?.value) +
     toNullableNumber(state.dom.payrollOtherDeductions?.value)
   );
 }
@@ -14614,6 +16775,12 @@ function recalculatePayrollFormTotals() {
     applyAlpatechRegularRev2DerivedFields();
   }
 
+  // DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+  // Regular payroll still derives earnings first, but statutory deductions
+  // now come from active statutory setup by Pay Date.
+  // This clears PAYE/Pension when no effective statutory setup applies.
+  applyActivePayrollStatutoryDeductionsToPayrollForm();
+
   const grossPay = calculatePayrollGrossPay();
   const totalDeductions = calculatePayrollTotalDeductions();
   const netPay = grossPay - totalDeductions;
@@ -14641,6 +16808,14 @@ function bindPayrollAutoCalculationEvents() {
     state.dom.payrollEmployeeGroup,
     state.dom.payrollModel,
     state.dom.payrollBaseSalary,
+
+    // DESCRIPTION ITEM 3 - STEP 2E-1 FIX
+    // Pay Date controls statutory deduction effective-date matching.
+    state.dom.payrollPayDate,
+
+    // DESCRIPTION ITEM 3 - STEP 2E-1
+    // Pay date controls which effective-dated statutory deduction record applies.
+    state.dom.payrollPayDate,
 
     state.dom.regularIncrementPercent,
     state.dom.regularMeritIncrement,

@@ -62,10 +62,10 @@
 
 
 
-<!-- WORKSPACE UI POLISH - HR/PAYROLL STANDARD STEP 2F-1
+    <!-- WORKSPACE UI POLISH - HR/PAYROLL STANDARD STEP 2F-1
      This card is a navigation switcher, not a main content section.
      The class gives CSS a reliable target without affecting other dashboard cards. -->
-<section class="card dashboard-section-card workspace-switcher-card mb-4">
+    <section class="card dashboard-section-card workspace-switcher-card mb-4">
       <div class="card-body p-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
           <div>
@@ -90,13 +90,13 @@
               <i class="bi bi-person-circle me-2"></i>Profile
             </button>
 
-<!-- EMPLOYEE WORKSPACE LAYOUT - HR/PAYROLL STANDARD STEP 2D
+            <!-- EMPLOYEE WORKSPACE LAYOUT - HR/PAYROLL STANDARD STEP 2D
      Keep the existing ID because JavaScript uses hrTabEmployeesBtn
      to open this workspace. Only the visible label is changing. -->
-<button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
-  id="hrTabEmployeesBtn">
-  <i class="bi bi-building me-2"></i>Manage Organization
-</button>
+            <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
+              id="hrTabEmployeesBtn">
+              <i class="bi bi-building me-2"></i>Manage Organization
+            </button>
 
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap" id="hrTabPayrollBtn">
               <i class="bi bi-cash-coin me-2"></i>Payroll
@@ -192,7 +192,10 @@
                   </div>
 
                   <div class="col-12">
-                    <button type="submit" id="saveHrProfileBtn" class="btn btn-primary dashboard-action-btn">
+                    <!-- DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+     Profile save should follow the same HR/payroll button behaviour:
+     grey and disabled until HR changes editable profile values. -->
+                    <button type="submit" id="saveHrProfileBtn" class="btn btn-secondary dashboard-action-btn" disabled>
                       <i class="bi bi-save me-2"></i>
                       <span id="saveHrProfileBtnText">Save Profile Changes</span>
                     </button>
@@ -1791,6 +1794,27 @@
                   </select>
                 </div>
 
+                <!-- DESCRIPTION ITEM 3 - STEP 2A-2
+                     Payroll Grade / Level belongs on Payroll Master Data because
+                     it controls payroll setup and statutory deduction inheritance,
+                     not the employee bio-data record. It is optional so existing
+                     payroll master records continue to work safely. -->
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollMasterGradeLevel" class="form-label fw-semibold">
+                    Payroll Grade / Level
+                  </label>
+                  <!-- DESCRIPTION ITEM 3 - STEP 2A-4
+     Payroll Grade / Level is now a controlled setup value.
+     Keep the existing id so current JavaScript references remain stable,
+     but change the field from free text to a connected dropdown. -->
+                  <select id="payrollMasterGradeLevel" class="form-select">
+                    <option value="">Select payroll grade / level</option>
+                  </select>
+                  <div class="form-text">
+                    Optional controlled payroll classification used for statutory deduction rule inheritance.
+                  </div>
+                </div>
+
                 <div class="col-md-6 col-xl-4">
                   <!-- PAYROLL CALCULATION CLARITY - STEP 1A
        This field still uses the existing payrollMasterBasicSalary id so
@@ -1895,12 +1919,12 @@
             <div id="payrollMasterRecordsTableWrapper" class="dashboard-table-wrap d-none">
               <table class="table align-middle">
                 <thead>
-                  <!-- EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-                       Grade removed from Payroll Master Records.
-                       Payroll Master now focuses on employee, salary, effective date,
-                       pay cycle, and payroll status. -->
+                  <!-- DESCRIPTION ITEM 3 - STEP 2A-2
+                       Payroll Grade / Level is restored to Payroll Master Records
+                       because statutory deductions can inherit rules from payroll grade/level. -->
                   <tr>
                     <th>Employee</th>
+                    <th>Grade / Level</th>
                     <th>Salary</th>
                     <th>Effective</th>
                     <th>Cycle</th>
@@ -1911,7 +1935,10 @@
                 </thead>
                 <tbody id="payrollMasterRecordsTableBody">
                   <tr>
-                    <td colspan="7" class="text-center text-secondary py-4">
+                    <!-- DESCRIPTION ITEM 3 - STEP 2A-2
+                         Colspan increased because Payroll Grade / Level is now shown
+                         as a real Payroll Master Records column. -->
+                    <td colspan="8" class="text-center text-secondary py-4">
                       Payroll master records will load here.
                     </td>
                   </tr>
@@ -2129,6 +2156,477 @@
           </div>
       </section>
 
+      <!-- =========================================================
+           DESCRIPTION ITEM 3 - STEP 2A
+           Statutory Deductions section shell
+           This holds employee-level or inherited statutory deduction
+           configuration before payroll records are created.
+      ========================================================== -->
+      <section class="card dashboard-section-card mb-4">
+        <div class="card-body p-4 p-lg-5">
+          <!-- DESCRIPTION ITEM 3 - STEP 2C
+     Statutory Deductions now contains both setup form and records list,
+     so this payroll working card should be collapsible like Payroll Master
+     and Allowance Components. -->
+          <div class="mb-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+              <div>
+                <h2 class="section-heading h4 mb-1">Statutory Deductions</h2>
+                <p class="section-subtext mb-0">
+                  Configure statutory deductions against an employee payroll profile using employee-specific or
+                  inherited rule-based setup.
+                </p>
+              </div>
+
+              <button type="button" id="togglePayrollStatutoryCardBtn"
+                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                aria-controls="payrollStatutoryCardCollapse">
+                <i class="bi bi-chevron-up me-2"></i>
+                <span>Collapse</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="payrollStatutoryCardCollapse">
+            <form id="payrollStatutoryCreateForm" novalidate>
+              <!-- Hidden id used later for edit mode -->
+              <input type="hidden" id="editingPayrollStatutoryId" />
+
+              <div class="row g-4">
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollStatutoryMasterRecordId" class="form-label fw-semibold">
+                    Payroll Master Record <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollStatutoryMasterRecordId" class="form-select" required>
+                    <option value="">Select payroll master record</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollStatutoryDeductionType" class="form-label fw-semibold">
+                    Deduction Type <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollStatutoryDeductionType" class="form-select" required>
+                    <option value="">Select deduction type</option>
+                    <option value="PAYE">PAYE</option>
+                    <option value="EMPLOYEE_PENSION">Employee Pension</option>
+                    <option value="EMPLOYER_PENSION">Employer Pension</option>
+                    <option value="NHF">NHF</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollStatutoryCalculationMethod" class="form-label fw-semibold">
+                    Calculation Method <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollStatutoryCalculationMethod" class="form-select" required>
+                    <option value="RULE_BASED" selected>Rule Based</option>
+                    <option value="PERCENTAGE">Percentage</option>
+                    <option value="AMOUNT">Amount</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollStatutoryDeductionValue" class="form-label fw-semibold">
+                    Deduction Value
+                    <!-- DESCRIPTION ITEM 3 - STEP 2A-5
+                       The required marker is controlled by Calculation Method.
+                       Rule Based deductions do not need a manual value.
+                       Percentage and Amount deductions do. -->
+                    <span id="payrollStatutoryDeductionValueRequiredMarker" class="text-danger d-none">*</span>
+                  </label>
+
+                  <input type="number" id="payrollStatutoryDeductionValue" class="form-control bg-light" step="0.0001"
+                    min="0" placeholder="Calculated from statutory rule" readonly />
+
+                  <div id="payrollStatutoryDeductionValueHelp" class="form-text">
+                    No manual value is required for rule-based statutory deductions.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollStatutoryEffectiveDate" class="form-label fw-semibold">
+                    Effective Date <span class="text-danger">*</span>
+                  </label>
+                  <input type="date" id="payrollStatutoryEffectiveDate" class="form-control" required />
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollStatutoryConfigSource" class="form-label fw-semibold">
+                    Configuration Source <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollStatutoryConfigSource" class="form-select" required>
+                    <option value="EMPLOYEE" selected>Employee Specific</option>
+
+                    <!-- DESCRIPTION ITEM 3 - STEP 2A-5
+                       Statutory deductions can inherit from the connected Payroll Grade / Level
+                       assigned on Payroll Master Data. This keeps deductions linked to payroll setup
+                       instead of using loose free-text grade values. -->
+                    <option value="GRADE_RULE">Inherited from Payroll Grade / Rule</option>
+                  </select>
+                  <div class="form-text">
+                    Use inherited setup only when the selected Payroll Master Record has a Payroll Grade / Level.
+                  </div>
+                </div>
+
+                <!-- DESCRIPTION ITEM 3 - STEP 2A-5
+                   Payroll Grade / Level is now read from the selected Payroll Master Record.
+                   HR should not type inherited grade manually here because that would break
+                   controlled grade/rule inheritance later. -->
+                <div class="col-md-6 col-xl-4" id="payrollStatutoryGradeLevelContextCol">
+                  <label for="payrollStatutoryGradeLevelDisplay" class="form-label fw-semibold">
+                    Payroll Grade / Level
+                  </label>
+
+                  <input type="text" id="payrollStatutoryGradeLevelDisplay" class="form-control bg-light"
+                    placeholder="Select payroll master record first" readonly />
+
+                  <input type="hidden" id="payrollStatutoryGradeLevelId" />
+                  <input type="hidden" id="payrollStatutoryGradeLevelSnapshot" />
+
+                  <div id="payrollStatutoryGradeLevelHelp" class="form-text">
+                    This is pulled from the selected Payroll Master Record.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollStatutoryStatus" class="form-label fw-semibold">
+                    Deduction Status <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollStatutoryStatus" class="form-select" required>
+                    <option value="Active" selected>Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="Draft">Draft</option>
+                  </select>
+                </div>
+
+                <div class="col-12">
+                  <label for="payrollStatutoryNotes" class="form-label fw-semibold">
+                    Notes
+                  </label>
+                  <textarea id="payrollStatutoryNotes" class="form-control" rows="3"
+                    placeholder="Optional statutory deduction notes"></textarea>
+                </div>
+
+                <!-- DESCRIPTION ITEM 3 - STEP 2B
+                   Save controls for Statutory Deductions.
+                   Create is disabled until required fields are complete.
+                   Clear resets the shell without touching saved records. -->
+                <div class="col-12">
+                  <div class="d-flex flex-wrap gap-2 pt-2">
+                    <button type="submit" id="savePayrollStatutoryBtn" class="btn btn-secondary dashboard-action-btn"
+                      disabled>
+                      <i class="bi bi-save me-2"></i>
+                      <span id="savePayrollStatutoryBtnText">Create Statutory Deduction</span>
+                    </button>
+
+                    <button type="button" id="cancelPayrollStatutoryEditBtn"
+                      class="btn btn-outline-danger dashboard-action-btn d-none">
+                      <!-- DESCRIPTION ITEM 3 - STEP 2D
+       Cancel Edit only appears when HR is updating an existing statutory
+       deduction record. Create mode keeps the form simple. -->
+                      <i class="bi bi-x-circle me-2"></i>
+                      Cancel Edit
+                    </button>
+
+                    <button type="button" id="resetPayrollStatutoryFormBtn"
+                      class="btn btn-outline-secondary dashboard-action-btn">
+                      <i class="bi bi-arrow-counterclockwise me-2"></i>
+                      Clear Form
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            <!-- DESCRIPTION ITEM 3 - STEP 2C
+               Statutory Deduction Records table.
+               This is view-only for now. Edit/update will be added in a later step
+               after the records list is confirmed working. -->
+            <hr class="my-4" />
+
+            <div id="payrollStatutoryRecordsHeader"
+              class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+              <div>
+                <h3 class="h5 mb-1">Statutory Deduction Records</h3>
+                <p class="section-subtext mb-0">
+                  Review saved statutory deduction setup by employee, type, method, and effective date.
+                </p>
+              </div>
+
+              <div class="d-flex flex-column flex-sm-row gap-2 w-100 w-lg-auto">
+                <div style="max-width: 320px;">
+                  <label for="payrollStatutorySearchInput" class="form-label fw-semibold mb-2">
+                    Search statutory deductions
+                  </label>
+                  <input type="text" id="payrollStatutorySearchInput" class="form-control"
+                    placeholder="Search by employee, type, method, status..." />
+                </div>
+
+                <button type="button" id="refreshPayrollStatutoryRecordsBtn"
+                  class="btn btn-outline-primary dashboard-action-btn align-self-end">
+                  <i class="bi bi-arrow-clockwise me-2"></i>
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div id="payrollStatutoryRecordsEmptyState" class="text-center text-secondary py-4">
+              No statutory deduction records found yet.
+            </div>
+
+            <div id="payrollStatutoryRecordsTableWrapper" class="dashboard-table-wrap d-none">
+              <table class="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Master Ref</th>
+                    <th>Type</th>
+                    <th>Method</th>
+                    <th>Value</th>
+                    <th>Source</th>
+                    <th>Effective</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+
+                    <!-- DESCRIPTION ITEM 3 - STEP 2D
+       Action column allows HR to maintain an existing statutory deduction
+       instead of creating duplicate deduction rows. -->
+                    <th class="text-center">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody id="payrollStatutoryRecordsTableBody">
+                  <tr>
+                    <td colspan="9" class="text-center text-secondary py-4">
+                      Statutory deduction records will load here.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           DESCRIPTION ITEM 4 - STEP 2
+           Other Deductions section shell.
+           This stores non-statutory employee deductions such as
+           union dues, cooperative deductions, and salary advance
+           repayments with amount and duration.
+      ========================================================== -->
+      <section class="card dashboard-section-card mb-4">
+        <div class="card-body p-4 p-lg-5">
+          <div class="mb-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+              <div>
+                <h2 class="section-heading h4 mb-1">Other Deductions</h2>
+                <p class="section-subtext mb-0">
+                  Configure non-statutory deductions such as union dues, cooperative deductions, and salary advance repayments.
+                </p>
+              </div>
+
+              <button type="button" id="togglePayrollOtherDeductionCardBtn"
+                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                aria-controls="payrollOtherDeductionCardCollapse">
+                <i class="bi bi-chevron-up me-2"></i>
+                <span>Collapse</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="payrollOtherDeductionCardCollapse">
+            <form id="payrollOtherDeductionCreateForm" novalidate>
+              <!-- DESCRIPTION ITEM 4 - STEP 2
+                   Hidden id reserved for edit mode in a later step. -->
+              <input type="hidden" id="editingPayrollOtherDeductionId" />
+
+              <div class="row g-4">
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollOtherDeductionMasterRecordId" class="form-label fw-semibold">
+                    Payroll Master Record <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollOtherDeductionMasterRecordId" class="form-select" required>
+                    <option value="">Select payroll master record</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollOtherDeductionType" class="form-label fw-semibold">
+                    Deduction Type <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollOtherDeductionType" class="form-select" required>
+                    <option value="">Select deduction type</option>
+                    <option value="UNION_DUES">Union Dues</option>
+                    <option value="COOPERATIVE">Cooperative Deduction</option>
+                    <option value="SALARY_ADVANCE">Salary Advance</option>
+                    <option value="OTHER">Other Deduction</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollOtherDeductionAmount" class="form-label fw-semibold">
+                    Amount Per Pay Cycle <span class="text-danger">*</span>
+                  </label>
+                  <input type="number" id="payrollOtherDeductionAmount" class="form-control" min="0" step="0.01"
+                    placeholder="Example: 5000" required />
+                  <div class="form-text">
+                    Amount to deduct from each payroll run.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollOtherDeductionDurationMonths" class="form-label fw-semibold">
+                    Duration <span class="text-danger">*</span>
+                  </label>
+                  <input type="number" id="payrollOtherDeductionDurationMonths" class="form-control" min="1" max="120"
+                    step="1" placeholder="Number of months" required />
+                  <div class="form-text">
+                    Number of monthly payroll cycles this deduction should run for.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollOtherDeductionStartDate" class="form-label fw-semibold">
+                    Start Date <span class="text-danger">*</span>
+                  </label>
+                  <input type="date" id="payrollOtherDeductionStartDate" class="form-control" required />
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollOtherDeductionReferenceNumber" class="form-label fw-semibold">
+                    Reference Number
+                  </label>
+                  <input type="text" id="payrollOtherDeductionReferenceNumber" class="form-control"
+                    placeholder="Optional approval or deduction reference" />
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollOtherDeductionStatus" class="form-label fw-semibold">
+                    Status <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollOtherDeductionStatus" class="form-select" required>
+                    <option value="Active" selected>Active</option>
+                    <option value="Draft">Draft</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div class="col-12">
+                  <label for="payrollOtherDeductionNotes" class="form-label fw-semibold">
+                    Notes
+                  </label>
+                  <textarea id="payrollOtherDeductionNotes" class="form-control" rows="3"
+                    placeholder="Optional deduction notes"></textarea>
+                </div>
+
+                <!-- DESCRIPTION ITEM 4 - STEP 2
+                     Save remains disabled in this UI shell step.
+                     Create/update persistence will be wired in the next step. -->
+                <div class="col-12">
+                  <div class="d-flex flex-wrap gap-2 pt-2">
+                    <button type="submit" id="savePayrollOtherDeductionBtn"
+                      class="btn btn-secondary dashboard-action-btn" disabled>
+                      <i class="bi bi-save me-2"></i>
+                      <span id="savePayrollOtherDeductionBtnText">Create Other Deduction</span>
+                    </button>
+
+                    <button type="button" id="cancelPayrollOtherDeductionEditBtn"
+                      class="btn btn-outline-danger dashboard-action-btn d-none">
+                      <i class="bi bi-x-circle me-2"></i>
+                      Cancel Edit
+                    </button>
+
+                    <button type="reset" id="resetPayrollOtherDeductionFormBtn"
+                      class="btn btn-outline-secondary dashboard-action-btn">
+                      <i class="bi bi-arrow-counterclockwise me-2"></i>
+                      Clear Form
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            <hr class="my-4" />
+
+            <!-- DESCRIPTION ITEM 4 - STEP 2
+                 Records shell for saved Other Deductions.
+                 Loading, search, save, and edit logic will be added after
+                 this card is confirmed to render cleanly. -->
+            <!-- DESCRIPTION ITEM 4 - STEP 2 UI POLISH
+                 Give the records section better breathing room and keep
+                 search/refresh controls aligned like a standard HR setup table. -->
+            <!-- DESCRIPTION ITEM 4 - STEP 2B
+                 Other Deduction Records UI polish.
+                 Use a clear setup-table toolbar so the records header,
+                 search field, and refresh action do not look cramped. -->
+            <div id="payrollOtherDeductionRecordsHeader"
+              class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+              <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
+                <div>
+                  <h3 class="h5 mb-1">Other Deduction Records</h3>
+                  <p class="section-subtext mb-0">
+                    Review saved union, cooperative, salary advance, and other deduction setup records.
+                  </p>
+                </div>
+
+                <button type="button" id="refreshPayrollOtherDeductionRecordsBtn"
+                  class="btn btn-outline-primary dashboard-action-btn align-self-start">
+                  <i class="bi bi-arrow-clockwise me-2"></i>
+                  Refresh
+                </button>
+              </div>
+
+              <div class="row g-3 align-items-end">
+                <div class="col-12 col-lg-8 col-xl-6">
+                  <label for="payrollOtherDeductionSearchInput" class="form-label fw-semibold mb-2">
+                    Search other deductions
+                  </label>
+
+                  <div class="input-group">
+                    <span class="input-group-text">
+                      <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" id="payrollOtherDeductionSearchInput" class="form-control"
+                      placeholder="Search by employee, type, status..." />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="payrollOtherDeductionRecordsEmptyState" class="text-center text-secondary py-4">
+              No other deduction records found yet.
+            </div>
+
+            <div id="payrollOtherDeductionRecordsTableWrapper" class="dashboard-table-wrap d-none">
+              <table class="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Master Ref</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Duration</th>
+                    <th>Total</th>
+                    <th>Start</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th class="text-center">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody id="payrollOtherDeductionRecordsTableBody">
+                  <tr>
+                    <td colspan="9" class="text-center text-secondary py-4">
+                      Other deduction records will load here.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section class="card dashboard-section-card mb-4">
         <div class="card-body p-4 p-lg-5">
@@ -2827,13 +3325,28 @@
                  Stable scroll target after submit/update.
                  This lets HR land cleanly on Payroll Records without
                  cutting off the records heading. -->
-            <div id="payrollRecordsHeader" class="mb-4">
-              <h2 class="section-heading h4 mb-1">Payroll Records</h2>
-              <p class="section-subtext mb-0">
-                Search payroll records by employee, pay cycle, department, group, or status.
-              </p>
+            <!-- DESCRIPTION ITEM 4 - STEP 2C
+                 Make Payroll Records collapsible like the other long HR/payroll cards.
+                 The header remains visible while filters, records, and payslip status
+                 sit inside the collapsible body. -->
+            <div id="payrollRecordsHeader"
+              class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
+              <div>
+                <h2 class="section-heading h4 mb-1">Payroll Records</h2>
+                <p class="section-subtext mb-0">
+                  Search payroll records by employee, pay cycle, department, group, or status.
+                </p>
+              </div>
+
+              <button type="button" id="togglePayrollRecordsCardBtn"
+                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                aria-controls="payrollRecordsCardCollapse">
+                <i class="bi bi-chevron-up me-2"></i>
+                <span>Collapse</span>
+              </button>
             </div>
 
+            <div id="payrollRecordsCardCollapse">
             <!-- DESCRIPTION ITEM 4 - STEP 2E
      Clean Payroll Records toolbar.
      Keep search/status/cycle as form controls in one row.
@@ -2894,11 +3407,12 @@
                 </button>
               </div>
             </div>
-          </div>
 
-          <!-- DESCRIPTION ITEM 4 - STEP 2C
-               Restore the Payroll Records empty-state wrapper expected by JS.
-               This prevents loose text from making the card look cut or misaligned. -->
+          <!-- DESCRIPTION ITEM 4 - STEP 2C FIX
+               Keep Payroll Records empty state, table, and payslip status
+               inside the Payroll Records collapsible body.
+               Previously, this section closed too early, so the table stayed
+               visible even when the button showed Expand. -->
           <div id="payrollRecordsEmptyState" class="text-center text-secondary py-4">
             No payroll records found yet.
           </div>
@@ -3022,6 +3536,10 @@
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- DESCRIPTION ITEM 4 - STEP 2C
+               Close Payroll Records collapsible body. -->
           </div>
       </section>
   </main>
