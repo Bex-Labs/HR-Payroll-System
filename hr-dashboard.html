@@ -2422,7 +2422,8 @@
               <div>
                 <h2 class="section-heading h4 mb-1">Other Deductions</h2>
                 <p class="section-subtext mb-0">
-                  Configure non-statutory deductions such as union dues, cooperative deductions, and salary advance repayments.
+                  Configure non-statutory deductions such as union dues, cooperative deductions, and salary advance
+                  repayments.
                 </p>
               </div>
 
@@ -2538,7 +2539,10 @@
                       Cancel Edit
                     </button>
 
-                    <button type="reset" id="resetPayrollOtherDeductionFormBtn"
+                    <!-- DESCRIPTION ITEM 4 - STEP 3
+     Use a normal button so JavaScript fully controls the clear behaviour.
+     This prevents the browser reset from bypassing validation/button state. -->
+                    <button type="button" id="resetPayrollOtherDeductionFormBtn"
                       class="btn btn-outline-secondary dashboard-action-btn">
                       <i class="bi bi-arrow-counterclockwise me-2"></i>
                       Clear Form
@@ -2561,8 +2565,7 @@
                  Other Deduction Records UI polish.
                  Use a clear setup-table toolbar so the records header,
                  search field, and refresh action do not look cramped. -->
-            <div id="payrollOtherDeductionRecordsHeader"
-              class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+            <div id="payrollOtherDeductionRecordsHeader" class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
               <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
                 <div>
                   <h3 class="h5 mb-1">Other Deduction Records</h3>
@@ -2619,6 +2622,280 @@
                   <tr>
                     <td colspan="9" class="text-center text-secondary py-4">
                       Other deduction records will load here.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           DESCRIPTION ITEM 5 - STEP 2
+           Employee Payroll Overrides section shell.
+           This stores employee-specific exceptions to standard grade,
+           statutory, allowance, or rule-based payroll setup.
+           Save/load logic will be wired after the UI is confirmed.
+      ========================================================== -->
+      <section class="card dashboard-section-card mb-4">
+        <div class="card-body p-4 p-lg-5">
+          <div class="mb-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+              <div>
+                <h2 class="section-heading h4 mb-1">Employee Payroll Overrides</h2>
+                <p class="section-subtext mb-0">
+                  Store employee-specific exceptions to standard grade or rule-based payroll elements.
+                </p>
+              </div>
+
+              <button type="button" id="togglePayrollEmployeeOverrideCardBtn"
+                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                aria-controls="payrollEmployeeOverrideCardCollapse">
+                <i class="bi bi-chevron-up me-2"></i>
+                <span>Collapse</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="payrollEmployeeOverrideCardCollapse">
+            <form id="payrollEmployeeOverrideCreateForm" novalidate>
+              <!-- DESCRIPTION ITEM 5 - STEP 2
+                   Hidden id reserved for edit mode in a later step. -->
+              <input type="hidden" id="editingPayrollEmployeeOverrideId" />
+
+              <div class="row g-4">
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideMasterRecordId" class="form-label fw-semibold">
+                    Payroll Master Record <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollEmployeeOverrideMasterRecordId" class="form-select" required>
+                    <option value="">Select payroll master record</option>
+                  </select>
+                  <div class="form-text">
+                    Links the override to the employee payroll setup.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideCategory" class="form-label fw-semibold">
+                    Override Category <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollEmployeeOverrideCategory" class="form-select" required>
+                    <option value="">Select override category</option>
+                    <option value="EARNING">Earning</option>
+                    <option value="STATUTORY_DEDUCTION">Statutory Deduction</option>
+                    <option value="OTHER_DEDUCTION">Other Deduction</option>
+                    <option value="PAYROLL_RULE">Payroll Rule</option>
+                    <option value="PAYROLL_STRUCTURE">Payroll Structure</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideElement" class="form-label fw-semibold">
+                    Payroll Element <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollEmployeeOverrideElement" class="form-select" required>
+                    <option value="">Select payroll element</option>
+                    <option value="BASIC_SALARY">Basic Salary</option>
+                    <option value="HOUSING_ALLOWANCE">Housing Allowance</option>
+                    <option value="TRANSPORT_ALLOWANCE">Transport Allowance</option>
+                    <option value="UTILITY_ALLOWANCE">Utility Allowance</option>
+                    <option value="MEDICAL_ALLOWANCE">Medical Allowance</option>
+                    <option value="OTHER_ALLOWANCE">Other Allowance</option>
+                    <option value="BONUS">Bonus</option>
+                    <option value="OVERTIME">Overtime</option>
+                    <option value="PAYE">PAYE</option>
+                    <option value="WHT">WHT</option>
+                    <option value="EMPLOYEE_PENSION">Employee Pension</option>
+                    <option value="EMPLOYER_PENSION">Employer Pension</option>
+                    <option value="NHF">NHF</option>
+                    <option value="UNION_DUES">Union Dues</option>
+                    <option value="COOPERATIVE">Cooperative</option>
+                    <option value="SALARY_ADVANCE">Salary Advance</option>
+                    <option value="GRADE_LEVEL_RULE">Grade / Level Rule</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideMethod" class="form-label fw-semibold">
+                    Override Method <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollEmployeeOverrideMethod" class="form-select" required>
+                    <option value="">Select override method</option>
+                    <option value="FIXED_AMOUNT">Fixed Amount</option>
+                    <option value="PERCENTAGE">Percentage</option>
+                    <option value="RULE_REPLACEMENT">Rule Replacement</option>
+                    <option value="EXEMPTION">Exemption</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideOriginalValue" class="form-label fw-semibold">
+                    Original Value Snapshot
+                  </label>
+                  <input type="number" id="payrollEmployeeOverrideOriginalValue" class="form-control" min="0"
+                    step="0.01" placeholder="Example: 5000" />
+                  <div class="form-text">
+                    Standard value before the employee-specific override.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideValue" class="form-label fw-semibold">
+                    Override Value
+                  </label>
+                  <input type="number" id="payrollEmployeeOverrideValue" class="form-control" min="0" step="0.01"
+                    placeholder="Example: 7500" />
+                  <div class="form-text">
+                    Required for fixed amount and percentage overrides.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideEffectiveDate" class="form-label fw-semibold">
+                    Effective Date <span class="text-danger">*</span>
+                  </label>
+                  <input type="date" id="payrollEmployeeOverrideEffectiveDate" class="form-control" required />
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideEndDate" class="form-label fw-semibold">
+                    End Date
+                  </label>
+                  <input type="date" id="payrollEmployeeOverrideEndDate" class="form-control" />
+                  <div class="form-text">
+                    Leave blank if the override should remain active.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="payrollEmployeeOverrideStatus" class="form-label fw-semibold">
+                    Status <span class="text-danger">*</span>
+                  </label>
+                  <select id="payrollEmployeeOverrideStatus" class="form-select" required>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6">
+                  <label for="payrollEmployeeOverrideApprovalReference" class="form-label fw-semibold">
+                    Approval Reference
+                  </label>
+                  <input type="text" id="payrollEmployeeOverrideApprovalReference" class="form-control"
+                    placeholder="Optional HR/payroll approval reference" />
+                </div>
+
+                <div class="col-md-6">
+                  <label for="payrollEmployeeOverrideRuleSnapshot" class="form-label fw-semibold">
+                    Rule Snapshot
+                  </label>
+                  <input type="text" id="payrollEmployeeOverrideRuleSnapshot" class="form-control"
+                    placeholder="Optional rule being replaced or exempted" />
+                </div>
+
+                <div class="col-12">
+                  <label for="payrollEmployeeOverrideReason" class="form-label fw-semibold">
+                    Reason <span class="text-danger">*</span>
+                  </label>
+                  <textarea id="payrollEmployeeOverrideReason" class="form-control" rows="2"
+                    placeholder="Explain why this employee-specific override is needed" required></textarea>
+                </div>
+
+                <div class="col-12">
+                  <label for="payrollEmployeeOverrideNotes" class="form-label fw-semibold">
+                    Notes
+                  </label>
+                  <textarea id="payrollEmployeeOverrideNotes" class="form-control" rows="2"
+                    placeholder="Optional override notes"></textarea>
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 mt-4">
+                <button type="submit" id="savePayrollEmployeeOverrideBtn" class="btn btn-secondary dashboard-action-btn"
+                  disabled>
+                  <i class="bi bi-save me-2"></i>
+                  <span id="savePayrollEmployeeOverrideBtnText">Create Employee Override</span>
+                </button>
+
+                <button type="button" id="cancelPayrollEmployeeOverrideEditBtn"
+                  class="btn btn-outline-secondary dashboard-action-btn d-none">
+                  <i class="bi bi-x-circle me-2"></i>
+                  Cancel Edit
+                </button>
+
+                <button type="button" id="resetPayrollEmployeeOverrideFormBtn"
+                  class="btn btn-outline-secondary dashboard-action-btn">
+                  <i class="bi bi-arrow-clockwise me-2"></i>
+                  Clear Form
+                </button>
+              </div>
+            </form>
+
+            <hr class="my-4" />
+
+            <!-- DESCRIPTION ITEM 5 - STEP 2
+                 Records shell for traceability/audit review.
+                 Load/search/edit behaviour will be wired after this shell is confirmed. -->
+            <div id="payrollEmployeeOverrideRecordsHeader" class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+              <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
+                <div>
+                  <h3 class="h5 mb-1">Employee Override Records</h3>
+                  <p class="section-subtext mb-0">
+                    Review employee-specific payroll override records and their approval trace.
+                  </p>
+                </div>
+
+                <button type="button" id="refreshPayrollEmployeeOverrideRecordsBtn"
+                  class="btn btn-outline-primary dashboard-action-btn align-self-start">
+                  <i class="bi bi-arrow-clockwise me-2"></i>
+                  Refresh
+                </button>
+              </div>
+
+              <div class="row g-3 align-items-end">
+                <div class="col-12 col-lg-8 col-xl-6">
+                  <label for="payrollEmployeeOverrideSearchInput" class="form-label fw-semibold mb-2">
+                    Search employee overrides
+                  </label>
+
+                  <div class="input-group">
+                    <span class="input-group-text">
+                      <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" id="payrollEmployeeOverrideSearchInput" class="form-control"
+                      placeholder="Search by employee, element, method, status..." />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="payrollEmployeeOverrideRecordsEmptyState" class="text-center text-secondary py-4">
+              No employee override records found yet.
+            </div>
+
+            <div id="payrollEmployeeOverrideRecordsTableWrapper" class="dashboard-table-wrap d-none">
+              <table class="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Master Ref</th>
+                    <th>Category</th>
+                    <th>Element</th>
+                    <th>Method</th>
+                    <th>Override</th>
+                    <th>Effective</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th class="text-center">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody id="payrollEmployeeOverrideRecordsTableBody">
+                  <tr>
+                    <td colspan="9" class="text-center text-secondary py-4">
+                      Employee override records will load here.
                     </td>
                   </tr>
                 </tbody>
@@ -3347,200 +3624,201 @@
             </div>
 
             <div id="payrollRecordsCardCollapse">
-            <!-- DESCRIPTION ITEM 4 - STEP 2E
+              <!-- DESCRIPTION ITEM 4 - STEP 2E
      Clean Payroll Records toolbar.
      Keep search/status/cycle as form controls in one row.
      Keep CSV and Send Payslips as action buttons in a separate footer row
      so the header no longer looks visually uneven. -->
-            <div class="border rounded-4 p-3 bg-light-subtle">
-              <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-5">
-                  <label for="payrollSearchInput" class="form-label fw-semibold mb-2">
-                    Search payroll records
-                  </label>
-                  <input type="text" id="payrollSearchInput" class="form-control"
-                    placeholder="Name, pay cycle, department..." />
+              <div class="border rounded-4 p-3 bg-light-subtle">
+                <div class="row g-3 align-items-end">
+                  <div class="col-12 col-lg-5">
+                    <label for="payrollSearchInput" class="form-label fw-semibold mb-2">
+                      Search payroll records
+                    </label>
+                    <input type="text" id="payrollSearchInput" class="form-control"
+                      placeholder="Name, pay cycle, department..." />
+                  </div>
+
+                  <div class="col-12 col-md-6 col-lg-3">
+                    <label for="payrollStatusFilter" class="form-label fw-semibold mb-2">
+                      Status filter
+                    </label>
+                    <select id="payrollStatusFilter" class="form-select">
+                      <option value="">All statuses</option>
+                      <option value="authorised">Authorised</option>
+                      <option value="draft">Draft</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+
+                  <div class="col-12 col-md-6 col-lg-4">
+                    <label for="exportPayrollPayCycle" class="form-label fw-semibold mb-2">
+                      Payroll action cycle
+                    </label>
+                    <select id="exportPayrollPayCycle" class="form-select dashboard-input">
+                      <option value="">All cycles</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div class="col-12 col-md-6 col-lg-3">
-                  <label for="payrollStatusFilter" class="form-label fw-semibold mb-2">
-                    Status filter
-                  </label>
-                  <select id="payrollStatusFilter" class="form-select">
-                    <option value="">All statuses</option>
-                    <option value="authorised">Authorised</option>
-                    <option value="draft">Draft</option>
-                    <option value="pending">Pending</option>
-                  </select>
-                </div>
+                <div
+                  class="d-flex flex-column flex-md-row justify-content-md-end align-items-md-center gap-2 mt-3 pt-3 border-top">
+                  <span class="small text-secondary me-md-auto">
+                    Payroll actions apply to the selected action cycle.
+                  </span>
 
-                <div class="col-12 col-md-6 col-lg-4">
-                  <label for="exportPayrollPayCycle" class="form-label fw-semibold mb-2">
-                    Payroll action cycle
-                  </label>
-                  <select id="exportPayrollPayCycle" class="form-select dashboard-input">
-                    <option value="">All cycles</option>
-                  </select>
-                </div>
-              </div>
+                  <button type="button" id="exportPayrollCsvBtn"
+                    class="btn btn-outline-primary dashboard-action-btn text-nowrap">
+                    <i class="bi bi-file-earmark-spreadsheet me-2"></i>
+                    Export CSV
+                  </button>
 
-              <div
-                class="d-flex flex-column flex-md-row justify-content-md-end align-items-md-center gap-2 mt-3 pt-3 border-top">
-                <span class="small text-secondary me-md-auto">
-                  Payroll actions apply to the selected action cycle.
-                </span>
-
-                <button type="button" id="exportPayrollCsvBtn"
-                  class="btn btn-outline-primary dashboard-action-btn text-nowrap">
-                  <i class="bi bi-file-earmark-spreadsheet me-2"></i>
-                  Export CSV
-                </button>
-
-                <!-- DESCRIPTION ITEM 4 - STEP 2E
+                  <!-- DESCRIPTION ITEM 4 - STEP 2E
          UI shell only. Button remains disabled until the email handler
          and validation are wired in the next step. -->
-                <button type="button" id="sendPayslipsEmailBtn"
-                  class="btn btn-outline-success dashboard-action-btn text-nowrap" disabled
-                  title="Payslip email sending will be enabled in the next steps">
-                  <i class="bi bi-envelope-paper me-2"></i>
-                  Send Payslips
-                </button>
+                  <button type="button" id="sendPayslipsEmailBtn"
+                    class="btn btn-outline-success dashboard-action-btn text-nowrap" disabled
+                    title="Payslip email sending will be enabled in the next steps">
+                    <i class="bi bi-envelope-paper me-2"></i>
+                    Send Payslips
+                  </button>
+                </div>
               </div>
-            </div>
 
-          <!-- DESCRIPTION ITEM 4 - STEP 2C FIX
+              <!-- DESCRIPTION ITEM 4 - STEP 2C FIX
                Keep Payroll Records empty state, table, and payslip status
                inside the Payroll Records collapsible body.
                Previously, this section closed too early, so the table stayed
                visible even when the button showed Expand. -->
-          <div id="payrollRecordsEmptyState" class="text-center text-secondary py-4">
-            No payroll records found yet.
-          </div>
+              <div id="payrollRecordsEmptyState" class="text-center text-secondary py-4">
+                No payroll records found yet.
+              </div>
 
-          <!-- DESCRIPTION ITEM 4 - STEP 5C
+              <!-- DESCRIPTION ITEM 4 - STEP 5C
      Keep Payroll Records visible for HR review, but contain long record lists
      inside a controlled scroll panel so the whole page does not become too long. -->
-          <div id="payrollRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
-            style="max-height: 620px; overflow-y: auto;">
-            <table class="table align-middle mb-0">
-              <!-- DESCRIPTION ITEM 4 - STEP 5C
+              <div id="payrollRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+                style="max-height: 620px; overflow-y: auto;">
+                <table class="table align-middle mb-0">
+                  <!-- DESCRIPTION ITEM 4 - STEP 5C
      Sticky table header keeps payroll columns visible while HR scrolls
      through many payroll records inside the contained panel. -->
-              <thead class="position-sticky top-0 bg-light" style="z-index: 2;">
-                <tr>
-                  <th>Employee</th>
-                  <th>Cycle</th>
-                  <th>Pay / Submit</th>
-                  <th>Pay Summary</th>
-                  <th>Status</th>
-                  <th class="text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody id="payrollRecordsTableBody">
-                <tr>
-                  <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 8B
+                  <thead class="position-sticky top-0 bg-light" style="z-index: 2;">
+                    <tr>
+                      <th>Employee</th>
+                      <th>Cycle</th>
+                      <th>Pay / Submit</th>
+                      <th>Pay Summary</th>
+                      <th>Status</th>
+                      <th class="text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="payrollRecordsTableBody">
+                    <tr>
+                      <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 8B
      Colspan reduced to match the new compact payroll records layout. -->
-                  <td colspan="6" class="text-center text-secondary py-4">
-                    Loading payroll records.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                      <td colspan="6" class="text-center text-secondary py-4">
+                        Loading payroll records.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
-          <hr class="my-4" />
+              <hr class="my-4" />
 
-          <!-- DESCRIPTION ITEM 4 - STEP 5B
+              <!-- DESCRIPTION ITEM 4 - STEP 5B
      Compact collapsible Payslip Email Status panel.
      This keeps payroll records as the primary table while allowing HR
      to expand status details only when they need to review prepared,
      sent, or failed payslip emails. -->
-          <div id="payslipEmailStatusSection">
-            <div class="border rounded-4 p-3 bg-light-subtle">
-              <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-                <div>
-                  <h3 class="h5 mb-1">Payslip Email Status</h3>
-                  <p class="section-subtext mb-0">
-                    Track prepared payslip email records for the selected payroll action cycle.
-                  </p>
-                </div>
+              <div id="payslipEmailStatusSection">
+                <div class="border rounded-4 p-3 bg-light-subtle">
+                  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                    <div>
+                      <h3 class="h5 mb-1">Payslip Email Status</h3>
+                      <p class="section-subtext mb-0">
+                        Track prepared payslip email records for the selected payroll action cycle.
+                      </p>
+                    </div>
 
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                  <!-- DESCRIPTION ITEM 4 - STEP 5B
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                      <!-- DESCRIPTION ITEM 4 - STEP 5B
              Summary badges are placeholders for now.
              JS will update these when payslip email logs are loaded. -->
-                  <span class="badge rounded-pill text-bg-secondary px-3 py-2">
-                    Pending: <span id="payslipEmailPendingCount">0</span>
-                  </span>
+                      <span class="badge rounded-pill text-bg-secondary px-3 py-2">
+                        Pending: <span id="payslipEmailPendingCount">0</span>
+                      </span>
 
-                  <span class="badge rounded-pill text-bg-success px-3 py-2">
-                    Sent: <span id="payslipEmailSentCount">0</span>
-                  </span>
+                      <span class="badge rounded-pill text-bg-success px-3 py-2">
+                        Sent: <span id="payslipEmailSentCount">0</span>
+                      </span>
 
-                  <span class="badge rounded-pill text-bg-danger px-3 py-2">
-                    Failed: <span id="payslipEmailFailedCount">0</span>
-                  </span>
+                      <span class="badge rounded-pill text-bg-danger px-3 py-2">
+                        Failed: <span id="payslipEmailFailedCount">0</span>
+                      </span>
 
-                  <button type="button" id="togglePayslipEmailLogsBtn"
-                    class="btn btn-outline-secondary dashboard-action-btn text-nowrap" aria-expanded="false"
-                    aria-controls="payslipEmailLogsCollapse">
-                    <i class="bi bi-chevron-down me-2"></i>
-                    <span>View Status</span>
-                  </button>
-                </div>
-              </div>
-
-              <!-- DESCRIPTION ITEM 4 - STEP 5B
-         Detailed status area remains collapsed by default so the Payroll
-         Records card stays compact. -->
-              <div id="payslipEmailLogsCollapse" class="d-none mt-4">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
-                  <div class="small text-secondary">
-                    Detailed payslip email logs will appear here after status loading is wired.
+                      <button type="button" id="togglePayslipEmailLogsBtn"
+                        class="btn btn-outline-secondary dashboard-action-btn text-nowrap" aria-expanded="false"
+                        aria-controls="payslipEmailLogsCollapse">
+                        <i class="bi bi-chevron-down me-2"></i>
+                        <span>View Status</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <!-- DESCRIPTION ITEM 4 - STEP 6
+                  <!-- DESCRIPTION ITEM 4 - STEP 5B
+         Detailed status area remains collapsed by default so the Payroll
+         Records card stays compact. -->
+                  <div id="payslipEmailLogsCollapse" class="d-none mt-4">
+                    <div
+                      class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+                      <div class="small text-secondary">
+                        Detailed payslip email logs will appear here after status loading is wired.
+                      </div>
+
+                      <!-- DESCRIPTION ITEM 4 - STEP 6
      Refresh payslip email logs from Supabase.
      This only loads audit/status records; it does not send emails. -->
-                  <button type="button" id="refreshPayslipEmailLogsBtn"
-                    class="btn btn-outline-primary dashboard-action-btn text-nowrap"
-                    title="Refresh prepared payslip email status records">
-                    <i class="bi bi-arrow-clockwise me-2"></i>
-                    Refresh Status
-                  </button>
-                </div>
+                      <button type="button" id="refreshPayslipEmailLogsBtn"
+                        class="btn btn-outline-primary dashboard-action-btn text-nowrap"
+                        title="Refresh prepared payslip email status records">
+                        <i class="bi bi-arrow-clockwise me-2"></i>
+                        Refresh Status
+                      </button>
+                    </div>
 
-                <div id="payslipEmailLogsEmptyState" class="alert alert-light border mb-0">
-                  No payslip email logs have been prepared yet.
-                </div>
+                    <div id="payslipEmailLogsEmptyState" class="alert alert-light border mb-0">
+                      No payslip email logs have been prepared yet.
+                    </div>
 
-                <div id="payslipEmailLogsTableWrapper" class="dashboard-table-wrap d-none">
-                  <table class="table align-middle mb-0">
-                    <thead>
-                      <tr>
-                        <th>Employee / Recipient</th>
-                        <th>Pay Cycle</th>
-                        <th>Status</th>
-                        <th>Sent At</th>
-                        <th>Error Message</th>
-                      </tr>
-                    </thead>
-                    <tbody id="payslipEmailLogsTableBody">
-                      <tr>
-                        <td colspan="5" class="text-center text-secondary py-4">
-                          Payslip email logs will load here.
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                    <div id="payslipEmailLogsTableWrapper" class="dashboard-table-wrap d-none">
+                      <table class="table align-middle mb-0">
+                        <thead>
+                          <tr>
+                            <th>Employee / Recipient</th>
+                            <th>Pay Cycle</th>
+                            <th>Status</th>
+                            <th>Sent At</th>
+                            <th>Error Message</th>
+                          </tr>
+                        </thead>
+                        <tbody id="payslipEmailLogsTableBody">
+                          <tr>
+                            <td colspan="5" class="text-center text-secondary py-4">
+                              Payslip email logs will load here.
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <!-- DESCRIPTION ITEM 4 - STEP 2C
+              <!-- DESCRIPTION ITEM 4 - STEP 2C
                Close Payroll Records collapsible body. -->
-          </div>
+            </div>
       </section>
   </main>
   <!-- BATCH PAYROLL DEFAULT - STEP 6D

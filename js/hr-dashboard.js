@@ -76,6 +76,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     // because the records table resolves employee and grade context from Payroll Master.
     await refreshPayrollStatutoryWorkspace();
 
+    // DESCRIPTION ITEM 4 - STEP 3
+    // Load saved Other Deductions after Payroll Master Records are available.
+    // Other Deductions are linked to Payroll Master Data in the same standard
+    // payroll setup pattern as allowances and statutory deductions.
+    await refreshPayrollOtherDeductionWorkspace();
+
+    // DESCRIPTION ITEM 5 - STEP 3
+    // Load employee-specific payroll overrides after Payroll Master Records
+    // are available, because overrides are linked to Payroll Master Data.
+    await refreshPayrollEmployeeOverrideWorkspace();
+
     await refreshPayrollWorkspace();
 
     // BANK DIRECTORY - STEP 7A
@@ -133,10 +144,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     // DESCRIPTION ITEM 3 - STEP 2D
-// Expose statutory deduction edit handler for the records table action button.
-window.hrEditPayrollStatutoryRecord = (statutoryDeductionId) => {
-  startPayrollStatutoryEdit(statutoryDeductionId);
-};
+    // Expose statutory deduction edit handler for the records table action button.
+    window.hrEditPayrollStatutoryRecord = (statutoryDeductionId) => {
+      startPayrollStatutoryEdit(statutoryDeductionId);
+    };
+
+    // DESCRIPTION ITEM 4 - STEP 4
+    // Expose Other Deduction edit handler for the records table action button.
+    // This lets HR maintain an existing union, cooperative, salary advance,
+    // or other deduction without creating duplicate deduction setup rows.
+    window.hrEditPayrollOtherDeductionRecord = (otherDeductionId) => {
+      startPayrollOtherDeductionEdit(otherDeductionId);
+    };
+
+    // DESCRIPTION ITEM 5 - STEP 4
+    // Expose Employee Payroll Override edit handler for the records table.
+    // This lets HR maintain an existing override instead of creating duplicates.
+    window.hrEditPayrollEmployeeOverrideRecord = (overrideId) => {
+      startPayrollEmployeeOverrideEdit(overrideId);
+    };
     // =========================================================
     // DESCRIPTION ITEM 1
     // Expose payroll master edit handler for table action buttons.
@@ -290,7 +316,7 @@ const state = {
   // Null means the form is in normal create mode.
   currentEditingPayrollStatutory: null,
 
-    // DESCRIPTION ITEM 4 - STEP 2
+  // DESCRIPTION ITEM 4 - STEP 2
   // Holds saved non-statutory deductions such as union dues,
   // cooperative deductions, and salary advance repayments.
   // Save/load logic will be added after the UI shell is confirmed.
@@ -301,6 +327,27 @@ const state = {
   // Tracks the Other Deduction currently being edited.
   // Null means the form is in create mode.
   currentEditingPayrollOtherDeduction: null,
+
+  // DESCRIPTION ITEM 4 - STEP 3
+  // Tracks the latest saved Other Deduction so the records table can
+  // show the new row first after create/refresh.
+  lastSavedPayrollOtherDeductionKey: null,
+
+  // DESCRIPTION ITEM 5 - STEP 2
+  // Holds employee-specific payroll override records.
+  // These records store traceable exceptions to grade/rule-based payroll setup.
+  payrollEmployeeOverrides: [],
+  filteredPayrollEmployeeOverrides: [],
+
+  // DESCRIPTION ITEM 5 - STEP 2
+  // Tracks the employee override currently being edited.
+  // Save/edit logic will be wired after the UI shell is confirmed.
+  currentEditingPayrollEmployeeOverride: null,
+
+  // DESCRIPTION ITEM 5 - STEP 2
+  // Reserved for keeping the latest saved/updated override first
+  // once save/edit behaviour is added.
+  lastSavedPayrollEmployeeOverrideKey: null,
 
   // BANK DIRECTORY - STEP 5
   // Temporary in-page bank directory records.
@@ -361,6 +408,108 @@ const state = {
   pendingProfileImageFile: null,
   dom: {},
 };
+
+const PAYROLL_MASTER_MAINTENANCE_ROLES = new Set([
+  "hr",
+  "hr_manager",
+  "payroll",
+  "payroll_manager",
+  "system_admin",
+]);
+
+function getCurrentUserRoleValue() {
+  // DESCRIPTION ITEM 7 - STEP 7A
+  // Normalise the signed-in user's role so Payroll Master maintenance
+  // can be restricted consistently across save, edit, and table actions.
+  return String(
+    state.currentProfile?.role ||
+    state.currentProfile?.system_role ||
+    state.currentProfile?.user_role ||
+    "",
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function canCurrentUserMaintainPayrollMasterData() {
+  return PAYROLL_MASTER_MAINTENANCE_ROLES.has(getCurrentUserRoleValue());
+}
+
+function showPayrollMasterAccessDeniedMessage() {
+  showPageAlert(
+    "warning",
+    "Payroll Master Data can only be maintained by authorised HR/payroll roles.",
+  );
+
+  showDashboardToast(
+    "warning",
+    "Payroll Master restricted",
+    "You can review payroll master records, but you are not authorised to create or maintain salary setup data.",
+  );
+}
+
+function setPayrollMasterMaintenanceFieldsDisabled(isDisabled) {
+  [
+    state.dom.payrollMasterEmployeeId,
+    state.dom.payrollMasterGradeLevel,
+    state.dom.payrollMasterBasicSalary,
+    state.dom.payrollMasterEffectiveDate,
+    state.dom.payrollMasterPayCycle,
+    state.dom.payrollMasterStatus,
+    state.dom.payrollMasterNotes,
+  ].forEach((field) => {
+    if (field) field.disabled = isDisabled;
+  });
+}
+
+function applyPayrollMasterAccessControls() {
+  const canMaintain = canCurrentUserMaintainPayrollMasterData();
+
+  // DESCRIPTION ITEM 7 - STEP 7A
+  // Payroll Master Data is salary setup data. Employees and managers must not
+  // create new versions or edit setup records from the UI.
+  setPayrollMasterMaintenanceFieldsDisabled(!canMaintain);
+
+  if (!canMaintain) {
+    state.currentEditingPayrollMaster = null;
+
+    if (state.dom.editingPayrollMasterId) {
+      state.dom.editingPayrollMasterId.value = "";
+    }
+
+    state.dom.cancelPayrollMasterEditBtn?.classList.add("d-none");
+
+    if (state.dom.resetPayrollMasterFormBtn) {
+      state.dom.resetPayrollMasterFormBtn.disabled = true;
+    }
+
+    if (state.dom.payrollMasterFormModeBadge) {
+      state.dom.payrollMasterFormModeBadge.textContent = "Read Only";
+      state.dom.payrollMasterFormModeBadge.className =
+        "badge rounded-pill text-bg-warning border px-3 py-2";
+    }
+
+    if (state.dom.savePayrollMasterBtn) {
+      state.dom.savePayrollMasterBtn.disabled = true;
+      state.dom.savePayrollMasterBtn.className =
+        "btn btn-secondary dashboard-action-btn";
+      state.dom.savePayrollMasterBtn.innerHTML = `
+        <i class="bi bi-lock me-2"></i>
+        <span id="savePayrollMasterBtnText">Payroll Master Read Only</span>
+      `;
+      state.dom.savePayrollMasterBtnText =
+        document.getElementById("savePayrollMasterBtnText");
+    }
+
+    return;
+  }
+
+  if (state.dom.resetPayrollMasterFormBtn) {
+    state.dom.resetPayrollMasterFormBtn.disabled = false;
+  }
+
+  updatePayrollMasterSaveButtonState();
+}
 
 function getSupabaseClient() {
   if (!window.supabaseClient) {
@@ -664,7 +813,7 @@ function cacheDomElements() {
     // cleanly without the heading being cut off.
     payrollRecordsHeader: document.getElementById("payrollRecordsHeader"),
 
-        // DESCRIPTION ITEM 4 - STEP 2C
+    // DESCRIPTION ITEM 4 - STEP 2C
     // Collapse controls for the Payroll Records review/audit card.
     // This keeps long payroll record lists compact by default.
     togglePayrollRecordsCardBtn: document.getElementById("togglePayrollRecordsCardBtn"),
@@ -849,14 +998,14 @@ function cacheDomElements() {
 
     // DESCRIPTION ITEM 3 - STEP 2B
     // Cache Statutory Deduction create controls.
-savePayrollStatutoryBtn: document.getElementById("savePayrollStatutoryBtn"),
-savePayrollStatutoryBtnText: document.getElementById("savePayrollStatutoryBtnText"),
+    savePayrollStatutoryBtn: document.getElementById("savePayrollStatutoryBtn"),
+    savePayrollStatutoryBtnText: document.getElementById("savePayrollStatutoryBtnText"),
 
-// DESCRIPTION ITEM 3 - STEP 2D
-// Cancel Edit appears only when maintaining an existing statutory deduction.
-cancelPayrollStatutoryEditBtn: document.getElementById("cancelPayrollStatutoryEditBtn"),
+    // DESCRIPTION ITEM 3 - STEP 2D
+    // Cancel Edit appears only when maintaining an existing statutory deduction.
+    cancelPayrollStatutoryEditBtn: document.getElementById("cancelPayrollStatutoryEditBtn"),
 
-resetPayrollStatutoryFormBtn: document.getElementById("resetPayrollStatutoryFormBtn"),
+    resetPayrollStatutoryFormBtn: document.getElementById("resetPayrollStatutoryFormBtn"),
 
     // DESCRIPTION ITEM 3 - STEP 2C
     // Cache Statutory Deductions collapse and records table controls.
@@ -894,6 +1043,38 @@ resetPayrollStatutoryFormBtn: document.getElementById("resetPayrollStatutoryForm
     payrollOtherDeductionRecordsEmptyState: document.getElementById("payrollOtherDeductionRecordsEmptyState"),
     payrollOtherDeductionRecordsTableWrapper: document.getElementById("payrollOtherDeductionRecordsTableWrapper"),
     payrollOtherDeductionRecordsTableBody: document.getElementById("payrollOtherDeductionRecordsTableBody"),
+
+    // DESCRIPTION ITEM 5 - STEP 2
+    // Cache Employee Payroll Overrides UI shell fields.
+    // This connects the new card to existing collapse/default-card behaviour only.
+    // Save/load/edit logic will be added in later steps.
+    payrollEmployeeOverrideCreateForm: document.getElementById("payrollEmployeeOverrideCreateForm"),
+    editingPayrollEmployeeOverrideId: document.getElementById("editingPayrollEmployeeOverrideId"),
+    payrollEmployeeOverrideMasterRecordId: document.getElementById("payrollEmployeeOverrideMasterRecordId"),
+    payrollEmployeeOverrideCategory: document.getElementById("payrollEmployeeOverrideCategory"),
+    payrollEmployeeOverrideElement: document.getElementById("payrollEmployeeOverrideElement"),
+    payrollEmployeeOverrideMethod: document.getElementById("payrollEmployeeOverrideMethod"),
+    payrollEmployeeOverrideOriginalValue: document.getElementById("payrollEmployeeOverrideOriginalValue"),
+    payrollEmployeeOverrideValue: document.getElementById("payrollEmployeeOverrideValue"),
+    payrollEmployeeOverrideEffectiveDate: document.getElementById("payrollEmployeeOverrideEffectiveDate"),
+    payrollEmployeeOverrideEndDate: document.getElementById("payrollEmployeeOverrideEndDate"),
+    payrollEmployeeOverrideStatus: document.getElementById("payrollEmployeeOverrideStatus"),
+    payrollEmployeeOverrideApprovalReference: document.getElementById("payrollEmployeeOverrideApprovalReference"),
+    payrollEmployeeOverrideRuleSnapshot: document.getElementById("payrollEmployeeOverrideRuleSnapshot"),
+    payrollEmployeeOverrideReason: document.getElementById("payrollEmployeeOverrideReason"),
+    payrollEmployeeOverrideNotes: document.getElementById("payrollEmployeeOverrideNotes"),
+    savePayrollEmployeeOverrideBtn: document.getElementById("savePayrollEmployeeOverrideBtn"),
+    savePayrollEmployeeOverrideBtnText: document.getElementById("savePayrollEmployeeOverrideBtnText"),
+    cancelPayrollEmployeeOverrideEditBtn: document.getElementById("cancelPayrollEmployeeOverrideEditBtn"),
+    resetPayrollEmployeeOverrideFormBtn: document.getElementById("resetPayrollEmployeeOverrideFormBtn"),
+    togglePayrollEmployeeOverrideCardBtn: document.getElementById("togglePayrollEmployeeOverrideCardBtn"),
+    payrollEmployeeOverrideCardCollapse: document.getElementById("payrollEmployeeOverrideCardCollapse"),
+    refreshPayrollEmployeeOverrideRecordsBtn: document.getElementById("refreshPayrollEmployeeOverrideRecordsBtn"),
+    payrollEmployeeOverrideSearchInput: document.getElementById("payrollEmployeeOverrideSearchInput"),
+    payrollEmployeeOverrideRecordsHeader: document.getElementById("payrollEmployeeOverrideRecordsHeader"),
+    payrollEmployeeOverrideRecordsEmptyState: document.getElementById("payrollEmployeeOverrideRecordsEmptyState"),
+    payrollEmployeeOverrideRecordsTableWrapper: document.getElementById("payrollEmployeeOverrideRecordsTableWrapper"),
+    payrollEmployeeOverrideRecordsTableBody: document.getElementById("payrollEmployeeOverrideRecordsTableBody"),
 
     payrollCreateForm: document.getElementById("payrollCreateForm"),
 
@@ -1126,8 +1307,14 @@ function getDashboardWorkingCardPairs() {
     [state.dom.togglePayrollAllowanceCardBtn, state.dom.payrollAllowanceCardCollapse],
     [state.dom.togglePayrollStatutoryCardBtn, state.dom.payrollStatutoryCardCollapse],
     [state.dom.togglePayrollOtherDeductionCardBtn, state.dom.payrollOtherDeductionCardCollapse],
+
+    // DESCRIPTION ITEM 5 - STEP 2
+    // Employee Payroll Overrides is another long payroll setup card,
+    // so it should collapse by default and support double-click collapse.
+    [state.dom.togglePayrollEmployeeOverrideCardBtn, state.dom.payrollEmployeeOverrideCardCollapse],
+
     [state.dom.togglePayrollRecordCardBtn, state.dom.payrollRecordCardCollapse],
-        // DESCRIPTION ITEM 4 - STEP 2C
+    // DESCRIPTION ITEM 4 - STEP 2C
     // Payroll Records can become long, so it should collapse by default
     // and support the same double-click collapse shortcut.
     [state.dom.togglePayrollRecordsCardBtn, state.dom.payrollRecordsCardCollapse],
@@ -1425,6 +1612,2036 @@ function redirectToPayrollStatutoryRecordsAfterSave() {
     state.dom.payrollStatutoryCardCollapse,
     16,
   );
+}
+
+// =========================================================
+// DESCRIPTION ITEM 4 - STEP 3
+// Other Deductions create/load helpers.
+// These support non-statutory deductions such as union dues,
+// cooperative deductions, and salary advance repayments.
+// Payroll calculation integration is intentionally not changed here.
+// =========================================================
+
+function openPayrollOtherDeductionCard() {
+  setDashboardCardExpanded(
+    state.dom.togglePayrollOtherDeductionCardBtn,
+    state.dom.payrollOtherDeductionCardCollapse,
+    true,
+  );
+}
+
+function redirectToPayrollOtherDeductionRecordsAfterSave() {
+  openPayrollOtherDeductionCard();
+
+  scrollToDashboardTarget(
+    state.dom.payrollOtherDeductionRecordsHeader ||
+    state.dom.payrollOtherDeductionRecordsTableWrapper ||
+    state.dom.payrollOtherDeductionCardCollapse,
+    16,
+  );
+}
+
+function formatPayrollOtherDeductionType(value = "") {
+  const labels = {
+    UNION_DUES: "Union Dues",
+    COOPERATIVE: "Cooperative Deduction",
+    SALARY_ADVANCE: "Salary Advance",
+    OTHER: "Other Deduction",
+  };
+
+  return labels[value] || formatStatusLabel(value || "--");
+}
+
+function getPayrollOtherDeductionMasterContext(record = {}) {
+  const master = getPayrollMasterRecordById(record.payroll_master_record_id);
+
+  if (!master) {
+    return {
+      fullName: "Unknown Employee",
+      workEmail: "--",
+      gradeLabel: "--",
+      basicSalary: null,
+      masterEffectiveDate: "",
+    };
+  }
+
+  const fullName =
+    `${master.first_name || ""} ${master.last_name || ""}`.trim() ||
+    master.work_email ||
+    "Unknown Employee";
+
+  return {
+    fullName,
+    workEmail: master.work_email || "--",
+    gradeLabel: getPayrollMasterGradeDisplay(master),
+    basicSalary: master.basic_salary,
+    masterEffectiveDate: master.salary_effective_date || "",
+  };
+}
+
+function populatePayrollOtherDeductionMasterOptions() {
+  const select = state.dom.payrollOtherDeductionMasterRecordId;
+  if (!select) return;
+
+  const currentValue = String(select.value || "").trim();
+  const records = Array.isArray(state.payrollMasterRecords)
+    ? [...state.payrollMasterRecords]
+    : [];
+
+  select.innerHTML = `<option value="">Select payroll master record</option>`;
+
+  if (!records.length) {
+    select.innerHTML = `<option value="">Create payroll master record first</option>`;
+    updatePayrollOtherDeductionSaveButtonState();
+    return;
+  }
+
+  const recordsToRender = sortPayrollMasterRecordsByLatestActivity(records);
+
+  recordsToRender.forEach((record) => {
+    const option = document.createElement("option");
+
+    const fullName =
+      `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
+      record.work_email ||
+      "Unknown Employee";
+    // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1F
+    // Display the saved payroll ID/reference in Payroll Records.
+    const payrollReference = String(record.payroll_reference || "").trim();
+
+    const gradeLabel = getPayrollMasterGradeDisplay(record);
+    const gradeSegment = gradeLabel && gradeLabel !== "--"
+      ? ` — ${gradeLabel}`
+      : "";
+
+    option.value = record.id;
+    option.textContent =
+      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+
+    select.appendChild(option);
+  });
+
+  if (currentValue) {
+    const stillExists = Array.from(select.options).some(
+      (option) => option.value === currentValue,
+    );
+
+    if (stillExists) {
+      select.value = currentValue;
+    }
+  }
+
+  updatePayrollOtherDeductionSaveButtonState();
+}
+
+function updatePayrollOtherDeductionSaveButtonState() {
+  const amount = Number(state.dom.payrollOtherDeductionAmount?.value || 0);
+  const duration = Number(state.dom.payrollOtherDeductionDurationMonths?.value || 0);
+
+  const canSubmit = Boolean(
+    String(state.dom.payrollOtherDeductionMasterRecordId?.value || "").trim() &&
+    String(state.dom.payrollOtherDeductionType?.value || "").trim() &&
+    Number.isFinite(amount) &&
+    amount > 0 &&
+    Number.isInteger(duration) &&
+    duration >= 1 &&
+    duration <= 120 &&
+    String(state.dom.payrollOtherDeductionStartDate?.value || "").trim() &&
+    String(state.dom.payrollOtherDeductionStatus?.value || "").trim()
+  );
+
+  setPrimaryActionButtonReadyState(
+    state.dom.savePayrollOtherDeductionBtn,
+    canSubmit,
+  );
+}
+
+function clearPayrollOtherDeductionValidationState() {
+  // DESCRIPTION ITEM 8 - STEP 8D
+  // Reset Other Deduction validation styling before each fresh validation pass.
+  [
+    state.dom.payrollOtherDeductionMasterRecordId,
+    state.dom.payrollOtherDeductionType,
+    state.dom.payrollOtherDeductionAmount,
+    state.dom.payrollOtherDeductionDurationMonths,
+    state.dom.payrollOtherDeductionStartDate,
+    state.dom.payrollOtherDeductionStatus,
+  ].forEach((field) => {
+    field?.classList.remove("is-invalid");
+  });
+}
+
+function markPayrollOtherDeductionFieldInvalid(field) {
+  if (!field) return;
+  field.classList.add("is-invalid");
+}
+
+function findPayrollOtherDeductionStartDateConflict({
+  payrollMasterRecordId = "",
+  deductionType = "",
+  startDate = "",
+  editingId = "",
+} = {}) {
+  const masterKey = String(payrollMasterRecordId || "").trim();
+  const typeKey = String(deductionType || "").trim();
+  const dateKey = String(startDate || "").trim();
+  const editingKey = String(editingId || "").trim();
+
+  if (!masterKey || !typeKey || !dateKey) return null;
+
+  // DESCRIPTION ITEM 8 - STEP 8D
+  // Other Deductions are effective from their start date.
+  // Duplicate same-date rows for the same Payroll Master and deduction type
+  // would make payroll deduction behaviour unclear.
+  return (state.payrollOtherDeductions || []).find((record) => {
+    return (
+      String(record.id || "").trim() !== editingKey &&
+      String(record.payroll_master_record_id || "").trim() === masterKey &&
+      String(record.deduction_type || "").trim() === typeKey &&
+      String(record.start_date || "").trim() === dateKey
+    );
+  }) || null;
+}
+
+function showPayrollOtherDeductionValidationIssues(issues = []) {
+  if (!issues.length) return;
+
+  const messageHtml = `
+    <div class="fw-semibold mb-2">Other Deduction could not be saved.</div>
+    <ul class="mb-0 ps-3">
+      ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
+    </ul>
+  `;
+
+  showPageAlert("warning", messageHtml);
+
+  showDashboardToast(
+    "warning",
+    "Other deduction validation failed",
+    issues[0] || "Please correct the highlighted Other Deduction fields.",
+  );
+}
+
+function validatePayrollOtherDeductionForm() {
+  clearPayrollOtherDeductionValidationState();
+
+  const issues = [];
+  let firstInvalidField = null;
+
+  const editingId =
+    String(state.currentEditingPayrollOtherDeduction?.id ||
+      state.dom.editingPayrollOtherDeductionId?.value ||
+      "").trim();
+
+  const payrollMasterRecordId =
+    String(state.dom.payrollOtherDeductionMasterRecordId?.value || "").trim();
+  const deductionType =
+    String(state.dom.payrollOtherDeductionType?.value || "").trim();
+  const amountText =
+    String(state.dom.payrollOtherDeductionAmount?.value || "").trim();
+  const durationText =
+    String(state.dom.payrollOtherDeductionDurationMonths?.value || "").trim();
+  const startDate =
+    String(state.dom.payrollOtherDeductionStartDate?.value || "").trim();
+  const status =
+    String(state.dom.payrollOtherDeductionStatus?.value || "").trim();
+
+  if (!payrollMasterRecordId) {
+    issues.push("Select the Payroll Master record for this deduction.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionMasterRecordId);
+    firstInvalidField ||= state.dom.payrollOtherDeductionMasterRecordId;
+  }
+
+  if (!deductionType) {
+    issues.push("Select the deduction type.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionType);
+    firstInvalidField ||= state.dom.payrollOtherDeductionType;
+  }
+
+  const amount = Number(amountText);
+
+  if (!amountText) {
+    issues.push("Enter the deduction amount per pay cycle.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionAmount);
+    firstInvalidField ||= state.dom.payrollOtherDeductionAmount;
+  } else if (!Number.isFinite(amount) || amount <= 0) {
+    issues.push("Deduction amount must be greater than zero.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionAmount);
+    firstInvalidField ||= state.dom.payrollOtherDeductionAmount;
+  }
+
+  const duration = Number(durationText);
+
+  if (!durationText) {
+    issues.push("Enter the deduction duration in months.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionDurationMonths);
+    firstInvalidField ||= state.dom.payrollOtherDeductionDurationMonths;
+  } else if (!Number.isInteger(duration) || duration < 1 || duration > 120) {
+    issues.push("Deduction duration must be a whole number between 1 and 120 months.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionDurationMonths);
+    firstInvalidField ||= state.dom.payrollOtherDeductionDurationMonths;
+  }
+
+  if (!startDate) {
+    issues.push("Select the deduction start date.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStartDate);
+    firstInvalidField ||= state.dom.payrollOtherDeductionStartDate;
+  } else if (Number.isNaN(new Date(startDate).getTime())) {
+    issues.push("Deduction start date is not valid.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStartDate);
+    firstInvalidField ||= state.dom.payrollOtherDeductionStartDate;
+  }
+
+  if (!status) {
+    issues.push("Select the deduction status.");
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStatus);
+    firstInvalidField ||= state.dom.payrollOtherDeductionStatus;
+  }
+
+  const conflict = findPayrollOtherDeductionStartDateConflict({
+    payrollMasterRecordId,
+    deductionType,
+    startDate,
+    editingId,
+  });
+
+  if (conflict) {
+    issues.push(
+      `An other deduction already exists for this Payroll Master, deduction type, and ${formatDate(startDate)}.`,
+    );
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionMasterRecordId);
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionType);
+    markPayrollOtherDeductionFieldInvalid(state.dom.payrollOtherDeductionStartDate);
+    firstInvalidField ||= state.dom.payrollOtherDeductionStartDate;
+  }
+
+  if (issues.length) {
+    showPayrollOtherDeductionValidationIssues(issues);
+
+    if (firstInvalidField?.focus) {
+      firstInvalidField.focus();
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+function buildPayrollOtherDeductionPayload() {
+  return {
+    payroll_master_record_id:
+      String(state.dom.payrollOtherDeductionMasterRecordId?.value || "").trim(),
+
+    deduction_type:
+      String(state.dom.payrollOtherDeductionType?.value || "").trim(),
+
+    deduction_amount:
+      Number(state.dom.payrollOtherDeductionAmount?.value || 0),
+
+    duration_months:
+      Number(state.dom.payrollOtherDeductionDurationMonths?.value || 0),
+
+    start_date:
+      state.dom.payrollOtherDeductionStartDate?.value || null,
+
+    reference_number:
+      String(state.dom.payrollOtherDeductionReferenceNumber?.value || "").trim() || null,
+
+    status:
+      String(state.dom.payrollOtherDeductionStatus?.value || "Active").trim(),
+
+    notes:
+      String(state.dom.payrollOtherDeductionNotes?.value || "").trim() || null,
+
+    created_by: state.currentUser?.id || null,
+    updated_by: state.currentUser?.id || null,
+  };
+}
+
+function setPayrollOtherDeductionSaveLoading(isLoading) {
+  const button = state.dom.savePayrollOtherDeductionBtn;
+  if (!button) return;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Saving Other Deduction...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+    state.dom.savePayrollOtherDeductionBtnText =
+      document.getElementById("savePayrollOtherDeductionBtnText");
+  }
+
+  updatePayrollOtherDeductionSaveButtonState();
+}
+
+function resetPayrollOtherDeductionForm() {
+  state.currentEditingPayrollOtherDeduction = null;
+
+  if (state.dom.editingPayrollOtherDeductionId) {
+    state.dom.editingPayrollOtherDeductionId.value = "";
+  }
+
+  [
+    state.dom.payrollOtherDeductionMasterRecordId,
+    state.dom.payrollOtherDeductionType,
+    state.dom.payrollOtherDeductionAmount,
+    state.dom.payrollOtherDeductionDurationMonths,
+    state.dom.payrollOtherDeductionStartDate,
+    state.dom.payrollOtherDeductionReferenceNumber,
+    state.dom.payrollOtherDeductionNotes,
+  ].forEach((field) => {
+    if (field) {
+      field.value = "";
+      field.classList.remove("is-invalid");
+    }
+  });
+
+  if (state.dom.payrollOtherDeductionStatus) {
+    state.dom.payrollOtherDeductionStatus.value = "Active";
+    state.dom.payrollOtherDeductionStatus.classList.remove("is-invalid");
+  }
+
+  if (state.dom.cancelPayrollOtherDeductionEditBtn) {
+    state.dom.cancelPayrollOtherDeductionEditBtn.classList.add("d-none");
+  }
+
+  if (state.dom.savePayrollOtherDeductionBtn) {
+    state.dom.savePayrollOtherDeductionBtn.innerHTML = `
+      <i class="bi bi-save me-2"></i>
+      <span id="savePayrollOtherDeductionBtnText">Create Other Deduction</span>
+    `;
+    state.dom.savePayrollOtherDeductionBtnText =
+      document.getElementById("savePayrollOtherDeductionBtnText");
+  }
+
+  updatePayrollOtherDeductionSaveButtonState();
+}
+
+async function handlePayrollOtherDeductionFormClear() {
+  const button = state.dom.resetPayrollOtherDeductionFormBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Clearing...");
+    await waitForNextPaint();
+    resetPayrollOtherDeductionForm();
+    await waitForMinimumLoadingFeedback(startedAt);
+  } finally {
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
+function renderPayrollOtherDeductionRecordsLoadingState() {
+  if (!state.dom.payrollOtherDeductionRecordsTableBody) return;
+
+  state.dom.payrollOtherDeductionRecordsEmptyState?.classList.add("d-none");
+  state.dom.payrollOtherDeductionRecordsTableWrapper?.classList.remove("d-none");
+
+  state.dom.payrollOtherDeductionRecordsTableBody.innerHTML = `
+    <tr>
+      <td colspan="9" class="text-center text-secondary py-4">
+        Loading other deduction records.
+      </td>
+    </tr>
+  `;
+}
+
+function buildPayrollOtherDeductionSortKey(record = {}) {
+  const id = String(record.id || "").trim();
+
+  if (id) {
+    return `id:${id}`;
+  }
+
+  return [
+    "fallback",
+    normalizeText(record.payroll_master_record_id),
+    normalizeText(record.deduction_type),
+    String(record.start_date || "").trim(),
+  ].join("|");
+}
+
+function sortPayrollOtherDeductionRecordsByLatestActivity(records = []) {
+  const lastSavedKey = String(state.lastSavedPayrollOtherDeductionKey || "").trim();
+
+  return [...records].sort((a, b) => {
+    const aKey = buildPayrollOtherDeductionSortKey(a);
+    const bKey = buildPayrollOtherDeductionSortKey(b);
+
+    if (lastSavedKey && aKey === lastSavedKey && bKey !== lastSavedKey) {
+      return -1;
+    }
+
+    if (lastSavedKey && bKey === lastSavedKey && aKey !== lastSavedKey) {
+      return 1;
+    }
+
+    const aTime = new Date(a.updated_at || a.created_at || 0).getTime() || 0;
+    const bTime = new Date(b.updated_at || b.created_at || 0).getTime() || 0;
+
+    if (bTime !== aTime) {
+      return bTime - aTime;
+    }
+
+    const aStartDate = new Date(a.start_date || 0).getTime() || 0;
+    const bStartDate = new Date(b.start_date || 0).getTime() || 0;
+
+    return bStartDate - aStartDate;
+  });
+}
+
+async function loadPayrollOtherDeductions() {
+  const supabase = getSupabaseClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("payroll_other_deductions")
+      .select("*")
+      .order("start_date", { ascending: false })
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    state.payrollOtherDeductions = Array.isArray(data) ? data : [];
+    applyPayrollOtherDeductionSearch();
+  } catch (error) {
+    console.error("Error loading other deductions:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Other deduction records could not be loaded.",
+    );
+
+    state.payrollOtherDeductions = [];
+    state.filteredPayrollOtherDeductions = [];
+    renderPayrollOtherDeductionRecords([]);
+  }
+}
+
+async function refreshPayrollOtherDeductionWorkspace() {
+  renderPayrollOtherDeductionRecordsLoadingState();
+  populatePayrollOtherDeductionMasterOptions();
+  await loadPayrollOtherDeductions();
+}
+
+function applyPayrollOtherDeductionSearch() {
+  const searchTerm = normalizeText(state.dom.payrollOtherDeductionSearchInput?.value || "");
+
+  let rows = [...state.payrollOtherDeductions];
+
+  if (searchTerm) {
+    rows = rows.filter((record) => {
+      const masterContext = getPayrollOtherDeductionMasterContext(record);
+
+      const searchableText = [
+        // DESCRIPTION ITEM 7 - STEP 7A SEARCH POLISH
+        // Match the visible Other Deduction Records table values so HR can
+        // search by employee, type, amount, duration, start date, status, or updated date.
+        masterContext.fullName,
+        masterContext.workEmail,
+        masterContext.gradeLabel,
+
+        formatPayrollOtherDeductionType(record.deduction_type),
+
+        record.deduction_amount,
+        formatCurrency(record.deduction_amount, "NGN"),
+
+        record.duration_months,
+
+        record.total_deduction_amount,
+        formatCurrency(record.total_deduction_amount, "NGN"),
+
+        record.start_date,
+        formatDate(record.start_date),
+
+        record.reference_number,
+
+        record.status,
+        formatStatusLabel(record.status),
+
+        record.updated_at,
+        record.created_at,
+        formatDate(record.updated_at || record.created_at),
+
+        record.notes,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(searchTerm);
+    });
+  }
+
+  state.filteredPayrollOtherDeductions = rows;
+  renderPayrollOtherDeductionRecords(rows);
+}
+
+// DESCRIPTION ITEM 4 - STEP 4
+// Find one Other Deduction record from the records already loaded in memory.
+function getPayrollOtherDeductionById(otherDeductionId = "") {
+  const id = String(otherDeductionId || "").trim();
+
+  if (!id) return null;
+
+  return (state.payrollOtherDeductions || []).find(
+    (record) => String(record.id || "").trim() === id,
+  ) || null;
+}
+
+// DESCRIPTION ITEM 4 - STEP 4
+// Load an existing Other Deduction into the same form for maintenance.
+// This keeps HR in one standard setup flow instead of creating duplicates.
+function startPayrollOtherDeductionEdit(otherDeductionId) {
+  const record = getPayrollOtherDeductionById(otherDeductionId);
+
+  if (!record) {
+    showPageAlert(
+      "warning",
+      "The selected other deduction record could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  clearPageAlert();
+  openPayrollOtherDeductionCard();
+
+  state.currentEditingPayrollOtherDeduction = record;
+
+  if (state.dom.editingPayrollOtherDeductionId) {
+    state.dom.editingPayrollOtherDeductionId.value = record.id || "";
+  }
+
+  if (state.dom.payrollOtherDeductionMasterRecordId) {
+    state.dom.payrollOtherDeductionMasterRecordId.value =
+      record.payroll_master_record_id || "";
+  }
+
+  if (state.dom.payrollOtherDeductionType) {
+    state.dom.payrollOtherDeductionType.value = record.deduction_type || "";
+  }
+
+  if (state.dom.payrollOtherDeductionAmount) {
+    state.dom.payrollOtherDeductionAmount.value = record.deduction_amount ?? "";
+  }
+
+  if (state.dom.payrollOtherDeductionDurationMonths) {
+    state.dom.payrollOtherDeductionDurationMonths.value = record.duration_months ?? "";
+  }
+
+  if (state.dom.payrollOtherDeductionStartDate) {
+    state.dom.payrollOtherDeductionStartDate.value = record.start_date || "";
+  }
+
+  if (state.dom.payrollOtherDeductionReferenceNumber) {
+    state.dom.payrollOtherDeductionReferenceNumber.value =
+      record.reference_number || "";
+  }
+
+  if (state.dom.payrollOtherDeductionStatus) {
+    state.dom.payrollOtherDeductionStatus.value = record.status || "Active";
+  }
+
+  if (state.dom.payrollOtherDeductionNotes) {
+    state.dom.payrollOtherDeductionNotes.value = record.notes || "";
+  }
+
+  if (state.dom.cancelPayrollOtherDeductionEditBtn) {
+    state.dom.cancelPayrollOtherDeductionEditBtn.classList.remove("d-none");
+  }
+
+  if (state.dom.savePayrollOtherDeductionBtn) {
+    state.dom.savePayrollOtherDeductionBtn.innerHTML = `
+      <i class="bi bi-save me-2"></i>
+      <span id="savePayrollOtherDeductionBtnText">Update Other Deduction</span>
+    `;
+    state.dom.savePayrollOtherDeductionBtnText =
+      document.getElementById("savePayrollOtherDeductionBtnText");
+  }
+
+  updatePayrollOtherDeductionSaveButtonState();
+
+  scrollToDashboardTarget(
+    state.dom.payrollOtherDeductionCreateForm?.closest(".dashboard-section-card") ||
+    state.dom.payrollOtherDeductionCreateForm,
+    16,
+  );
+}
+
+// DESCRIPTION ITEM 4 - STEP 4
+// Exit edit mode without changing saved Other Deduction records.
+function exitPayrollOtherDeductionEditMode() {
+  resetPayrollOtherDeductionForm();
+
+  showPageAlert(
+    "info",
+    "Other deduction edit was cancelled.",
+  );
+}
+
+function renderPayrollOtherDeductionRecords(records = []) {
+  const tbody = state.dom.payrollOtherDeductionRecordsTableBody;
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  if (!records.length) {
+    state.dom.payrollOtherDeductionRecordsEmptyState?.classList.remove("d-none");
+    state.dom.payrollOtherDeductionRecordsTableWrapper?.classList.add("d-none");
+    return;
+  }
+
+  state.dom.payrollOtherDeductionRecordsEmptyState?.classList.add("d-none");
+  state.dom.payrollOtherDeductionRecordsTableWrapper?.classList.remove("d-none");
+
+  const recordsToRender = sortPayrollOtherDeductionRecordsByLatestActivity(records);
+
+  recordsToRender.forEach((record) => {
+    const masterContext = getPayrollOtherDeductionMasterContext(record);
+    const totalAmount =
+      record.total_deduction_amount ??
+      Number(record.deduction_amount || 0) * Number(record.duration_months || 0);
+
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>
+        <div class="fw-semibold">${escapeHtml(masterContext.fullName)}</div>
+        <div class="text-secondary small">
+          Effective: ${formatDate(masterContext.masterEffectiveDate)}
+        </div>
+        <div class="text-secondary small text-break">
+          ${escapeHtml(masterContext.workEmail || "--")}
+        </div>
+      </td>
+
+      <td>${escapeHtml(formatPayrollOtherDeductionType(record.deduction_type))}</td>
+
+      <td class="text-nowrap">
+        ${formatCurrency(record.deduction_amount, "NGN")}
+      </td>
+
+      <td class="text-nowrap">
+        ${escapeHtml(record.duration_months || "--")} month(s)
+      </td>
+
+      <td class="text-nowrap">
+        ${formatCurrency(totalAmount, "NGN")}
+      </td>
+
+      <td class="text-nowrap">${formatDate(record.start_date)}</td>
+
+      <td>
+        <span class="badge ${getStatusBadgeClass(record.status)}">
+          ${escapeHtml(formatStatusLabel(record.status))}
+        </span>
+      </td>
+
+      <td class="text-nowrap">${formatDate(record.updated_at || record.created_at)}</td>
+
+      <td class="text-center">
+        <!-- DESCRIPTION ITEM 4 - STEP 4
+             Maintain existing Other Deduction setup from the records table.
+             This prevents duplicate setup rows when HR only needs to change
+             amount, duration, start date, reference, status, or notes. -->
+        <button type="button"
+          class="btn btn-sm btn-outline-primary"
+          title="Edit other deduction"
+          onclick="window.hrEditPayrollOtherDeductionRecord('${escapeHtml(record.id)}')">
+          <i class="bi bi-pencil-square"></i>
+        </button>
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+}
+
+async function handlePayrollOtherDeductionRecordsRefresh() {
+  const button = state.dom.refreshPayrollOtherDeductionRecordsBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Refreshing...");
+    await waitForNextPaint();
+    await refreshPayrollOtherDeductionWorkspace();
+    await waitForMinimumLoadingFeedback(startedAt);
+  } finally {
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
+async function handlePayrollOtherDeductionSave() {
+  clearPageAlert();
+
+  if (!validatePayrollOtherDeductionForm()) {
+    // DESCRIPTION ITEM 8 - STEP 8D
+    // validatePayrollOtherDeductionForm now shows clear field-specific messages,
+    // so do not replace them with a generic warning.
+    return;
+  }
+
+  const startedAt = Date.now();
+  const payload = buildPayrollOtherDeductionPayload();
+
+  try {
+    setPayrollOtherDeductionSaveLoading(true);
+    await waitForNextPaint();
+
+    const supabase = getSupabaseClient();
+
+    // DESCRIPTION ITEM 4 - STEP 4
+    // Use the same form for create and update.
+    // Create mode inserts a new deduction setup.
+    // Edit mode updates the existing setup row and does not change created_by.
+    const editingId = String(
+      state.currentEditingPayrollOtherDeduction?.id ||
+      state.dom.editingPayrollOtherDeductionId?.value ||
+      "",
+    ).trim();
+
+    let data;
+    let error;
+
+    if (editingId) {
+      const updatePayload = {
+        ...payload,
+        updated_by: state.currentUser?.id || null,
+      };
+
+      // created_by must remain the original creator on update.
+      delete updatePayload.created_by;
+
+      const response = await supabase
+        .from("payroll_other_deductions")
+        .update(updatePayload)
+        .eq("id", editingId)
+        .select("*")
+        .maybeSingle();
+
+      data = response.data;
+      error = response.error;
+    } else {
+      const response = await supabase
+        .from("payroll_other_deductions")
+        .insert([payload])
+        .select("*")
+        .maybeSingle();
+
+      data = response.data;
+      error = response.error;
+    }
+
+    if (error) {
+      throw error;
+    }
+
+    state.lastSavedPayrollOtherDeductionKey = buildPayrollOtherDeductionSortKey({
+      id: data?.id,
+      payroll_master_record_id:
+        data?.payroll_master_record_id || payload.payroll_master_record_id,
+      deduction_type: data?.deduction_type || payload.deduction_type,
+      start_date: data?.start_date || payload.start_date,
+    });
+
+    if (state.dom.payrollOtherDeductionSearchInput) {
+      state.dom.payrollOtherDeductionSearchInput.value = "";
+    }
+
+    await refreshPayrollOtherDeductionWorkspace();
+
+    // DESCRIPTION ITEM 4 - STEP 4
+    // Use clear success wording for create vs update so HR knows
+    // whether a new setup was added or an existing one was maintained.
+    const wasEditing = Boolean(
+      state.currentEditingPayrollOtherDeduction?.id ||
+      state.dom.editingPayrollOtherDeductionId?.value,
+    );
+
+    showPageAlert(
+      "success",
+      `Other deduction was ${wasEditing ? "updated" : "created"} successfully from <strong>${escapeHtml(
+        payload.start_date,
+      )}</strong>.`,
+    );
+
+    showDashboardToast(
+      "success",
+      wasEditing ? "Other deduction updated" : "Other deduction created",
+      wasEditing
+        ? "The existing deduction setup has been updated successfully."
+        : "The deduction setup has been saved against the selected Payroll Master Record.",
+    );
+
+    resetPayrollOtherDeductionForm();
+
+    setTimeout(() => {
+      redirectToPayrollOtherDeductionRecordsAfterSave();
+    }, 250);
+  } catch (error) {
+    console.error("Error saving other deduction:", error);
+
+    const message = String(error.message || "").toLowerCase();
+
+    if (
+      message.includes("payroll_other_deductions_unique_setup") ||
+      message.includes("duplicate key value")
+    ) {
+      showPageAlert(
+        "warning",
+        "An other deduction already exists for this payroll master record, deduction type, and start date. Use a different start date or maintain the existing record when edit mode is added.",
+      );
+
+      showDashboardToast(
+        "warning",
+        "Duplicate other deduction",
+        "This employee already has the same deduction type starting on that date.",
+      );
+
+      return;
+    }
+
+    showPageAlert(
+      "danger",
+      error.message || "Other deduction could not be saved.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Other deduction save failed",
+      error.message || "The other deduction setup could not be saved.",
+    );
+  } finally {
+    await waitForMinimumLoadingFeedback(startedAt, 600);
+    setPayrollOtherDeductionSaveLoading(false);
+  }
+}
+
+// =========================================================
+// DESCRIPTION ITEM 5 - STEP 3
+// Employee Payroll Overrides create/load helpers.
+// These store employee-specific exceptions to standard grade,
+// statutory, deduction, earning, or rule-based payroll setup.
+// Payroll calculation integration is intentionally not changed here.
+// =========================================================
+
+function openPayrollEmployeeOverrideCard() {
+  setDashboardCardExpanded(
+    state.dom.togglePayrollEmployeeOverrideCardBtn,
+    state.dom.payrollEmployeeOverrideCardCollapse,
+    true,
+  );
+}
+
+function redirectToPayrollEmployeeOverrideRecordsAfterSave() {
+  openPayrollEmployeeOverrideCard();
+
+  scrollToDashboardTarget(
+    state.dom.payrollEmployeeOverrideRecordsHeader ||
+    state.dom.payrollEmployeeOverrideRecordsTableWrapper ||
+    state.dom.payrollEmployeeOverrideCardCollapse,
+    16,
+  );
+}
+
+function formatPayrollEmployeeOverrideCategory(value = "") {
+  const labels = {
+    EARNING: "Earning",
+    STATUTORY_DEDUCTION: "Statutory Deduction",
+    OTHER_DEDUCTION: "Other Deduction",
+    PAYROLL_RULE: "Payroll Rule",
+    PAYROLL_STRUCTURE: "Payroll Structure",
+  };
+
+  return labels[value] || formatStatusLabel(value || "--");
+}
+
+function formatPayrollEmployeeOverrideElement(value = "") {
+  const labels = {
+    BASIC_SALARY: "Basic Salary",
+    HOUSING_ALLOWANCE: "Housing Allowance",
+    TRANSPORT_ALLOWANCE: "Transport Allowance",
+    UTILITY_ALLOWANCE: "Utility Allowance",
+    MEDICAL_ALLOWANCE: "Medical Allowance",
+    OTHER_ALLOWANCE: "Other Allowance",
+    BONUS: "Bonus",
+    OVERTIME: "Overtime",
+    PAYE: "PAYE",
+    WHT: "WHT",
+    EMPLOYEE_PENSION: "Employee Pension",
+    EMPLOYER_PENSION: "Employer Pension",
+    NHF: "NHF",
+    UNION_DUES: "Union Dues",
+    COOPERATIVE: "Cooperative",
+    SALARY_ADVANCE: "Salary Advance",
+    GRADE_LEVEL_RULE: "Grade / Level Rule",
+    OTHER: "Other",
+  };
+
+  return labels[value] || formatStatusLabel(value || "--");
+}
+
+function formatPayrollEmployeeOverrideMethod(value = "") {
+  const labels = {
+    FIXED_AMOUNT: "Fixed Amount",
+    PERCENTAGE: "Percentage",
+    RULE_REPLACEMENT: "Rule Replacement",
+    EXEMPTION: "Exemption",
+  };
+
+  return labels[value] || formatStatusLabel(value || "--");
+}
+
+function getPayrollEmployeeOverrideMasterContext(record = {}) {
+  const master = getPayrollMasterRecordById(record.payroll_master_record_id);
+
+  if (!master) {
+    return {
+      fullName: "Unknown Employee",
+      workEmail: "--",
+      gradeLabel: "--",
+      masterEffectiveDate: "",
+    };
+  }
+
+  const fullName =
+    `${master.first_name || ""} ${master.last_name || ""}`.trim() ||
+    master.work_email ||
+    "Unknown Employee";
+
+  return {
+    fullName,
+    workEmail: master.work_email || "--",
+    gradeLabel: getPayrollMasterGradeDisplay(master),
+    masterEffectiveDate: master.salary_effective_date || "",
+  };
+}
+
+function populatePayrollEmployeeOverrideMasterOptions() {
+  const select = state.dom.payrollEmployeeOverrideMasterRecordId;
+  if (!select) return;
+
+  const currentValue = String(select.value || "").trim();
+  const records = Array.isArray(state.payrollMasterRecords)
+    ? [...state.payrollMasterRecords]
+    : [];
+
+  select.innerHTML = `<option value="">Select payroll master record</option>`;
+
+  if (!records.length) {
+    select.innerHTML = `<option value="">Create payroll master record first</option>`;
+    updatePayrollEmployeeOverrideSaveButtonState();
+    return;
+  }
+
+  const recordsToRender = sortPayrollMasterRecordsByLatestActivity(records);
+
+  recordsToRender.forEach((record) => {
+    const option = document.createElement("option");
+
+    const fullName =
+      `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
+      record.work_email ||
+      "Unknown Employee";
+
+    const gradeLabel = getPayrollMasterGradeDisplay(record);
+    const gradeSegment = gradeLabel && gradeLabel !== "--"
+      ? ` — ${gradeLabel}`
+      : "";
+
+    option.value = record.id;
+    option.dataset.employeeId = record.employee_id || "";
+
+    option.textContent =
+      `${fullName}${gradeSegment} — ${formatCurrency(record.basic_salary, "NGN")} — ${record.salary_effective_date || "--"}`;
+
+    select.appendChild(option);
+  });
+
+  if (currentValue) {
+    const stillExists = Array.from(select.options).some(
+      (option) => option.value === currentValue,
+    );
+
+    if (stillExists) {
+      select.value = currentValue;
+    }
+  }
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+}
+
+function isPayrollEmployeeOverrideFormReadyForSubmit() {
+  const method = String(state.dom.payrollEmployeeOverrideMethod?.value || "").trim();
+  const overrideValue = String(state.dom.payrollEmployeeOverrideValue?.value || "").trim();
+
+  const hasRequiredFields = [
+    state.dom.payrollEmployeeOverrideMasterRecordId,
+    state.dom.payrollEmployeeOverrideCategory,
+    state.dom.payrollEmployeeOverrideElement,
+    state.dom.payrollEmployeeOverrideMethod,
+    state.dom.payrollEmployeeOverrideEffectiveDate,
+    state.dom.payrollEmployeeOverrideStatus,
+    state.dom.payrollEmployeeOverrideReason,
+  ].every((field) => Boolean(String(field?.value || "").trim()));
+
+  const numericOverrideValue = Number(overrideValue);
+
+  const valueIsValid =
+    method === "EXEMPTION" ||
+    (
+      method === "RULE_REPLACEMENT" &&
+      Boolean(String(state.dom.payrollEmployeeOverrideRuleSnapshot?.value || "").trim())
+    ) ||
+    (
+      method === "FIXED_AMOUNT" &&
+      overrideValue !== "" &&
+      Number.isFinite(numericOverrideValue) &&
+      numericOverrideValue > 0
+    ) ||
+    (
+      method === "PERCENTAGE" &&
+      overrideValue !== "" &&
+      Number.isFinite(numericOverrideValue) &&
+      numericOverrideValue > 0 &&
+      numericOverrideValue <= 100
+    );
+
+  const effectiveDate = String(state.dom.payrollEmployeeOverrideEffectiveDate?.value || "").trim();
+  const endDate = String(state.dom.payrollEmployeeOverrideEndDate?.value || "").trim();
+
+  const dateRangeIsValid =
+    !effectiveDate ||
+    !endDate ||
+    new Date(endDate).getTime() >= new Date(effectiveDate).getTime();
+
+  return hasRequiredFields && valueIsValid && dateRangeIsValid;
+}
+
+function updatePayrollEmployeeOverrideSaveButtonState() {
+  setPrimaryActionButtonReadyState(
+    state.dom.savePayrollEmployeeOverrideBtn,
+    isPayrollEmployeeOverrideFormReadyForSubmit(),
+  );
+}
+
+function clearPayrollEmployeeOverrideValidationState() {
+  // DESCRIPTION ITEM 8 - STEP 8E
+  // Reset Employee Override validation styling before each fresh validation pass.
+  [
+    state.dom.payrollEmployeeOverrideMasterRecordId,
+    state.dom.payrollEmployeeOverrideCategory,
+    state.dom.payrollEmployeeOverrideElement,
+    state.dom.payrollEmployeeOverrideMethod,
+    state.dom.payrollEmployeeOverrideOriginalValue,
+    state.dom.payrollEmployeeOverrideValue,
+    state.dom.payrollEmployeeOverrideEffectiveDate,
+    state.dom.payrollEmployeeOverrideEndDate,
+    state.dom.payrollEmployeeOverrideStatus,
+    state.dom.payrollEmployeeOverrideRuleSnapshot,
+    state.dom.payrollEmployeeOverrideReason,
+  ].forEach((field) => {
+    field?.classList.remove("is-invalid");
+  });
+}
+
+function markPayrollEmployeeOverrideFieldInvalid(field) {
+  if (!field) return;
+  field.classList.add("is-invalid");
+}
+
+function findPayrollEmployeeOverrideEffectiveDateConflict({
+  payrollMasterRecordId = "",
+  overrideCategory = "",
+  overrideElement = "",
+  effectiveDate = "",
+  editingId = "",
+} = {}) {
+  const masterKey = String(payrollMasterRecordId || "").trim();
+  const categoryKey = String(overrideCategory || "").trim();
+  const elementKey = String(overrideElement || "").trim();
+  const dateKey = String(effectiveDate || "").trim();
+  const editingKey = String(editingId || "").trim();
+
+  if (!masterKey || !categoryKey || !elementKey || !dateKey) return null;
+
+  // DESCRIPTION ITEM 8 - STEP 8E
+  // Employee Overrides are effective-dated exceptions.
+  // Duplicate same-date overrides for the same Payroll Master, category,
+  // and element would make payroll calculation unclear.
+  return (state.payrollEmployeeOverrides || []).find((record) => {
+    return (
+      String(record.id || "").trim() !== editingKey &&
+      String(record.payroll_master_record_id || "").trim() === masterKey &&
+      String(record.override_category || "").trim() === categoryKey &&
+      String(record.override_element || "").trim() === elementKey &&
+      String(record.effective_date || "").trim() === dateKey
+    );
+  }) || null;
+}
+
+function showPayrollEmployeeOverrideValidationIssues(issues = []) {
+  if (!issues.length) return;
+
+  const messageHtml = `
+    <div class="fw-semibold mb-2">Employee Payroll Override could not be saved.</div>
+    <ul class="mb-0 ps-3">
+      ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
+    </ul>
+  `;
+
+  showPageAlert("warning", messageHtml);
+
+  showDashboardToast(
+    "warning",
+    "Employee override validation failed",
+    issues[0] || "Please correct the highlighted Employee Override fields.",
+  );
+}
+
+function validatePayrollEmployeeOverrideForm() {
+  clearPayrollEmployeeOverrideValidationState();
+
+  const issues = [];
+  let firstInvalidField = null;
+
+  const editingId =
+    String(state.currentEditingPayrollEmployeeOverride?.id ||
+      state.dom.editingPayrollEmployeeOverrideId?.value ||
+      "").trim();
+
+  const payrollMasterRecordId =
+    String(state.dom.payrollEmployeeOverrideMasterRecordId?.value || "").trim();
+  const overrideCategory =
+    String(state.dom.payrollEmployeeOverrideCategory?.value || "").trim();
+  const overrideElement =
+    String(state.dom.payrollEmployeeOverrideElement?.value || "").trim();
+  const method =
+    String(state.dom.payrollEmployeeOverrideMethod?.value || "").trim();
+  const originalValueText =
+    String(state.dom.payrollEmployeeOverrideOriginalValue?.value || "").trim();
+  const overrideValueText =
+    String(state.dom.payrollEmployeeOverrideValue?.value || "").trim();
+  const effectiveDate =
+    String(state.dom.payrollEmployeeOverrideEffectiveDate?.value || "").trim();
+  const endDate =
+    String(state.dom.payrollEmployeeOverrideEndDate?.value || "").trim();
+  const status =
+    String(state.dom.payrollEmployeeOverrideStatus?.value || "").trim();
+  const ruleSnapshot =
+    String(state.dom.payrollEmployeeOverrideRuleSnapshot?.value || "").trim();
+  const reason =
+    String(state.dom.payrollEmployeeOverrideReason?.value || "").trim();
+
+  if (!payrollMasterRecordId) {
+    issues.push("Select the Payroll Master record for this override.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMasterRecordId);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideMasterRecordId;
+  }
+
+  if (!overrideCategory) {
+    issues.push("Select the override category.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideCategory);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideCategory;
+  }
+
+  if (!overrideElement) {
+    issues.push("Select the payroll element being overridden.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideElement);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideElement;
+  }
+
+  if (!method) {
+    issues.push("Select the override method.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMethod);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideMethod;
+  }
+
+  if (originalValueText) {
+    const originalValue = Number(originalValueText);
+
+    if (!Number.isFinite(originalValue) || originalValue < 0) {
+      issues.push("Original value snapshot must be zero or greater.");
+      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideOriginalValue);
+      firstInvalidField ||= state.dom.payrollEmployeeOverrideOriginalValue;
+    }
+  }
+
+  if (method === "FIXED_AMOUNT") {
+    const overrideValue = Number(overrideValueText);
+
+    if (!overrideValueText) {
+      issues.push("Enter the fixed override amount.");
+      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
+      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
+    } else if (!Number.isFinite(overrideValue) || overrideValue <= 0) {
+      issues.push("Fixed override amount must be greater than zero.");
+      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
+      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
+    }
+  }
+
+  if (method === "PERCENTAGE") {
+    const overrideValue = Number(overrideValueText);
+
+    if (!overrideValueText) {
+      issues.push("Enter the percentage override value.");
+      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
+      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
+    } else if (!Number.isFinite(overrideValue) || overrideValue <= 0 || overrideValue > 100) {
+      issues.push("Percentage override must be greater than zero and not more than 100.");
+      markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideValue);
+      firstInvalidField ||= state.dom.payrollEmployeeOverrideValue;
+    }
+  }
+
+  if (method === "RULE_REPLACEMENT" && !ruleSnapshot) {
+    issues.push("Rule Replacement requires a rule snapshot or replacement rule note.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideRuleSnapshot);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideRuleSnapshot;
+  }
+
+  if (!effectiveDate) {
+    issues.push("Select the override effective date.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
+  } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
+    issues.push("Override effective date is not valid.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
+  }
+
+  if (
+    effectiveDate &&
+    endDate &&
+    new Date(endDate).getTime() < new Date(effectiveDate).getTime()
+  ) {
+    issues.push("Override end date cannot be before the effective date.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEndDate);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideEndDate;
+  }
+
+  if (!status) {
+    issues.push("Select the override status.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideStatus);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideStatus;
+  }
+
+  if (!reason) {
+    issues.push("Enter the reason for this employee-specific override.");
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideReason);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideReason;
+  }
+
+  const conflict = findPayrollEmployeeOverrideEffectiveDateConflict({
+    payrollMasterRecordId,
+    overrideCategory,
+    overrideElement,
+    effectiveDate,
+    editingId,
+  });
+
+  if (conflict) {
+    issues.push(
+      `An employee override already exists for this Payroll Master, category, element, and ${formatDate(effectiveDate)}.`,
+    );
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideMasterRecordId);
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideCategory);
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideElement);
+    markPayrollEmployeeOverrideFieldInvalid(state.dom.payrollEmployeeOverrideEffectiveDate);
+    firstInvalidField ||= state.dom.payrollEmployeeOverrideEffectiveDate;
+  }
+
+  if (issues.length) {
+    showPayrollEmployeeOverrideValidationIssues(issues);
+
+    if (firstInvalidField?.focus) {
+      firstInvalidField.focus();
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+function buildPayrollEmployeeOverridePayload() {
+  const selectedMasterOption =
+    state.dom.payrollEmployeeOverrideMasterRecordId?.selectedOptions?.[0] || null;
+
+  const method = String(state.dom.payrollEmployeeOverrideMethod?.value || "").trim();
+  const overrideValue = String(state.dom.payrollEmployeeOverrideValue?.value || "").trim();
+  const originalValue = String(state.dom.payrollEmployeeOverrideOriginalValue?.value || "").trim();
+
+  return {
+    payroll_master_record_id:
+      String(state.dom.payrollEmployeeOverrideMasterRecordId?.value || "").trim(),
+
+    employee_id:
+      String(selectedMasterOption?.dataset?.employeeId || "").trim() || null,
+
+    override_category:
+      String(state.dom.payrollEmployeeOverrideCategory?.value || "").trim(),
+
+    override_element:
+      String(state.dom.payrollEmployeeOverrideElement?.value || "").trim(),
+
+    override_method: method,
+
+    original_value_snapshot:
+      originalValue === "" ? null : Number(originalValue),
+
+    override_value:
+      method === "RULE_REPLACEMENT" || method === "EXEMPTION" || overrideValue === ""
+        ? null
+        : Number(overrideValue),
+
+    override_rule_snapshot:
+      String(state.dom.payrollEmployeeOverrideRuleSnapshot?.value || "").trim() || null,
+
+    effective_date:
+      state.dom.payrollEmployeeOverrideEffectiveDate?.value || null,
+
+    end_date:
+      state.dom.payrollEmployeeOverrideEndDate?.value || null,
+
+    approval_reference:
+      String(state.dom.payrollEmployeeOverrideApprovalReference?.value || "").trim() || null,
+
+    reason:
+      String(state.dom.payrollEmployeeOverrideReason?.value || "").trim(),
+
+    notes:
+      String(state.dom.payrollEmployeeOverrideNotes?.value || "").trim() || null,
+
+    status:
+      String(state.dom.payrollEmployeeOverrideStatus?.value || "Active").trim(),
+
+    created_by: state.currentUser?.id || null,
+    updated_by: state.currentUser?.id || null,
+  };
+}
+
+function setPayrollEmployeeOverrideSaveLoading(isLoading) {
+  const button = state.dom.savePayrollEmployeeOverrideBtn;
+  if (!button) return;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Saving Employee Override...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+
+    state.dom.savePayrollEmployeeOverrideBtnText =
+      document.getElementById("savePayrollEmployeeOverrideBtnText");
+  }
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+}
+
+function resetPayrollEmployeeOverrideForm() {
+  state.currentEditingPayrollEmployeeOverride = null;
+
+  if (state.dom.editingPayrollEmployeeOverrideId) {
+    state.dom.editingPayrollEmployeeOverrideId.value = "";
+  }
+
+  [
+    state.dom.payrollEmployeeOverrideMasterRecordId,
+    state.dom.payrollEmployeeOverrideCategory,
+    state.dom.payrollEmployeeOverrideElement,
+    state.dom.payrollEmployeeOverrideMethod,
+    state.dom.payrollEmployeeOverrideOriginalValue,
+    state.dom.payrollEmployeeOverrideValue,
+    state.dom.payrollEmployeeOverrideEffectiveDate,
+    state.dom.payrollEmployeeOverrideEndDate,
+    state.dom.payrollEmployeeOverrideApprovalReference,
+    state.dom.payrollEmployeeOverrideRuleSnapshot,
+    state.dom.payrollEmployeeOverrideReason,
+    state.dom.payrollEmployeeOverrideNotes,
+  ].forEach((field) => {
+    if (field) {
+      field.value = "";
+      field.classList.remove("is-invalid");
+    }
+  });
+
+  if (state.dom.payrollEmployeeOverrideStatus) {
+    state.dom.payrollEmployeeOverrideStatus.value = "Active";
+    state.dom.payrollEmployeeOverrideStatus.classList.remove("is-invalid");
+  }
+
+  if (state.dom.cancelPayrollEmployeeOverrideEditBtn) {
+    state.dom.cancelPayrollEmployeeOverrideEditBtn.classList.add("d-none");
+  }
+
+  if (state.dom.savePayrollEmployeeOverrideBtn) {
+    state.dom.savePayrollEmployeeOverrideBtn.innerHTML = `
+      <i class="bi bi-save me-2"></i>
+      <span id="savePayrollEmployeeOverrideBtnText">Create Employee Override</span>
+    `;
+
+    state.dom.savePayrollEmployeeOverrideBtnText =
+      document.getElementById("savePayrollEmployeeOverrideBtnText");
+  }
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+}
+
+async function handlePayrollEmployeeOverrideFormClear() {
+  const button = state.dom.resetPayrollEmployeeOverrideFormBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Clearing...");
+    await waitForNextPaint();
+    resetPayrollEmployeeOverrideForm();
+    await waitForMinimumLoadingFeedback(startedAt);
+  } finally {
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
+function renderPayrollEmployeeOverrideRecordsLoadingState() {
+  if (!state.dom.payrollEmployeeOverrideRecordsTableBody) return;
+
+  state.dom.payrollEmployeeOverrideRecordsEmptyState?.classList.add("d-none");
+  state.dom.payrollEmployeeOverrideRecordsTableWrapper?.classList.remove("d-none");
+
+  state.dom.payrollEmployeeOverrideRecordsTableBody.innerHTML = `
+    <tr>
+      <td colspan="9" class="text-center text-secondary py-4">
+        Loading employee override records.
+      </td>
+    </tr>
+  `;
+}
+
+function buildPayrollEmployeeOverrideSortKey(record = {}) {
+  const id = String(record.id || "").trim();
+
+  if (id) {
+    return `id:${id}`;
+  }
+
+  return [
+    "fallback",
+    normalizeText(record.payroll_master_record_id),
+    normalizeText(record.override_category),
+    normalizeText(record.override_element),
+    String(record.effective_date || "").trim(),
+  ].join("|");
+}
+
+function sortPayrollEmployeeOverrideRecordsByLatestActivity(records = []) {
+  const lastSavedKey = String(state.lastSavedPayrollEmployeeOverrideKey || "").trim();
+
+  return [...records].sort((a, b) => {
+    const aKey = buildPayrollEmployeeOverrideSortKey(a);
+    const bKey = buildPayrollEmployeeOverrideSortKey(b);
+
+    if (lastSavedKey && aKey === lastSavedKey && bKey !== lastSavedKey) return -1;
+    if (lastSavedKey && bKey === lastSavedKey && aKey !== lastSavedKey) return 1;
+
+    const aTime = new Date(a.updated_at || a.created_at || 0).getTime() || 0;
+    const bTime = new Date(b.updated_at || b.created_at || 0).getTime() || 0;
+
+    if (bTime !== aTime) return bTime - aTime;
+
+    const aEffectiveDate = new Date(a.effective_date || 0).getTime() || 0;
+    const bEffectiveDate = new Date(b.effective_date || 0).getTime() || 0;
+
+    return bEffectiveDate - aEffectiveDate;
+  });
+}
+
+async function loadPayrollEmployeeOverrides() {
+  const supabase = getSupabaseClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("payroll_employee_overrides")
+      .select("*")
+      .order("effective_date", { ascending: false })
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    state.payrollEmployeeOverrides = Array.isArray(data) ? data : [];
+    applyPayrollEmployeeOverrideSearch();
+  } catch (error) {
+    console.error("Error loading employee payroll overrides:", error);
+
+    showPageAlert(
+      "danger",
+      error.message || "Employee payroll override records could not be loaded.",
+    );
+
+    state.payrollEmployeeOverrides = [];
+    state.filteredPayrollEmployeeOverrides = [];
+    renderPayrollEmployeeOverrideRecords([]);
+  }
+}
+
+async function refreshPayrollEmployeeOverrideWorkspace() {
+  renderPayrollEmployeeOverrideRecordsLoadingState();
+  populatePayrollEmployeeOverrideMasterOptions();
+  await loadPayrollEmployeeOverrides();
+}
+
+function applyPayrollEmployeeOverrideSearch() {
+  const searchTerm = normalizeText(
+    state.dom.payrollEmployeeOverrideSearchInput?.value || "",
+  );
+
+  let rows = [...state.payrollEmployeeOverrides];
+
+  if (searchTerm) {
+    rows = rows.filter((record) => {
+      const masterContext = getPayrollEmployeeOverrideMasterContext(record);
+
+      const searchableText = [
+        masterContext.fullName,
+        masterContext.workEmail,
+        masterContext.gradeLabel,
+        formatPayrollEmployeeOverrideCategory(record.override_category),
+        formatPayrollEmployeeOverrideElement(record.override_element),
+        formatPayrollEmployeeOverrideMethod(record.override_method),
+        record.original_value_snapshot,
+        record.override_value,
+        record.override_rule_snapshot,
+        record.approval_reference,
+        record.reason,
+        record.status,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(searchTerm);
+    });
+  }
+
+  state.filteredPayrollEmployeeOverrides = rows;
+  renderPayrollEmployeeOverrideRecords(rows);
+}
+
+function formatPayrollEmployeeOverrideValue(record = {}) {
+  const method = String(record.override_method || "").trim();
+
+  if (method === "EXEMPTION") {
+    return "Exempted";
+  }
+
+  if (method === "RULE_REPLACEMENT") {
+    return record.override_rule_snapshot || "Rule replaced";
+  }
+
+  if (method === "PERCENTAGE") {
+    return `${Number(record.override_value || 0).toLocaleString()}%`;
+  }
+
+  return formatCurrency(record.override_value || 0, "NGN");
+}
+
+// DESCRIPTION ITEM 5 - STEP 4
+// Find one Employee Payroll Override record from the records already loaded.
+function getPayrollEmployeeOverrideById(overrideId = "") {
+  const id = String(overrideId || "").trim();
+
+  if (!id) return null;
+
+  return (state.payrollEmployeeOverrides || []).find(
+    (record) => String(record.id || "").trim() === id,
+  ) || null;
+}
+
+// DESCRIPTION ITEM 5 - STEP 4
+// Load an existing employee override into the same form for maintenance.
+function startPayrollEmployeeOverrideEdit(overrideId) {
+  const record = getPayrollEmployeeOverrideById(overrideId);
+
+  if (!record) {
+    showPageAlert(
+      "warning",
+      "The selected employee override record could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  clearPageAlert();
+  openPayrollEmployeeOverrideCard();
+
+  state.currentEditingPayrollEmployeeOverride = record;
+
+  if (state.dom.editingPayrollEmployeeOverrideId) {
+    state.dom.editingPayrollEmployeeOverrideId.value = record.id || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideMasterRecordId) {
+    state.dom.payrollEmployeeOverrideMasterRecordId.value =
+      record.payroll_master_record_id || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideCategory) {
+    state.dom.payrollEmployeeOverrideCategory.value =
+      record.override_category || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideElement) {
+    state.dom.payrollEmployeeOverrideElement.value =
+      record.override_element || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideMethod) {
+    state.dom.payrollEmployeeOverrideMethod.value =
+      record.override_method || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideOriginalValue) {
+    state.dom.payrollEmployeeOverrideOriginalValue.value =
+      record.original_value_snapshot ?? "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideValue) {
+    state.dom.payrollEmployeeOverrideValue.value =
+      record.override_value ?? "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideEffectiveDate) {
+    state.dom.payrollEmployeeOverrideEffectiveDate.value =
+      record.effective_date || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideEndDate) {
+    state.dom.payrollEmployeeOverrideEndDate.value =
+      record.end_date || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideStatus) {
+    state.dom.payrollEmployeeOverrideStatus.value =
+      record.status || "Active";
+  }
+
+  if (state.dom.payrollEmployeeOverrideApprovalReference) {
+    state.dom.payrollEmployeeOverrideApprovalReference.value =
+      record.approval_reference || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideRuleSnapshot) {
+    state.dom.payrollEmployeeOverrideRuleSnapshot.value =
+      record.override_rule_snapshot || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideReason) {
+    state.dom.payrollEmployeeOverrideReason.value =
+      record.reason || "";
+  }
+
+  if (state.dom.payrollEmployeeOverrideNotes) {
+    state.dom.payrollEmployeeOverrideNotes.value =
+      record.notes || "";
+  }
+
+  if (state.dom.cancelPayrollEmployeeOverrideEditBtn) {
+    state.dom.cancelPayrollEmployeeOverrideEditBtn.classList.remove("d-none");
+  }
+
+  if (state.dom.savePayrollEmployeeOverrideBtn) {
+    state.dom.savePayrollEmployeeOverrideBtn.innerHTML = `
+      <i class="bi bi-save me-2"></i>
+      <span id="savePayrollEmployeeOverrideBtnText">Update Employee Override</span>
+    `;
+
+    state.dom.savePayrollEmployeeOverrideBtnText =
+      document.getElementById("savePayrollEmployeeOverrideBtnText");
+  }
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+
+  scrollToDashboardTarget(
+    state.dom.payrollEmployeeOverrideCreateForm?.closest(".dashboard-section-card") ||
+    state.dom.payrollEmployeeOverrideCreateForm,
+    16,
+  );
+}
+
+// DESCRIPTION ITEM 5 - STEP 4
+// Exit edit mode without changing saved employee override records.
+function exitPayrollEmployeeOverrideEditMode() {
+  resetPayrollEmployeeOverrideForm();
+
+  showPageAlert(
+    "info",
+    "Employee payroll override edit was cancelled.",
+  );
+}
+
+function renderPayrollEmployeeOverrideRecords(records = []) {
+  const tbody = state.dom.payrollEmployeeOverrideRecordsTableBody;
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  if (!records.length) {
+    state.dom.payrollEmployeeOverrideRecordsEmptyState?.classList.remove("d-none");
+    state.dom.payrollEmployeeOverrideRecordsTableWrapper?.classList.add("d-none");
+    return;
+  }
+
+  state.dom.payrollEmployeeOverrideRecordsEmptyState?.classList.add("d-none");
+  state.dom.payrollEmployeeOverrideRecordsTableWrapper?.classList.remove("d-none");
+
+  const recordsToRender = sortPayrollEmployeeOverrideRecordsByLatestActivity(records);
+
+  recordsToRender.forEach((record) => {
+    const masterContext = getPayrollEmployeeOverrideMasterContext(record);
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>
+        <div class="fw-semibold">${escapeHtml(masterContext.fullName)}</div>
+        <div class="text-secondary small">Effective: ${formatDate(masterContext.masterEffectiveDate)}</div>
+        <div class="text-secondary small text-break">${escapeHtml(masterContext.workEmail || "--")}</div>
+      </td>
+
+      <td>${escapeHtml(formatPayrollEmployeeOverrideCategory(record.override_category))}</td>
+
+      <td>${escapeHtml(formatPayrollEmployeeOverrideElement(record.override_element))}</td>
+
+      <td>${escapeHtml(formatPayrollEmployeeOverrideMethod(record.override_method))}</td>
+
+      <td>
+        <div class="fw-semibold">${escapeHtml(formatPayrollEmployeeOverrideValue(record))}</div>
+        <div class="text-secondary small">
+          Original: ${record.original_value_snapshot === null || record.original_value_snapshot === undefined
+        ? "--"
+        : escapeHtml(String(record.original_value_snapshot))
+      }
+        </div>
+      </td>
+
+      <td class="text-nowrap">
+        ${formatDate(record.effective_date)}
+        <div class="text-secondary small">
+          End: ${record.end_date ? formatDate(record.end_date) : "Open"}
+        </div>
+      </td>
+
+      <td>
+        <span class="badge ${getStatusBadgeClass(record.status)}">
+          ${escapeHtml(formatStatusLabel(record.status))}
+        </span>
+      </td>
+
+      <td class="text-nowrap">${formatDate(record.updated_at || record.created_at)}</td>
+
+      <td class="text-center">
+        <!-- DESCRIPTION ITEM 5 - STEP 4
+             Maintain existing employee-specific override records.
+             This keeps overrides traceable and avoids duplicate active overrides
+             for the same payroll master, category, element, and effective date. -->
+        <button type="button"
+          class="btn btn-sm btn-outline-primary"
+          title="Edit employee override"
+          onclick="window.hrEditPayrollEmployeeOverrideRecord('${escapeHtml(record.id)}')">
+          <i class="bi bi-pencil-square"></i>
+        </button>
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+}
+
+async function handlePayrollEmployeeOverrideRecordsRefresh() {
+  const button = state.dom.refreshPayrollEmployeeOverrideRecordsBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Refreshing...");
+    await waitForNextPaint();
+    await refreshPayrollEmployeeOverrideWorkspace();
+    await waitForMinimumLoadingFeedback(startedAt);
+  } finally {
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
+async function handlePayrollEmployeeOverrideSave() {
+  clearPageAlert();
+
+  if (!validatePayrollEmployeeOverrideForm()) {
+    // DESCRIPTION ITEM 8 - STEP 8E
+    // validatePayrollEmployeeOverrideForm now shows clear field-specific
+    // messages, so do not replace them with a generic warning.
+    return;
+  }
+
+  const startedAt = Date.now();
+  const payload = buildPayrollEmployeeOverridePayload();
+
+  try {
+    setPayrollEmployeeOverrideSaveLoading(true);
+    await waitForNextPaint();
+
+    const supabase = getSupabaseClient();
+
+    // DESCRIPTION ITEM 5 - STEP 4
+    // Use the same form for create and update.
+    // Create mode inserts a new override.
+    // Edit mode updates the existing override and keeps created_by unchanged.
+    const editingId = String(
+      state.currentEditingPayrollEmployeeOverride?.id ||
+      state.dom.editingPayrollEmployeeOverrideId?.value ||
+      "",
+    ).trim();
+
+    let data;
+    let error;
+
+    if (editingId) {
+      const updatePayload = {
+        ...payload,
+        updated_by: state.currentUser?.id || null,
+      };
+
+      // created_by must remain the original creator on update.
+      delete updatePayload.created_by;
+
+      const response = await supabase
+        .from("payroll_employee_overrides")
+        .update(updatePayload)
+        .eq("id", editingId)
+        .select("*")
+        .maybeSingle();
+
+      data = response.data;
+      error = response.error;
+    } else {
+      const response = await supabase
+        .from("payroll_employee_overrides")
+        .insert([payload])
+        .select("*")
+        .maybeSingle();
+
+      data = response.data;
+      error = response.error;
+    }
+
+    if (error) {
+      throw error;
+    }
+
+    state.lastSavedPayrollEmployeeOverrideKey =
+      buildPayrollEmployeeOverrideSortKey({
+        id: data?.id,
+        payroll_master_record_id:
+          data?.payroll_master_record_id || payload.payroll_master_record_id,
+        override_category:
+          data?.override_category || payload.override_category,
+        override_element:
+          data?.override_element || payload.override_element,
+        effective_date:
+          data?.effective_date || payload.effective_date,
+      });
+
+    if (state.dom.payrollEmployeeOverrideSearchInput) {
+      state.dom.payrollEmployeeOverrideSearchInput.value = "";
+    }
+
+    await refreshPayrollEmployeeOverrideWorkspace();
+
+    // DESCRIPTION ITEM 5 - STEP 4
+    // Use clear create/update wording so HR knows whether a new override
+    // was added or an existing traceable override was maintained.
+    const wasEditing = Boolean(
+      state.currentEditingPayrollEmployeeOverride?.id ||
+      state.dom.editingPayrollEmployeeOverrideId?.value,
+    );
+
+    showPageAlert(
+      "success",
+      `Employee payroll override was ${wasEditing ? "updated" : "created"} successfully from <strong>${escapeHtml(
+        payload.effective_date,
+      )}</strong>.`,
+    );
+
+    showDashboardToast(
+      "success",
+      wasEditing ? "Employee override updated" : "Employee override created",
+      wasEditing
+        ? "The employee-specific payroll override has been updated and remains traceable."
+        : "The employee-specific payroll override has been saved and is now traceable.",
+    );
+
+    resetPayrollEmployeeOverrideForm();
+
+    setTimeout(() => {
+      redirectToPayrollEmployeeOverrideRecordsAfterSave();
+    }, 250);
+  } catch (error) {
+    console.error("Error saving employee payroll override:", error);
+
+    const message = String(error.message || "").toLowerCase();
+
+    if (
+      message.includes("payroll_employee_overrides_unique_active_setup") ||
+      message.includes("duplicate key value")
+    ) {
+      showPageAlert(
+        "warning",
+        "An active employee override already exists for this payroll master record, category, element, and effective date.",
+      );
+
+      showDashboardToast(
+        "warning",
+        "Duplicate employee override",
+        "Use a different effective date or maintain the existing override when edit mode is added.",
+      );
+
+      return;
+    }
+
+    showPageAlert(
+      "danger",
+      error.message || "Employee payroll override could not be saved.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Employee override save failed",
+      error.message || "The employee payroll override could not be saved.",
+    );
+  } finally {
+    await waitForMinimumLoadingFeedback(startedAt, 600);
+    setPayrollEmployeeOverrideSaveLoading(false);
+  }
 }
 
 // HR SAVE/EDIT BEHAVIOUR - ALLOWANCE COMPONENTS STEP 2 FIX
@@ -1892,6 +4109,11 @@ function bindEvents() {
     state.batchPayrollPreparedRows = [];
 
     resetPayrollForm();
+    // DESCRIPTION ITEM 7 - STEP 7A
+    // Apply Payroll Master maintenance restrictions as soon as the signed-in
+    // profile is available. Records may still be viewed, but setup actions are
+    // locked for non-HR/payroll roles.
+    applyPayrollMasterAccessControls();
     switchHrWorkspace("payroll");
   });
 
@@ -1908,22 +4130,22 @@ function bindEvents() {
     continueRunPayrollToPayrollWorkspace();
   });
 
-state.dom.hrProfileForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await saveHrOwnProfile();
-});
+  state.dom.hrProfileForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveHrOwnProfile();
+  });
 
-// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
-// Profile save button should stay grey until Full Name or Department changes.
-[
-  state.dom.hrProfileFullName,
-  state.dom.hrProfileDepartment,
-].forEach((field) => {
-  field?.addEventListener("input", updateHrProfileSaveButtonState);
-  field?.addEventListener("change", updateHrProfileSaveButtonState);
-});
+  // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+  // Profile save button should stay grey until Full Name or Department changes.
+  [
+    state.dom.hrProfileFullName,
+    state.dom.hrProfileDepartment,
+  ].forEach((field) => {
+    field?.addEventListener("input", updateHrProfileSaveButtonState);
+    field?.addEventListener("change", updateHrProfileSaveButtonState);
+  });
 
-updateHrProfileSaveButtonState();
+  updateHrProfileSaveButtonState();
 
   state.dom.hrProfileImageInput?.addEventListener("change", (event) => {
     const file = event.target.files?.[0] || null;
@@ -2186,6 +4408,13 @@ updateHrProfileSaveButtonState();
     await handlePayrollMasterRecordsRefresh();
   });
 
+  state.dom.payrollMasterSearchInput?.addEventListener("input", () => {
+    // DESCRIPTION ITEM 7 - STEP 7A FIX
+    // Payroll Master search was cached and the filter function existed,
+    // but the input was not wired. Run the local filter as HR types.
+    applyPayrollMasterSearch();
+  });
+
   // DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 3
   // Bind collapsible behavior for the Payroll Master Data card.
   bindCardCollapseToggle(
@@ -2415,10 +4644,10 @@ updateHrProfileSaveButtonState();
   });
 
   // DESCRIPTION ITEM 3 - STEP 2D
-// Cancel Statutory Deduction edit and return the form to clean create mode.
-state.dom.cancelPayrollStatutoryEditBtn?.addEventListener("click", () => {
-  exitPayrollStatutoryEditMode();
-});
+  // Cancel Statutory Deduction edit and return the form to clean create mode.
+  state.dom.cancelPayrollStatutoryEditBtn?.addEventListener("click", () => {
+    exitPayrollStatutoryEditMode();
+  });
 
   // DESCRIPTION ITEM 3 - STEP 2B
   // Keep create button disabled until the statutory deduction form is valid.
@@ -2467,6 +4696,113 @@ state.dom.cancelPayrollStatutoryEditBtn?.addEventListener("click", () => {
     state.dom.togglePayrollOtherDeductionCardBtn,
     state.dom.payrollOtherDeductionCardCollapse,
   );
+
+  // DESCRIPTION ITEM 5 - STEP 2
+  // Make the Employee Payroll Overrides card collapsible like the other
+  // payroll setup cards. This is UI shell wiring only.
+  bindCardCollapseToggle(
+    state.dom.togglePayrollEmployeeOverrideCardBtn,
+    state.dom.payrollEmployeeOverrideCardCollapse,
+  );
+
+  // DESCRIPTION ITEM 5 - STEP 3
+  // Save Employee Payroll Overrides into Supabase.
+  // This supports create/load/search only in this step.
+  state.dom.payrollEmployeeOverrideCreateForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await handlePayrollEmployeeOverrideSave();
+  });
+
+  // DESCRIPTION ITEM 5 - STEP 3
+  // Clear the Employee Payroll Override form without touching saved records.
+  state.dom.resetPayrollEmployeeOverrideFormBtn?.addEventListener("click", async () => {
+    await handlePayrollEmployeeOverrideFormClear();
+  });
+
+  // DESCRIPTION ITEM 5 - STEP 4
+  // Cancel Employee Payroll Override edit and return to clean create mode.
+  state.dom.cancelPayrollEmployeeOverrideEditBtn?.addEventListener("click", () => {
+    exitPayrollEmployeeOverrideEditMode();
+  });
+
+  // DESCRIPTION ITEM 5 - STEP 3
+  // Refresh saved Employee Payroll Override records.
+  state.dom.refreshPayrollEmployeeOverrideRecordsBtn?.addEventListener("click", async () => {
+    await handlePayrollEmployeeOverrideRecordsRefresh();
+  });
+
+  // DESCRIPTION ITEM 5 - STEP 3
+  // Search saved Employee Payroll Override records.
+  state.dom.payrollEmployeeOverrideSearchInput?.addEventListener("input", () => {
+    applyPayrollEmployeeOverrideSearch();
+  });
+
+  // DESCRIPTION ITEM 5 - STEP 3
+  // Keep Create Employee Override grey until required fields are complete.
+  [
+    state.dom.payrollEmployeeOverrideMasterRecordId,
+    state.dom.payrollEmployeeOverrideCategory,
+    state.dom.payrollEmployeeOverrideElement,
+    state.dom.payrollEmployeeOverrideMethod,
+    state.dom.payrollEmployeeOverrideValue,
+    state.dom.payrollEmployeeOverrideEffectiveDate,
+    state.dom.payrollEmployeeOverrideEndDate,
+    state.dom.payrollEmployeeOverrideStatus,
+    state.dom.payrollEmployeeOverrideReason,
+  ].forEach((field) => {
+    field?.addEventListener("input", updatePayrollEmployeeOverrideSaveButtonState);
+    field?.addEventListener("change", updatePayrollEmployeeOverrideSaveButtonState);
+  });
+
+  updatePayrollEmployeeOverrideSaveButtonState();
+
+  // DESCRIPTION ITEM 4 - STEP 3
+  // Save Other Deductions into Supabase.
+  // This supports create/load/search only in this step.
+  state.dom.payrollOtherDeductionCreateForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await handlePayrollOtherDeductionSave();
+  });
+
+  // DESCRIPTION ITEM 4 - STEP 3
+  // Clear the Other Deductions form without touching saved records.
+  state.dom.resetPayrollOtherDeductionFormBtn?.addEventListener("click", async () => {
+    await handlePayrollOtherDeductionFormClear();
+  });
+
+  // DESCRIPTION ITEM 4 - STEP 4
+  // Cancel Other Deduction edit and return the form to clean create mode.
+  state.dom.cancelPayrollOtherDeductionEditBtn?.addEventListener("click", () => {
+    exitPayrollOtherDeductionEditMode();
+  });
+
+  // DESCRIPTION ITEM 4 - STEP 3
+  // Refresh saved Other Deduction records from Supabase.
+  state.dom.refreshPayrollOtherDeductionRecordsBtn?.addEventListener("click", async () => {
+    await handlePayrollOtherDeductionRecordsRefresh();
+  });
+
+  // DESCRIPTION ITEM 4 - STEP 3
+  // Search saved Other Deduction records as HR types.
+  state.dom.payrollOtherDeductionSearchInput?.addEventListener("input", () => {
+    applyPayrollOtherDeductionSearch();
+  });
+
+  // DESCRIPTION ITEM 4 - STEP 3
+  // Keep Create Other Deduction grey until required setup fields are complete.
+  [
+    state.dom.payrollOtherDeductionMasterRecordId,
+    state.dom.payrollOtherDeductionType,
+    state.dom.payrollOtherDeductionAmount,
+    state.dom.payrollOtherDeductionDurationMonths,
+    state.dom.payrollOtherDeductionStartDate,
+    state.dom.payrollOtherDeductionStatus,
+  ].forEach((field) => {
+    field?.addEventListener("input", updatePayrollOtherDeductionSaveButtonState);
+    field?.addEventListener("change", updatePayrollOtherDeductionSaveButtonState);
+  });
+
+  updatePayrollOtherDeductionSaveButtonState();
 
   // DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 4
   // Bind collapsible behavior for the Allowance Components card.
@@ -2597,9 +4933,17 @@ state.dom.cancelPayrollStatutoryEditBtn?.addEventListener("click", () => {
   state.dom.payrollPayCycle?.addEventListener("change", () => {
     updatePayDateFromPayCycle();
 
-    // DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-    // Pay Cycle updates Pay Date, and Pay Date controls statutory deductions.
-    recalculatePayrollFormTotals();
+    // DESCRIPTION ITEM 6 - STEP 6B
+    // Pay Period changes the Pay Date, so reload the Payroll Master version
+    // that is effective for that new Pay Date before recalculating payroll.
+    populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
+  });
+
+  state.dom.payrollPayDate?.addEventListener("change", () => {
+    // DESCRIPTION ITEM 6 - STEP 6B
+    // If HR manually changes Pay Date, the salary source must switch to the
+    // Payroll Master version active on that date.
+    populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
   });
 
   // BATCH PAYROLL CSV IMPORT - STEP 1
@@ -4252,49 +6596,146 @@ async function refreshPayrollMasterWorkspace() {
   // Load payroll master records from the database, then apply client-side search.
   await loadPayrollMasterRecords();
 }
+
+function clearPayrollMasterValidationState() {
+  // DESCRIPTION ITEM 8 - STEP 8A
+  // Reset Payroll Master validation styling before each fresh validation pass.
+  [
+    state.dom.payrollMasterEmployeeId,
+    state.dom.payrollMasterBasicSalary,
+    state.dom.payrollMasterEffectiveDate,
+    state.dom.payrollMasterPayCycle,
+    state.dom.payrollMasterStatus,
+  ].forEach((field) => {
+    field?.classList.remove("is-invalid");
+  });
+}
+
+function markPayrollMasterFieldInvalid(field) {
+  if (!field) return;
+  field.classList.add("is-invalid");
+}
+
+function findPayrollMasterEffectiveDateConflict(employeeId = "", effectiveDate = "") {
+  const employeeKey = String(employeeId || "").trim();
+  const dateKey = String(effectiveDate || "").trim();
+
+  if (!employeeKey || !dateKey) return null;
+
+  // DESCRIPTION ITEM 8 - STEP 8A
+  // Payroll Master is versioned by employee + effective date.
+  // A second row for the same employee and same effective date would make
+  // historical payroll resolution ambiguous, so block it before save.
+  return (state.payrollMasterRecords || []).find((record) => {
+    return (
+      String(record.employee_id || "").trim() === employeeKey &&
+      String(record.salary_effective_date || "").trim() === dateKey
+    );
+  }) || null;
+}
+
+function showPayrollMasterValidationIssues(issues = []) {
+  if (!issues.length) return;
+
+  const messageHtml = `
+    <div class="fw-semibold mb-2">Payroll Master Data could not be saved.</div>
+    <ul class="mb-0 ps-3">
+      ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
+    </ul>
+  `;
+
+  showPageAlert("warning", messageHtml);
+
+  showDashboardToast(
+    "warning",
+    "Payroll Master validation failed",
+    issues[0] || "Please correct the highlighted Payroll Master fields.",
+  );
+}
+
 // =========================================================
 // DESCRIPTION ITEM 1
 // Payroll Master create/save helpers
 // This step supports create only. Edit/update comes next.
 // =========================================================
 function validatePayrollMasterForm() {
-  let isValid = true;
+  clearPayrollMasterValidationState();
+
+  const issues = [];
   let firstInvalidField = null;
 
-  // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
-  // Grade is no longer required for Payroll Master Data.
-  const requiredFields = [
-    state.dom.payrollMasterEmployeeId,
-    state.dom.payrollMasterBasicSalary,
-    state.dom.payrollMasterEffectiveDate,
-    state.dom.payrollMasterPayCycle,
-    state.dom.payrollMasterStatus,
-  ];
+  const employeeId = String(state.dom.payrollMasterEmployeeId?.value || "").trim();
+  const salaryText = String(state.dom.payrollMasterBasicSalary?.value || "").trim();
+  const effectiveDate = String(state.dom.payrollMasterEffectiveDate?.value || "").trim();
+  const payCycle = String(state.dom.payrollMasterPayCycle?.value || "").trim();
+  const status = String(state.dom.payrollMasterStatus?.value || "").trim();
 
-  requiredFields.forEach((field) => {
-    const value = String(field?.value || "").trim();
+  if (!employeeId) {
+    issues.push("Select an employee for the payroll master record.");
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterEmployeeId);
+    firstInvalidField ||= state.dom.payrollMasterEmployeeId;
+  }
 
-    if (!value) {
-      field?.classList.add("is-invalid");
-      isValid = false;
-      if (!firstInvalidField) firstInvalidField = field;
-    } else {
-      field?.classList.remove("is-invalid");
+  const salaryValue = Number(salaryText);
+
+  if (!salaryText) {
+    issues.push("Enter the agreed monthly gross salary.");
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterBasicSalary);
+    firstInvalidField ||= state.dom.payrollMasterBasicSalary;
+  } else if (!Number.isFinite(salaryValue) || salaryValue <= 0) {
+    issues.push("Monthly gross salary must be greater than zero.");
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterBasicSalary);
+    firstInvalidField ||= state.dom.payrollMasterBasicSalary;
+  }
+
+  if (!effectiveDate) {
+    issues.push("Select the salary effective date.");
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
+    firstInvalidField ||= state.dom.payrollMasterEffectiveDate;
+  } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
+    issues.push("Salary effective date is not valid.");
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
+    firstInvalidField ||= state.dom.payrollMasterEffectiveDate;
+  }
+
+  if (!payCycle) {
+    issues.push("Select the pay cycle.");
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterPayCycle);
+    firstInvalidField ||= state.dom.payrollMasterPayCycle;
+  } else if (payCycle !== "Monthly") {
+    issues.push("Only Monthly pay cycle is currently supported.");
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterPayCycle);
+    firstInvalidField ||= state.dom.payrollMasterPayCycle;
+  }
+
+  if (!status) {
+    issues.push("Select the payroll status.");
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterStatus);
+    firstInvalidField ||= state.dom.payrollMasterStatus;
+  }
+
+  const conflict = findPayrollMasterEffectiveDateConflict(employeeId, effectiveDate);
+
+  if (conflict) {
+    issues.push(
+      `A Payroll Master record already exists for this employee on ${formatDate(effectiveDate)}.`,
+    );
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterEmployeeId);
+    markPayrollMasterFieldInvalid(state.dom.payrollMasterEffectiveDate);
+    firstInvalidField ||= state.dom.payrollMasterEffectiveDate;
+  }
+
+  if (issues.length) {
+    showPayrollMasterValidationIssues(issues);
+
+    if (firstInvalidField?.focus) {
+      firstInvalidField.focus();
     }
-  });
 
-  const salaryValue = Number(state.dom.payrollMasterBasicSalary?.value || 0);
-  if (!Number.isFinite(salaryValue) || salaryValue < 0) {
-    state.dom.payrollMasterBasicSalary?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.payrollMasterBasicSalary;
+    return false;
   }
 
-  if (!isValid && firstInvalidField?.focus) {
-    firstInvalidField.focus();
-  }
-
-  return isValid;
+  return true;
 }
 
 function buildPayrollMasterPayload(isEditMode = false) {
@@ -4339,6 +6780,43 @@ function buildPayrollMasterPayload(isEditMode = false) {
   return payload;
 }
 
+function stripPayrollMasterVersionSystemNotes(notes = "") {
+  // DESCRIPTION ITEM 6 - STEP 6A FIX
+  // Keep system-generated version notes out of the editable Notes box.
+  // HR should only see/edit their own notes when creating a new version.
+  return String(notes || "")
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !String(line || "")
+          .trim()
+          .startsWith("Payroll master version created from previous record"),
+    )
+    .join("\n")
+    .trim();
+}
+
+function buildPayrollMasterVersionNotes(previousRecord = {}, newNotes = "") {
+  const previousEffectiveDate = formatDate(previousRecord.salary_effective_date);
+  const previousSalary = formatCurrency(previousRecord.basic_salary || 0, "NGN");
+
+  const versionNote = [
+    "Payroll master version created from previous record",
+    previousEffectiveDate ? `Previous effective date: ${previousEffectiveDate}` : "",
+    previousSalary ? `Previous salary: ${previousSalary}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  // DESCRIPTION ITEM 6 - STEP 6A
+  // Payroll Master changes are versioned, not overwritten.
+  // This note keeps the new version traceable while the old effective-dated
+  // record remains available for historical payroll reproduction.
+  return [stripPayrollMasterVersionSystemNotes(newNotes), versionNote]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function setPayrollMasterSaveLoading(isLoading, isEditMode = false) {
   const button = state.dom.savePayrollMasterBtn;
   if (!button) return;
@@ -4352,7 +6830,7 @@ function setPayrollMasterSaveLoading(isLoading, isEditMode = false) {
 
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      ${isEditMode ? "Updating Master Data..." : "Saving Master Data..."}
+${isEditMode ? "Saving New Version..." : "Saving Master Data..."}
     `;
   } else if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
@@ -4363,18 +6841,40 @@ function setPayrollMasterSaveLoading(isLoading, isEditMode = false) {
 
 async function handlePayrollMasterSave() {
   clearPageAlert();
+  if (!canCurrentUserMaintainPayrollMasterData()) {
+    // DESCRIPTION ITEM 7 - STEP 7A
+    // UI hiding is not enough. Block direct submit attempts as well.
+    showPayrollMasterAccessDeniedMessage();
+    return;
+  }
 
   if (!validatePayrollMasterForm()) {
-    showPageAlert(
-      "warning",
-      "Please complete all required payroll master fields before saving.",
-    );
+    // DESCRIPTION ITEM 8 - STEP 8A
+    // validatePayrollMasterForm now shows clear field-specific messages,
+    // so do not replace them with a generic warning.
     return;
   }
 
   const editingId = String(state.dom.editingPayrollMasterId?.value || "").trim();
   const isEditMode = Boolean(editingId);
-  const payload = buildPayrollMasterPayload(isEditMode);
+
+  // DESCRIPTION ITEM 6 - STEP 6A
+  // Editing Payroll Master Data now creates a new effective-dated version.
+  // This prevents historical salary setup from being overwritten.
+  const payload = buildPayrollMasterPayload(false);
+
+  if (isEditMode) {
+    const previousRecord =
+      state.currentEditingPayrollMaster ||
+      state.payrollMasterRecords.find((item) => String(item.id) === editingId) ||
+      {};
+
+    // DESCRIPTION ITEM 6 - STEP 6A FIX
+    // Do not use native browser confirmation popups.
+    // Payroll Master versioning should follow the same page alert/success
+    // notification behaviour used across the HR & Payroll System.
+    payload.notes = buildPayrollMasterVersionNotes(previousRecord, payload.notes);
+  }
 
   try {
     setPayrollMasterSaveLoading(true, isEditMode);
@@ -4382,25 +6882,15 @@ async function handlePayrollMasterSave() {
     const supabase = getSupabaseClient();
     let response;
 
-    // =========================================================
-    // DESCRIPTION ITEM 1
-    // Create new master record or update existing one,
-    // depending on whether we are in edit mode.
-    // =========================================================
-    if (isEditMode) {
-      response = await supabase
-        .from("payroll_master_records")
-        .update(payload)
-        .eq("id", editingId)
-        .select("*")
-        .maybeSingle();
-    } else {
-      response = await supabase
-        .from("payroll_master_records")
-        .insert([payload])
-        .select("*")
-        .maybeSingle();
-    }
+    // DESCRIPTION ITEM 6 - STEP 6A
+    // Always insert Payroll Master saves as effective-dated records.
+    // In edit/version mode, the selected row is only used as a template;
+    // it is not overwritten. Existing historical records remain reproducible.
+    response = await supabase
+      .from("payroll_master_records")
+      .insert([payload])
+      .select("*")
+      .maybeSingle();
 
     if (response.error) {
       throw response.error;
@@ -4411,12 +6901,23 @@ async function handlePayrollMasterSave() {
     showPageAlert(
       "success",
       isEditMode
-        ? `Payroll master record was updated successfully for effective date <strong>${escapeHtml(
+        ? `New payroll master version was created successfully for effective date <strong>${escapeHtml(
           payload.salary_effective_date,
         )}</strong>.`
         : `Payroll master record was created successfully for effective date <strong>${escapeHtml(
           payload.salary_effective_date,
         )}</strong>.`,
+    );
+
+    // DESCRIPTION ITEM 6 - STEP 6A
+    // Payroll Master save now uses the same floating success notification
+    // pattern already used by other HR/payroll setup cards.
+    showDashboardToast(
+      "success",
+      isEditMode ? "Payroll master version created" : "Payroll master created",
+      isEditMode
+        ? "A new effective-dated payroll master version has been created. The old version remains for historical payroll."
+        : "The payroll master record has been saved successfully.",
     );
 
     // HR SAVE/EDIT BEHAVIOUR - PAYROLL MASTER STEP 1
@@ -4439,12 +6940,29 @@ async function handlePayrollMasterSave() {
         "warning",
         "A payroll master record already exists for this employee on the selected salary effective date.",
       );
+
+      // DESCRIPTION ITEM 6 - STEP 6A
+      // Keep duplicate Payroll Master feedback visible even when HR is scrolled
+      // inside the Payroll Master card and cannot see the top page alert.
+      showDashboardToast(
+        "warning",
+        "Duplicate payroll master version",
+        "This employee already has a payroll master record for the selected effective date. Use a different effective date for the new version.",
+      );
+
       return;
     }
 
     showPageAlert(
       "danger",
       error.message || "Payroll master record could not be saved.",
+    );
+    // DESCRIPTION ITEM 6 - STEP 6A
+    // Match the standard HR/payroll error notification pattern.
+    showDashboardToast(
+      "danger",
+      "Payroll master save failed",
+      error.message || "The payroll master record could not be saved.",
     );
   } finally {
     setPayrollMasterSaveLoading(false, isEditMode);
@@ -4546,6 +7064,15 @@ function renderPayrollMasterRecords(records) {
   // are re-rendered, including after a Payroll Master create/update.
   populatePayrollStatutoryMasterOptions();
 
+  // DESCRIPTION ITEM 4 - STEP 3
+  // Keep Other Deductions connected whenever Payroll Master Records
+  // are re-rendered, including after a Payroll Master create/update.
+  populatePayrollOtherDeductionMasterOptions();
+  // DESCRIPTION ITEM 5 - STEP 3
+  // Keep Employee Payroll Overrides connected whenever Payroll Master Records
+  // are re-rendered, including after Payroll Master create/update.
+  populatePayrollEmployeeOverrideMasterOptions();
+
   tbody.innerHTML = "";
 
   if (!records.length) {
@@ -4618,17 +7145,21 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
 </td>
 
   <td class="text-center">
-    <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 6
-         Use a compact icon-only edit action to reduce table clutter. -->
-    <button
-      type="button"
-      class="btn btn-sm btn-outline-primary"
-      title="Edit payroll master record"
-      aria-label="Edit payroll master record"
-      onclick="window.hrEditPayrollMasterRecord('${String(record.id).replaceAll("'", "\\'")}')"
-    >
-      <i class="bi bi-pencil-square"></i>
-    </button>
+    ${canCurrentUserMaintainPayrollMasterData()
+        ? `<!-- DESCRIPTION ITEM 7 - STEP 7A
+             Only authorised HR/payroll roles can create a new Payroll Master version. -->
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-primary"
+          title="Create new payroll master version"
+          aria-label="Create new payroll master version"
+          onclick="window.hrEditPayrollMasterRecord('${String(record.id).replaceAll("'", "\\'")}')"
+        >
+          <i class="bi bi-pencil-square"></i>
+        </button>`
+        : `<span class="badge bg-light text-secondary border" title="Payroll Master maintenance is restricted">
+          <i class="bi bi-lock me-1"></i>Read only
+        </span>`}
   </td>
 `;
 
@@ -4642,6 +7173,12 @@ ${escapeHtml(getPayrollMasterGradeDisplay(record))}
 // Save/update behavior will be added in the next step.
 // =========================================================
 function startPayrollMasterEdit(payrollMasterId) {
+  if (!canCurrentUserMaintainPayrollMasterData()) {
+    // DESCRIPTION ITEM 7 - STEP 7A
+    // Prevent unauthorised users from opening Payroll Master version mode.
+    showPayrollMasterAccessDeniedMessage();
+    return;
+  }
   const record = state.payrollMasterRecords.find(
     (item) => String(item.id) === String(payrollMasterId),
   );
@@ -4688,11 +7225,17 @@ function startPayrollMasterEdit(payrollMasterId) {
   }
 
   if (state.dom.payrollMasterNotes) {
-    state.dom.payrollMasterNotes.value = record.notes || "";
+    // DESCRIPTION ITEM 6 - STEP 6A FIX
+    // Do not show old system-generated version audit notes in the editable form.
+    // The new version audit will be rebuilt cleanly when HR saves.
+    state.dom.payrollMasterNotes.value = stripPayrollMasterVersionSystemNotes(record.notes || "");
   }
 
   if (state.dom.payrollMasterFormModeBadge) {
-    state.dom.payrollMasterFormModeBadge.textContent = "Edit Mode";
+    // DESCRIPTION ITEM 6 - STEP 6A
+    // Existing payroll master rows are used as templates for new versions.
+    // They are not directly overwritten.
+    state.dom.payrollMasterFormModeBadge.textContent = "New Version Mode";
     state.dom.payrollMasterFormModeBadge.className =
       "badge rounded-pill text-bg-primary px-3 py-2";
   }
@@ -4704,7 +7247,7 @@ function startPayrollMasterEdit(payrollMasterId) {
   if (state.dom.savePayrollMasterBtn) {
     state.dom.savePayrollMasterBtn.innerHTML = `
       <i class="bi bi-save me-2"></i>
-      <span id="savePayrollMasterBtnText">Update Payroll Master Record</span>
+<span id="savePayrollMasterBtnText">Save Payroll Master Version</span>
     `;
     state.dom.savePayrollMasterBtnText = document.getElementById("savePayrollMasterBtnText");
   }
@@ -4915,7 +7458,10 @@ function isPayrollStatutoryFormReadyForSubmit() {
 
   const manualValueIsValid =
     method === "RULE_BASED" ||
-    (deductionValue !== "" && Number.isFinite(Number(deductionValue)) && Number(deductionValue) >= 0);
+    // DESCRIPTION ITEM 8 - STEP 8C
+    // Manual statutory values must be positive. Rule Based deductions stay exempt
+    // because they are calculated from statutory rules and save null value.
+    (deductionValue !== "" && Number.isFinite(Number(deductionValue)) && Number(deductionValue) > 0);
 
   const inheritedSetupIsValid =
     configSource !== "GRADE_RULE" || Boolean(gradeSnapshot);
@@ -4932,71 +7478,189 @@ function updatePayrollStatutorySaveButtonState() {
   );
 }
 
+function clearPayrollStatutoryValidationState() {
+  // DESCRIPTION ITEM 8 - STEP 8C
+  // Reset Statutory Deduction validation styling before each fresh validation pass.
+  [
+    state.dom.payrollStatutoryMasterRecordId,
+    state.dom.payrollStatutoryDeductionType,
+    state.dom.payrollStatutoryCalculationMethod,
+    state.dom.payrollStatutoryDeductionValue,
+    state.dom.payrollStatutoryEffectiveDate,
+    state.dom.payrollStatutoryConfigSource,
+    state.dom.payrollStatutoryGradeLevelDisplay,
+    state.dom.payrollStatutoryStatus,
+  ].forEach((field) => {
+    field?.classList.remove("is-invalid");
+  });
+}
+
+function markPayrollStatutoryFieldInvalid(field) {
+  if (!field) return;
+  field.classList.add("is-invalid");
+}
+
+function findPayrollStatutoryEffectiveDateConflict({
+  payrollMasterRecordId = "",
+  deductionType = "",
+  effectiveDate = "",
+  editingId = "",
+} = {}) {
+  const masterKey = String(payrollMasterRecordId || "").trim();
+  const typeKey = String(deductionType || "").trim();
+  const dateKey = String(effectiveDate || "").trim();
+  const editingKey = String(editingId || "").trim();
+
+  if (!masterKey || !typeKey || !dateKey) return null;
+
+  // DESCRIPTION ITEM 8 - STEP 8C
+  // Statutory setup is effective-dated by Payroll Master + Deduction Type.
+  // Duplicate same-date rows would make statutory calculation ambiguous.
+  return (state.payrollStatutoryDeductions || []).find((record) => {
+    return (
+      String(record.id || "").trim() !== editingKey &&
+      String(record.payroll_master_record_id || "").trim() === masterKey &&
+      String(record.deduction_type || "").trim() === typeKey &&
+      String(record.effective_date || "").trim() === dateKey
+    );
+  }) || null;
+}
+
+function showPayrollStatutoryValidationIssues(issues = []) {
+  if (!issues.length) return;
+
+  const messageHtml = `
+    <div class="fw-semibold mb-2">Statutory Deduction could not be saved.</div>
+    <ul class="mb-0 ps-3">
+      ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
+    </ul>
+  `;
+
+  showPageAlert("warning", messageHtml);
+
+  showDashboardToast(
+    "warning",
+    "Statutory validation failed",
+    issues[0] || "Please correct the highlighted Statutory Deduction fields.",
+  );
+}
+
 // DESCRIPTION ITEM 3 - STEP 2B
 // Validate fields before saving and focus the first invalid field.
 // This mirrors existing HR/payroll form behaviour without adding edit logic yet.
 function validatePayrollStatutoryForm() {
-  let isValid = true;
+  clearPayrollStatutoryValidationState();
+
+  const issues = [];
   let firstInvalidField = null;
 
-  const requiredFields = [
-    state.dom.payrollStatutoryMasterRecordId,
-    state.dom.payrollStatutoryDeductionType,
-    state.dom.payrollStatutoryCalculationMethod,
-    state.dom.payrollStatutoryEffectiveDate,
-    state.dom.payrollStatutoryConfigSource,
-    state.dom.payrollStatutoryStatus,
-  ];
+  const editingId = String(state.dom.editingPayrollStatutoryId?.value || "").trim();
+  const payrollMasterRecordId =
+    String(state.dom.payrollStatutoryMasterRecordId?.value || "").trim();
+  const deductionType =
+    String(state.dom.payrollStatutoryDeductionType?.value || "").trim();
+  const method =
+    String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
+  const deductionValueText =
+    String(state.dom.payrollStatutoryDeductionValue?.value || "").trim();
+  const effectiveDate =
+    String(state.dom.payrollStatutoryEffectiveDate?.value || "").trim();
+  const configSource =
+    String(state.dom.payrollStatutoryConfigSource?.value || "").trim();
+  const gradeSnapshot =
+    String(state.dom.payrollStatutoryGradeLevelSnapshot?.value || "").trim();
+  const status =
+    String(state.dom.payrollStatutoryStatus?.value || "").trim();
 
-  requiredFields.forEach((field) => {
-    const hasValue = Boolean(String(field?.value || "").trim());
+  if (!payrollMasterRecordId) {
+    issues.push("Select the Payroll Master record for this statutory deduction.");
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryMasterRecordId);
+    firstInvalidField ||= state.dom.payrollStatutoryMasterRecordId;
+  }
 
-    field?.classList.toggle("is-invalid", !hasValue);
+  if (!deductionType) {
+    issues.push("Select the statutory deduction type.");
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryDeductionType);
+    firstInvalidField ||= state.dom.payrollStatutoryDeductionType;
+  }
 
-    if (!hasValue) {
-      isValid = false;
-      if (!firstInvalidField) firstInvalidField = field;
-    }
-  });
-
-  const method = String(state.dom.payrollStatutoryCalculationMethod?.value || "").trim();
-  const deductionValue = String(state.dom.payrollStatutoryDeductionValue?.value || "").trim();
+  if (!method) {
+    issues.push("Select the calculation method.");
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryCalculationMethod);
+    firstInvalidField ||= state.dom.payrollStatutoryCalculationMethod;
+  }
 
   if (method !== "RULE_BASED") {
-    const numericValue = Number(deductionValue);
-    const hasValidManualValue =
-      deductionValue !== "" && Number.isFinite(numericValue) && numericValue >= 0;
+    const numericValue = Number(deductionValueText);
 
-    state.dom.payrollStatutoryDeductionValue?.classList.toggle(
-      "is-invalid",
-      !hasValidManualValue,
-    );
-
-    if (!hasValidManualValue) {
-      isValid = false;
-      if (!firstInvalidField) {
-        firstInvalidField = state.dom.payrollStatutoryDeductionValue;
-      }
+    if (!deductionValueText) {
+      issues.push("Enter the statutory deduction value.");
+      markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryDeductionValue);
+      firstInvalidField ||= state.dom.payrollStatutoryDeductionValue;
+    } else if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      issues.push("Statutory deduction value must be greater than zero.");
+      markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryDeductionValue);
+      firstInvalidField ||= state.dom.payrollStatutoryDeductionValue;
     }
   }
 
-  const configSource = String(state.dom.payrollStatutoryConfigSource?.value || "").trim();
-  const gradeSnapshot = String(state.dom.payrollStatutoryGradeLevelSnapshot?.value || "").trim();
+  if (!effectiveDate) {
+    issues.push("Select the statutory deduction effective date.");
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryEffectiveDate);
+    firstInvalidField ||= state.dom.payrollStatutoryEffectiveDate;
+  } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
+    issues.push("Statutory deduction effective date is not valid.");
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryEffectiveDate);
+    firstInvalidField ||= state.dom.payrollStatutoryEffectiveDate;
+  }
+
+  if (!configSource) {
+    issues.push("Select the configuration source.");
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryConfigSource);
+    firstInvalidField ||= state.dom.payrollStatutoryConfigSource;
+  }
 
   if (configSource === "GRADE_RULE" && !gradeSnapshot) {
-    state.dom.payrollStatutoryGradeLevelDisplay?.classList.add("is-invalid");
-    isValid = false;
+    issues.push("Inherited Grade / Rule requires the selected Payroll Master record to have a Payroll Grade / Level.");
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryMasterRecordId);
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryGradeLevelDisplay);
+    firstInvalidField ||= state.dom.payrollStatutoryMasterRecordId;
+  }
 
-    if (!firstInvalidField) {
-      firstInvalidField = state.dom.payrollStatutoryMasterRecordId;
+  if (!status) {
+    issues.push("Select the statutory deduction status.");
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryStatus);
+    firstInvalidField ||= state.dom.payrollStatutoryStatus;
+  }
+
+  const conflict = findPayrollStatutoryEffectiveDateConflict({
+    payrollMasterRecordId,
+    deductionType,
+    effectiveDate,
+    editingId,
+  });
+
+  if (conflict) {
+    issues.push(
+      `A statutory deduction already exists for this Payroll Master, deduction type, and ${formatDate(effectiveDate)}.`,
+    );
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryMasterRecordId);
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryDeductionType);
+    markPayrollStatutoryFieldInvalid(state.dom.payrollStatutoryEffectiveDate);
+    firstInvalidField ||= state.dom.payrollStatutoryEffectiveDate;
+  }
+
+  if (issues.length) {
+    showPayrollStatutoryValidationIssues(issues);
+
+    if (firstInvalidField?.focus) {
+      firstInvalidField.focus();
     }
+
+    return false;
   }
 
-  if (!isValid && firstInvalidField?.focus) {
-    firstInvalidField.focus();
-  }
-
-  return isValid;
+  return true;
 }
 
 // DESCRIPTION ITEM 3 - STEP 2B
@@ -5035,14 +7699,14 @@ function buildPayrollStatutoryPayload(isEditMode = false) {
     status:
       String(state.dom.payrollStatutoryStatus?.value || "Active").trim(),
 
-notes:
-  String(state.dom.payrollStatutoryNotes?.value || "").trim() || null,
+    notes:
+      String(state.dom.payrollStatutoryNotes?.value || "").trim() || null,
 
-// DESCRIPTION ITEM 3 - STEP 2D
-// For updates, preserve the original creator and only change updated_by.
-// For creates, set both created_by and updated_by.
-...(isEditMode ? {} : { created_by: state.currentUser?.id || null }),
-updated_by: state.currentUser?.id || null,
+    // DESCRIPTION ITEM 3 - STEP 2D
+    // For updates, preserve the original creator and only change updated_by.
+    // For creates, set both created_by and updated_by.
+    ...(isEditMode ? {} : { created_by: state.currentUser?.id || null }),
+    updated_by: state.currentUser?.id || null,
   };
 }
 
@@ -5117,19 +7781,19 @@ function resetPayrollStatutoryForm() {
   if (state.dom.payrollStatutoryGradeLevelSnapshot) {
     state.dom.payrollStatutoryGradeLevelSnapshot.value = "";
   }
-// DESCRIPTION ITEM 3 - STEP 2D
-// Restore create-mode controls after save, clear, or cancel edit.
-if (state.dom.cancelPayrollStatutoryEditBtn) {
-  state.dom.cancelPayrollStatutoryEditBtn.classList.add("d-none");
-}
+  // DESCRIPTION ITEM 3 - STEP 2D
+  // Restore create-mode controls after save, clear, or cancel edit.
+  if (state.dom.cancelPayrollStatutoryEditBtn) {
+    state.dom.cancelPayrollStatutoryEditBtn.classList.add("d-none");
+  }
 
-if (state.dom.savePayrollStatutoryBtn) {
-  state.dom.savePayrollStatutoryBtn.innerHTML = `
+  if (state.dom.savePayrollStatutoryBtn) {
+    state.dom.savePayrollStatutoryBtn.innerHTML = `
     <i class="bi bi-save me-2"></i>
     <span id="savePayrollStatutoryBtnText">Create Statutory Deduction</span>
   `;
-  state.dom.savePayrollStatutoryBtnText = document.getElementById("savePayrollStatutoryBtnText");
-}
+    state.dom.savePayrollStatutoryBtnText = document.getElementById("savePayrollStatutoryBtnText");
+  }
   syncPayrollStatutorySelectedMasterContext();
   syncPayrollStatutoryCalculationMethodUi();
   updatePayrollStatutorySaveButtonState();
@@ -5266,10 +7930,9 @@ async function handlePayrollStatutorySave() {
   clearPageAlert();
 
   if (!validatePayrollStatutoryForm()) {
-    showPageAlert(
-      "warning",
-      "Please complete the required statutory deduction fields before saving.",
-    );
+    // DESCRIPTION ITEM 8 - STEP 8C
+    // validatePayrollStatutoryForm now shows clear field-specific messages,
+    // so do not replace them with a generic warning.
     return;
   }
 
@@ -5279,42 +7942,42 @@ async function handlePayrollStatutorySave() {
     setPayrollStatutorySaveLoading(true);
     await waitForNextPaint();
 
-const supabase = getSupabaseClient();
+    const supabase = getSupabaseClient();
 
-const editingId = String(
-  state.currentEditingPayrollStatutory?.id ||
-  state.dom.editingPayrollStatutoryId?.value ||
-  "",
-).trim();
+    const editingId = String(
+      state.currentEditingPayrollStatutory?.id ||
+      state.dom.editingPayrollStatutoryId?.value ||
+      "",
+    ).trim();
 
-const isEditMode = Boolean(editingId);
-const payload = buildPayrollStatutoryPayload(isEditMode);
+    const isEditMode = Boolean(editingId);
+    const payload = buildPayrollStatutoryPayload(isEditMode);
 
-let error = null;
+    let error = null;
 
-if (isEditMode) {
-  // DESCRIPTION ITEM 3 - STEP 2D
-  // Update the selected statutory deduction instead of creating a duplicate.
-  // The unique master/type/effective-date rule remains protected by Supabase.
-  const response = await supabase
-    .from("payroll_statutory_deductions")
-    .update(payload)
-    .eq("id", editingId);
+    if (isEditMode) {
+      // DESCRIPTION ITEM 3 - STEP 2D
+      // Update the selected statutory deduction instead of creating a duplicate.
+      // The unique master/type/effective-date rule remains protected by Supabase.
+      const response = await supabase
+        .from("payroll_statutory_deductions")
+        .update(payload)
+        .eq("id", editingId);
 
-  error = response.error;
-} else {
-  // DESCRIPTION ITEM 3 - STEP 2D
-  // Create mode remains unchanged for new statutory deduction setup records.
-  const response = await supabase
-    .from("payroll_statutory_deductions")
-    .insert(payload);
+      error = response.error;
+    } else {
+      // DESCRIPTION ITEM 3 - STEP 2D
+      // Create mode remains unchanged for new statutory deduction setup records.
+      const response = await supabase
+        .from("payroll_statutory_deductions")
+        .insert(payload);
 
-  error = response.error;
-}
+      error = response.error;
+    }
 
-if (error) {
-  throw new Error(error.message || "Statutory deduction could not be saved.");
-}
+    if (error) {
+      throw new Error(error.message || "Statutory deduction could not be saved.");
+    }
 
     // DESCRIPTION ITEM 3 - STEP 2C
     // Clear records search and refresh the Statutory Deduction Records table
@@ -5323,31 +7986,31 @@ if (error) {
       state.dom.payrollStatutorySearchInput.value = "";
     }
 
-await refreshPayrollStatutoryWorkspace();
+    await refreshPayrollStatutoryWorkspace();
 
-resetPayrollStatutoryForm();
+    resetPayrollStatutoryForm();
 
-// DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
-// After create/update, land on Statutory Deduction Records so HR can
-// immediately verify the saved row without the heading being cut off.
-setTimeout(() => {
-  redirectToPayrollStatutoryRecordsAfterSave();
-}, 250);
+    // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
+    // After create/update, land on Statutory Deduction Records so HR can
+    // immediately verify the saved row without the heading being cut off.
+    setTimeout(() => {
+      redirectToPayrollStatutoryRecordsAfterSave();
+    }, 250);
 
-showPageAlert(
-  "success",
-  isEditMode
-    ? "Statutory deduction was updated successfully."
-    : "Statutory deduction was created successfully.",
-);
+    showPageAlert(
+      "success",
+      isEditMode
+        ? "Statutory deduction was updated successfully."
+        : "Statutory deduction was created successfully.",
+    );
 
-showDashboardToast(
-  "success",
-  isEditMode ? "Statutory deduction updated" : "Statutory deduction created",
-  isEditMode
-    ? "The statutory deduction setup has been updated."
-    : "The statutory deduction setup has been saved against the selected Payroll Master Record.",
-);
+    showDashboardToast(
+      "success",
+      isEditMode ? "Statutory deduction updated" : "Statutory deduction created",
+      isEditMode
+        ? "The statutory deduction setup has been updated."
+        : "The statutory deduction setup has been saved against the selected Payroll Master Record.",
+    );
   } catch (error) {
     console.error("Error saving statutory deduction:", error);
 
@@ -5563,14 +8226,31 @@ function applyPayrollStatutorySearch() {
       const masterContext = getPayrollStatutoryMasterContext(record);
 
       const searchableText = [
+        // DESCRIPTION ITEM 7 - STEP 7A SEARCH POLISH
+        // Match the visible Statutory Deduction Records table values so HR
+        // can search by employee, type, method, value, effective date, or status.
         masterContext.fullName,
         masterContext.workEmail,
         masterContext.gradeLabel,
+
         formatPayrollStatutoryDeductionType(record.deduction_type),
         formatPayrollStatutoryCalculationMethod(record.calculation_method),
         formatPayrollStatutoryConfigSource(record.configuration_source),
+
+        record.deduction_value,
+        formatCurrency(record.deduction_value, "NGN"),
+        `${record.deduction_value || ""}%`,
+
         record.effective_date,
+        formatDate(record.effective_date),
+
         record.status,
+        formatStatusLabel(record.status),
+
+        record.updated_at,
+        record.created_at,
+        formatDate(record.updated_at || record.created_at),
+
         record.notes,
       ]
         .join(" ")
@@ -5604,12 +8284,12 @@ function renderPayrollStatutoryRecords(records = []) {
 
   const recordsToRender = sortPayrollStatutoryRecordsByLatestActivity(records);
 
-recordsToRender.forEach((record) => {
-  const masterContext = getPayrollStatutoryMasterContext(record);
+  recordsToRender.forEach((record) => {
+    const masterContext = getPayrollStatutoryMasterContext(record);
 
-  // DESCRIPTION ITEM 3 - STEP 2D
-  // Safe id used by the inline Edit button for this statutory deduction row.
-  const safeStatutoryDeductionId = String(record.id || "").replaceAll("'", "\\'");
+    // DESCRIPTION ITEM 3 - STEP 2D
+    // Safe id used by the inline Edit button for this statutory deduction row.
+    const safeStatutoryDeductionId = String(record.id || "").replaceAll("'", "\\'");
     const gradeLine = masterContext.gradeLabel
       ? `<div class="text-secondary small">${escapeHtml(masterContext.gradeLabel)}</div>`
       : "";
@@ -5767,13 +8447,26 @@ function applyPayrollMasterSearch() {
       // Include Payroll Grade / Level in Payroll Master search so HR can
       // filter records by grade/level when maintaining payroll setup.
       const searchableText = [
+        // DESCRIPTION ITEM 7 - STEP 7A FIX
+        // Payroll Master search must match the visible records table,
+        // not just employee names. This lets HR find records by salary,
+        // effective date, pay cycle, status, grade, or employee details.
         record.first_name,
         record.last_name,
         record.work_email,
         getPayrollMasterGradeDisplay(record),
+
+        record.basic_salary,
+        formatCurrency(record.basic_salary, "NGN"),
+
+        record.salary_effective_date,
+        formatDate(record.salary_effective_date),
+
         record.pay_cycle,
         record.payroll_status,
-        record.salary_effective_date,
+
+        record.updated_at,
+        formatDate(record.updated_at || record.created_at),
       ]
         .join(" ")
         .toLowerCase();
@@ -5837,47 +8530,162 @@ async function refreshPayrollAllowanceWorkspace() {
   // Load allowance rows from the database, then apply search.
   await loadPayrollAllowanceComponents();
 }
+
+function clearPayrollAllowanceValidationState() {
+  // DESCRIPTION ITEM 8 - STEP 8B
+  // Reset Allowance Component validation styling before each fresh validation pass.
+  [
+    state.dom.payrollAllowanceMasterRecordId,
+    state.dom.payrollAllowanceType,
+    state.dom.payrollAllowanceAmount,
+    state.dom.payrollAllowanceEffectiveDate,
+    state.dom.payrollAllowanceStatus,
+  ].forEach((field) => {
+    field?.classList.remove("is-invalid");
+  });
+}
+
+function markPayrollAllowanceFieldInvalid(field) {
+  if (!field) return;
+  field.classList.add("is-invalid");
+}
+
+function findPayrollAllowanceEffectiveDateConflict({
+  payrollMasterRecordId = "",
+  allowanceType = "",
+  effectiveDate = "",
+  editingId = "",
+} = {}) {
+  const masterKey = String(payrollMasterRecordId || "").trim();
+  const typeKey = String(allowanceType || "").trim();
+  const dateKey = String(effectiveDate || "").trim();
+  const editingKey = String(editingId || "").trim();
+
+  if (!masterKey || !typeKey || !dateKey) return null;
+
+  // DESCRIPTION ITEM 8 - STEP 8B
+  // Allowance setup is effective-dated by Payroll Master + Allowance Type.
+  // A duplicate same-date row would make allowance setup ambiguous.
+  return (state.payrollAllowanceComponents || []).find((record) => {
+    return (
+      String(record.id || "").trim() !== editingKey &&
+      String(record.payroll_master_record_id || "").trim() === masterKey &&
+      String(record.allowance_type || "").trim() === typeKey &&
+      String(record.effective_date || "").trim() === dateKey
+    );
+  }) || null;
+}
+
+function showPayrollAllowanceValidationIssues(issues = []) {
+  if (!issues.length) return;
+
+  const messageHtml = `
+    <div class="fw-semibold mb-2">Allowance Component could not be saved.</div>
+    <ul class="mb-0 ps-3">
+      ${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}
+    </ul>
+  `;
+
+  showPageAlert("warning", messageHtml);
+
+  showDashboardToast(
+    "warning",
+    "Allowance validation failed",
+    issues[0] || "Please correct the highlighted Allowance Component fields.",
+  );
+}
+
 // =========================================================
 // DESCRIPTION ITEM 2
 // Allowance create/save helpers
 // This step supports create only. Edit/update comes next.
 // =========================================================
 function validatePayrollAllowanceForm() {
-  let isValid = true;
+  clearPayrollAllowanceValidationState();
+
+  const issues = [];
   let firstInvalidField = null;
 
-  const requiredFields = [
-    state.dom.payrollAllowanceMasterRecordId,
-    state.dom.payrollAllowanceType,
-    state.dom.payrollAllowanceAmount,
-    state.dom.payrollAllowanceEffectiveDate,
-    state.dom.payrollAllowanceStatus,
-  ];
+  const editingId = String(state.dom.editingPayrollAllowanceId?.value || "").trim();
+  const payrollMasterRecordId =
+    String(state.dom.payrollAllowanceMasterRecordId?.value || "").trim();
+  const allowanceType =
+    String(state.dom.payrollAllowanceType?.value || "").trim();
+  const amountText =
+    String(state.dom.payrollAllowanceAmount?.value || "").trim();
+  const effectiveDate =
+    String(state.dom.payrollAllowanceEffectiveDate?.value || "").trim();
+  const status =
+    String(state.dom.payrollAllowanceStatus?.value || "").trim();
 
-  requiredFields.forEach((field) => {
-    const value = String(field?.value || "").trim();
+  if (!payrollMasterRecordId) {
+    issues.push("Select the Payroll Master record for this allowance.");
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceMasterRecordId);
+    firstInvalidField ||= state.dom.payrollAllowanceMasterRecordId;
+  }
 
-    if (!value) {
-      field?.classList.add("is-invalid");
-      isValid = false;
-      if (!firstInvalidField) firstInvalidField = field;
-    } else {
-      field?.classList.remove("is-invalid");
-    }
+  if (!allowanceType) {
+    issues.push("Select the allowance type.");
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceType);
+    firstInvalidField ||= state.dom.payrollAllowanceType;
+  }
+
+  const amountValue = Number(amountText);
+
+  if (!amountText) {
+    issues.push("Enter the allowance amount.");
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceAmount);
+    firstInvalidField ||= state.dom.payrollAllowanceAmount;
+  } else if (!Number.isFinite(amountValue) || amountValue <= 0) {
+    issues.push("Allowance amount must be greater than zero.");
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceAmount);
+    firstInvalidField ||= state.dom.payrollAllowanceAmount;
+  }
+
+  if (!effectiveDate) {
+    issues.push("Select the allowance effective date.");
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceEffectiveDate);
+    firstInvalidField ||= state.dom.payrollAllowanceEffectiveDate;
+  } else if (Number.isNaN(new Date(effectiveDate).getTime())) {
+    issues.push("Allowance effective date is not valid.");
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceEffectiveDate);
+    firstInvalidField ||= state.dom.payrollAllowanceEffectiveDate;
+  }
+
+  if (!status) {
+    issues.push("Select the allowance status.");
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceStatus);
+    firstInvalidField ||= state.dom.payrollAllowanceStatus;
+  }
+
+  const conflict = findPayrollAllowanceEffectiveDateConflict({
+    payrollMasterRecordId,
+    allowanceType,
+    effectiveDate,
+    editingId,
   });
 
-  const amountValue = Number(state.dom.payrollAllowanceAmount?.value || 0);
-  if (!Number.isFinite(amountValue) || amountValue < 0) {
-    state.dom.payrollAllowanceAmount?.classList.add("is-invalid");
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.payrollAllowanceAmount;
+  if (conflict) {
+    issues.push(
+      `An allowance already exists for this Payroll Master, allowance type, and ${formatDate(effectiveDate)}.`,
+    );
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceMasterRecordId);
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceType);
+    markPayrollAllowanceFieldInvalid(state.dom.payrollAllowanceEffectiveDate);
+    firstInvalidField ||= state.dom.payrollAllowanceEffectiveDate;
   }
 
-  if (!isValid && firstInvalidField?.focus) {
-    firstInvalidField.focus();
+  if (issues.length) {
+    showPayrollAllowanceValidationIssues(issues);
+
+    if (firstInvalidField?.focus) {
+      firstInvalidField.focus();
+    }
+
+    return false;
   }
 
-  return isValid;
+  return true;
 }
 
 function buildPayrollAllowancePayload(isEditMode = false) {
@@ -5931,10 +8739,9 @@ async function handlePayrollAllowanceSave() {
   clearPageAlert();
 
   if (!validatePayrollAllowanceForm()) {
-    showPageAlert(
-      "warning",
-      "Please complete all required allowance fields before saving.",
-    );
+    // DESCRIPTION ITEM 8 - STEP 8B
+    // validatePayrollAllowanceForm now shows clear field-specific messages,
+    // so do not replace them with a generic warning.
     return;
   }
 
@@ -6347,10 +9154,32 @@ function applyPayrollAllowanceSearch() {
 
   if (searchTerm) {
     rows = rows.filter((record) => {
+      const fullName =
+        `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
+        record.work_email ||
+        "Unknown Employee";
+
       const searchableText = [
+        // DESCRIPTION ITEM 7 - STEP 7A SEARCH POLISH
+        // Match the visible Allowance Records table values so HR can search
+        // by employee, type, amount, effective date, status, or updated date.
+        fullName,
+        record.work_email,
         record.allowance_type,
-        record.allowance_status,
+
+        record.allowance_amount,
+        formatCurrency(record.allowance_amount, "NGN"),
+
         record.effective_date,
+        formatDate(record.effective_date),
+
+        record.allowance_status,
+        formatStatusLabel(record.allowance_status),
+
+        record.updated_at,
+        record.created_at,
+        formatDate(record.updated_at || record.created_at),
+
         record.notes,
       ]
         .join(" ")
@@ -6362,17 +9191,6 @@ function applyPayrollAllowanceSearch() {
 
   state.filteredPayrollAllowanceComponents = rows;
   renderPayrollAllowanceRecords(rows);
-}
-async function handlePayrollRecordsRefresh() {
-  const button = state.dom.refreshPayrollRecordsBtn;
-
-  try {
-    setWorkspaceRefreshLoading(button, true);
-    await waitForNextPaint();
-    await refreshPayrollWorkspace();
-  } finally {
-    setWorkspaceRefreshLoading(button, false);
-  }
 }
 
 // BANK DIRECTORY - STEP 10A
@@ -7328,10 +10146,14 @@ function buildBatchPayrollTemplateRow(employee = {}) {
     employee.work_email ||
     "";
 
+  // DESCRIPTION ITEM 4 - STEP 5 FIX
+  // Use the Payroll Master record effective for the selected batch pay date
+  // when building the Alpatech import template.
   const activePayrollMaster =
-    typeof getLatestActivePayrollMasterProfileForEmployee === "function"
-      ? getLatestActivePayrollMasterProfileForEmployee(employee.id)
-      : null;
+    getEffectivePayrollMasterRecordForEmployeeAtDate(
+      employee.id,
+      getCurrentBatchPayrollCalculationDate(),
+    );
 
   const monthlyGrossSalary = Number(activePayrollMaster?.basic_salary || 0);
 
@@ -7665,45 +10487,87 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     };
   }
 
+  // DESCRIPTION ITEM 4 - STEP 5 FIX
+  // CSV payroll import must also use the Payroll Master record that is
+  // effective for the selected batch pay date.
+  // This keeps CSV import aligned with manual payroll and Run Payroll.
   const activePayrollMaster =
-    getLatestActivePayrollMasterProfileForEmployee(employee.id);
+    getEffectivePayrollMasterRecordForEmployeeAtDate(
+      employee.id,
+      getCurrentBatchPayrollCalculationDate(),
+    );
 
-  const baseSalary = parseBatchPayrollCsvAmount(
+  // DESCRIPTION ITEM 4 - STEP 5 CSV FIX
+  // Stop this imported row if the employee does not have a valid payroll
+  // master setup for the selected batch pay date.
+  if (!activePayrollMaster?.id) {
+    return {
+      skipped: true,
+      reason: `No active Payroll Master setup found for ${employeeNameFromCsv || employeeCustomId || "this employee"} on the selected batch pay date.`,
+      employee_custom_id: employeeCustomId,
+      employee_name: employeeNameFromCsv,
+    };
+  }
+
+  let baseSalary = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["Base Salary"]),
   );
 
-  const incrementAmount = parseBatchPayrollCsvAmount(
+  let incrementAmount = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["5% Increment"]),
   );
 
-  const meritIncrement = parseBatchPayrollCsvAmount(
+  let meritIncrement = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, [
       "Merit Increament",
       "Merit Increment",
     ]),
   );
 
-  const newBaseSalary = parseBatchPayrollCsvAmount(
+  let newBaseSalary = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["New Base Salary"]),
   );
 
-  const basicPay = parseBatchPayrollCsvAmount(
+  const resolvedCsvBaseSalary = resolveBatchPayrollBaseSalaryWithEmployeeOverride(
+    activePayrollMaster.id,
+    getCurrentBatchPayrollCalculationDate(),
+    newBaseSalary || baseSalary || Number(activePayrollMaster.basic_salary || 0),
+  );
+
+  const employeeOverrideAuditSummary =
+    buildPayrollEmployeeOverrideAuditSummaryForMaster(
+      activePayrollMaster.id,
+      getCurrentBatchPayrollCalculationDate(),
+    );
+
+  if (resolvedCsvBaseSalary.overrideApplied) {
+    // DESCRIPTION ITEM 5 - STEP 5B
+    // CSV import must respect an active employee Basic Salary override.
+    // The override becomes the final batch salary source, so imported salary
+    // review increments are not stacked on top of the approved exception.
+    baseSalary = resolvedCsvBaseSalary.amount;
+    newBaseSalary = resolvedCsvBaseSalary.amount;
+    incrementAmount = 0;
+    meritIncrement = 0;
+  }
+
+  let basicPay = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["Basic 50%"]),
   );
 
-  const housingAllowance = parseBatchPayrollCsvAmount(
+  let housingAllowance = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["Housing 10%"]),
   );
 
-  const transportAllowance = parseBatchPayrollCsvAmount(
+  let transportAllowance = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["Transport 10%"]),
   );
 
-  const utilityAllowance = parseBatchPayrollCsvAmount(
+  let utilityAllowance = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["Utility 10%"]),
   );
 
-  const otherAllowance = parseBatchPayrollCsvAmount(
+  let otherAllowance = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["Other Allowance 20%"]),
   );
 
@@ -7717,15 +10581,29 @@ function buildBatchPayrollPreparedRowFromCsv(row = [], headerMap = new Map()) {
     getBatchPayrollCsvValue(row, headerMap, ["Overtime"]),
   );
 
-  const bht = parseBatchPayrollCsvAmount(
+  let bht = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["BHT"]),
   ) || basicPay + housingAllowance + transportAllowance;
 
+  if (resolvedCsvBaseSalary.overrideApplied) {
+    // DESCRIPTION ITEM 5 - STEP 5B FIX
+    // When an active Basic Salary override exists, CSV-imported salary split
+    // values must not keep the old salary structure. Recalculate the standard
+    // payroll split from the approved override amount so Prepared Gross,
+    // BHT, deductions, and net pay all align with Run Payroll/manual payroll.
+    basicPay = newBaseSalary * 0.5;
+    housingAllowance = newBaseSalary * 0.1;
+    transportAllowance = newBaseSalary * 0.1;
+    utilityAllowance = newBaseSalary * 0.1;
+    otherAllowance = newBaseSalary * 0.2;
+    bht = basicPay + housingAllowance + transportAllowance;
+  }
+
   // DESCRIPTION ITEM 3 - STEP 2E-2B
-// PAYE and Pension values in the imported CSV are no longer trusted as
-// payroll deductions. Deductions must come from active Statutory Deduction
-// setup so manual payroll, Run Payroll batch, and CSV batch behave the same.
-const netSalaryBeforeLogistics = parseBatchPayrollCsvAmount(
+  // PAYE and Pension values in the imported CSV are no longer trusted as
+  // payroll deductions. Deductions must come from active Statutory Deduction
+  // setup so manual payroll, Run Payroll batch, and CSV batch behave the same.
+  const netSalaryBeforeLogistics = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["NET SALARY", "Net Salary"]),
   );
 
@@ -7743,60 +10621,62 @@ const netSalaryBeforeLogistics = parseBatchPayrollCsvAmount(
     getBatchPayrollCsvValue(row, headerMap, ["Data & Airtime"]),
   );
 
-// BATCH PAYROLL CSV IMPORT - STEP 5C
-// Final gross/net for CSV batch payroll should preserve optional extra earnings.
-const grossPay =
-  newBaseSalary +
-  bonus +
-  overtime +
-  logisticsAllowance +
-  dataAirtimeAllowance;
+  // BATCH PAYROLL CSV IMPORT - STEP 5C
+  // Final gross/net for CSV batch payroll should preserve optional extra earnings.
+  const grossPay =
+    newBaseSalary +
+    bonus +
+    overtime +
+    logisticsAllowance +
+    dataAirtimeAllowance;
 
-// DESCRIPTION ITEM 3 - STEP 2E-2B
-// Recalculate imported CSV deductions from active statutory setup.
-// This keeps CSV batch aligned with manual payroll and Run Payroll batch.
-// Employer Pension is stored separately and is not part of employee Total Deductions.
-const statutoryTotals = calculateBatchStatutoryDeductionTotals({
-  payrollMasterRecordId: activePayrollMaster?.id || "",
-  payrollDate: getCurrentBatchPayrollCalculationDate(),
+  // DESCRIPTION ITEM 3 - STEP 2E-2B
+  // Recalculate imported CSV deductions from active statutory setup.
+  // This keeps CSV batch aligned with manual payroll and Run Payroll batch.
+  // Employer Pension is stored separately and is not part of employee Total Deductions.
+  const statutoryTotals = calculateBatchStatutoryDeductionTotals({
+    payrollMasterRecordId: activePayrollMaster?.id || "",
+    payrollDate: getCurrentBatchPayrollCalculationDate(),
 
-  basicPay,
-  housingAllowance,
-  transportAllowance,
-  utilityAllowance,
-  otherAllowance,
-  medicalAllowance: 0,
-  bonus,
-  overtime,
-  logisticsAllowance,
-  dataAirtimeAllowance,
+    basicPay,
+    housingAllowance,
+    transportAllowance,
+    utilityAllowance,
+    otherAllowance,
+    medicalAllowance: 0,
+    bonus,
+    overtime,
+    logisticsAllowance,
+    dataAirtimeAllowance,
 
-  bht,
-  grossPay,
-});
+    bht,
+    grossPay,
+  });
 
-const payeTax = statutoryTotals.payeTax;
-const employeePension = statutoryTotals.employeePension;
-const employerPension = statutoryTotals.employerPension;
-const otherDeductions = statutoryTotals.otherDeductions;
-const totalDeductions = statutoryTotals.totalDeductions;
-const netPay = statutoryTotals.netPay;
+  const payeTax = statutoryTotals.payeTax;
+  const employeePension = statutoryTotals.employeePension;
+  const employerPension = statutoryTotals.employerPension;
+  const otherDeductions = statutoryTotals.otherDeductions;
+  const totalDeductions = statutoryTotals.totalDeductions;
+  const netPay = statutoryTotals.netPay;
 
-// DESCRIPTION ITEM 3 - STEP 2E-2B
-// Keep this field consistent with the recalculated net pay instead of
-// preserving stale CSV net values after statutory deductions are applied.
-const recalculatedMonthlySalaryPlusLogistics =
-  logisticsAllowance > 0 || monthlySalaryPlusLogistics > 0
-    ? Math.max(netPay - dataAirtimeAllowance, 0)
-    : null;
+  // DESCRIPTION ITEM 3 - STEP 2E-2B
+  // Keep this field consistent with the recalculated net pay instead of
+  // preserving stale CSV net values after statutory deductions are applied.
+  const recalculatedMonthlySalaryPlusLogistics =
+    logisticsAllowance > 0 || monthlySalaryPlusLogistics > 0
+      ? Math.max(netPay - dataAirtimeAllowance, 0)
+      : null;
 
-return {
+  const preparedRow = {
     employee_id: employee.id,
     payroll_master_record_id: activePayrollMaster?.id || null,
     pay_cycle: String(state.dom.batchPayrollPayCycle?.value || "").trim(),
     payroll_group: "REGULAR",
     payroll_model: "REGULAR",
     source: "csv",
+    employee_override_applied: resolvedCsvBaseSalary.overrideApplied,
+    employee_override_audit_summary: employeeOverrideAuditSummary,
 
     base_salary: baseSalary,
     // BATCH PAYROLL CSV IMPORT - STEP 5C
@@ -7817,23 +10697,23 @@ return {
     bonus,
     overtime,
 
-logistics_allowance: logisticsAllowance || null,
-data_airtime_allowance: dataAirtimeAllowance || null,
+    logistics_allowance: logisticsAllowance || null,
+    data_airtime_allowance: dataAirtimeAllowance || null,
 
-// DESCRIPTION ITEM 3 - STEP 2E-2B
-// Store the recalculated monthly salary plus logistics after statutory
-// deductions have been applied.
-monthly_salary_plus_logistics: recalculatedMonthlySalaryPlusLogistics,
+    // DESCRIPTION ITEM 3 - STEP 2E-2B
+    // Store the recalculated monthly salary plus logistics after statutory
+    // deductions have been applied.
+    monthly_salary_plus_logistics: recalculatedMonthlySalaryPlusLogistics,
 
-employee_pension: employeePension,
-employer_pension: employerPension,
-paye_tax: payeTax,
-wht_tax: 0,
+    employee_pension: employeePension,
+    employer_pension: employerPension,
+    paye_tax: payeTax,
+    wht_tax: 0,
 
-// DESCRIPTION ITEM 3 - STEP 2E-2B
-// NHF and future statutory deductions without their own payroll column
-// are saved under Other Deductions, same as manual payroll.
-other_deductions: otherDeductions,
+    // DESCRIPTION ITEM 3 - STEP 2E-2B
+    // NHF and future statutory deductions without their own payroll column
+    // are saved under Other Deductions, same as manual payroll.
+    other_deductions: otherDeductions,
 
     bht,
     gross_pay: grossPay,
@@ -7844,6 +10724,12 @@ other_deductions: otherDeductions,
     employee_custom_id: employeeCustomId,
     employee_name: employeeNameFromCsv,
   };
+
+  return applyActivePayrollEmployeeOverridesToBatchPreparedRow(
+    preparedRow,
+    activePayrollMaster.id,
+    getCurrentBatchPayrollCalculationDate(),
+  );
 }
 
 // BATCH PAYROLL CSV IMPORT - STEP 2
@@ -7915,11 +10801,25 @@ function renderImportedBatchPayrollCsvRows(preparedRows = [], skippedRows = []) 
           CSV Base: ${formatCurrency(preparedRow.base_salary, "NGN")}
         </div>
 <div class="text-secondary small">
-  <!-- DESCRIPTION ITEM 3 - STEP 2E-2B
-       Imported CSV rows are recalculated using active statutory deductions,
-       so this is now the prepared/system net pay, not the raw CSV net pay. -->
+  <!-- DESCRIPTION ITEM 4 - STEP 5 CSV FIX
+       CSV rows are recalculated using payroll setup, so HR can verify
+       gross pay, other deductions, total deductions, and net pay before submit. -->
+  Prepared Gross: ${formatCurrency(preparedRow.gross_pay, "NGN")}
+</div>
+<div class="text-secondary small">
+  Prepared Other Ded: ${formatCurrency(preparedRow.other_deductions, "NGN")}
+</div>
+<div class="text-secondary small">
+  Prepared Total Ded: ${formatCurrency(preparedRow.total_deductions, "NGN")}
+</div>
+<div class="text-secondary small">
   Prepared Net Pay: ${formatCurrency(preparedRow.net_pay, "NGN")}
 </div>
+${preparedRow.employee_override_applied
+        ? `<div class="text-primary small fw-semibold mt-1">
+      Employee override applied
+    </div>`
+        : ""}
       </td>
 
       <td>
@@ -8022,18 +10922,18 @@ async function handleBatchPayrollCsvImport() {
       .slice(headerRowIndex + 1)
       .filter((row) => row.some((cell) => String(cell || "").trim()));
 
-const preparedRows = [];
-const skippedRows = [];
+    const preparedRows = [];
+    const skippedRows = [];
 
-// DESCRIPTION ITEM 3 - STEP 2E-2B
-// CSV import must set the batch pay period/date before preparing rows.
-// Statutory deductions are effective-dated, so each imported row must be
-// calculated against the selected Batch Pay Date.
-populateBatchPayrollPayCycleOptions();
-updateBatchPayDateFromPayCycle();
+    // DESCRIPTION ITEM 3 - STEP 2E-2B
+    // CSV import must set the batch pay period/date before preparing rows.
+    // Statutory deductions are effective-dated, so each imported row must be
+    // calculated against the selected Batch Pay Date.
+    populateBatchPayrollPayCycleOptions();
+    updateBatchPayDateFromPayCycle();
 
-dataRows.forEach((row) => {
-  const preparedRow = buildBatchPayrollPreparedRowFromCsv(row, headerMap);
+    dataRows.forEach((row) => {
+      const preparedRow = buildBatchPayrollPreparedRowFromCsv(row, headerMap);
 
       if (preparedRow.skipped) {
         skippedRows.push(preparedRow);
@@ -8052,10 +10952,10 @@ dataRows.forEach((row) => {
     );
 
     renderImportedBatchPayrollCsvRows(preparedRows, skippedRows);
-// DESCRIPTION ITEM 3 - STEP 2E-2B
-// Batch Pay Period/Date was already rebuilt before CSV rows were prepared,
-// so do not rebuild it again here. Rebuilding after preparation can make
-// statutory effective-date calculations use a stale date.
+    // DESCRIPTION ITEM 3 - STEP 2E-2B
+    // Batch Pay Period/Date was already rebuilt before CSV rows were prepared,
+    // so do not rebuild it again here. Rebuilding after preparation can make
+    // statutory effective-date calculations use a stale date.
 
     // BATCH PAYROLL CSV IMPORT - STEP 5
     // CSV import is a batch flow, so hide the manual single payroll form
@@ -8185,11 +11085,15 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
       employee.work_email ||
       "Unknown Employee";
 
-    // BATCH PAYROLL DEFAULT - STEP 3B
-    // Each selected employee must show their own active Payroll Master record.
-    // This is still review-only; save/submission will come later.
+    // DESCRIPTION ITEM 4 - STEP 5 FIX
+    // Batch payroll must use the Payroll Master record that is active
+    // for the selected batch pay date, not just the latest active record.
+    // This keeps Run Payroll aligned with manual payroll behaviour.
     const activePayrollMaster =
-      getLatestActivePayrollMasterProfileForEmployee(employee.id);
+      getEffectivePayrollMasterRecordForEmployeeAtDate(
+        employee.id,
+        getCurrentBatchPayrollCalculationDate(),
+      );
 
     const salaryValue = Number(activePayrollMaster?.basic_salary || 0);
     const hasValidActiveMaster =
@@ -8261,9 +11165,24 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
               <div class="text-secondary small">
                 Est. PAYE: ${formatCurrency(preparedPayrollRow.paye_tax, "NGN")}
               </div>
+              <!-- DESCRIPTION ITEM 4 - STEP 5 FIX
+                   Show Other Deductions and Total Deductions in the batch
+                   preview so HR can verify union, cooperative, and salary
+                   advance deductions before submitting the batch. -->
+              <div class="text-secondary small">
+                Est. Other Ded: ${formatCurrency(preparedPayrollRow.other_deductions, "NGN")}
+              </div>
+              <div class="text-secondary small">
+                Est. Total Ded: ${formatCurrency(preparedPayrollRow.total_deductions, "NGN")}
+              </div>
               <div class="text-secondary small">
                 Est. Net: ${formatCurrency(preparedPayrollRow.net_pay, "NGN")}
-              </div>`
+              </div>
+              ${preparedPayrollRow.employee_override_applied
+          ? `<div class="text-primary small fw-semibold mt-1">
+                    Employee override applied
+                  </div>`
+          : ""}`
         : ""
       }
       </td>
@@ -10988,8 +13907,15 @@ function renderBatchPayrollSetupWarning(selectedEmployees = []) {
   if (!warning) return;
 
   const affectedEmployees = selectedEmployees.filter((employee) => {
+    // DESCRIPTION ITEM 4 - STEP 5 FIX
+    // Use the Payroll Master record effective for the selected batch pay date.
+    // This keeps the Run Payroll warning aligned with the actual batch preview
+    // and prevents false "ready/missing setup" behaviour.
     const activePayrollMaster =
-      getLatestActivePayrollMasterProfileForEmployee(employee.id);
+      getEffectivePayrollMasterRecordForEmployeeAtDate(
+        employee.id,
+        getCurrentBatchPayrollCalculationDate(),
+      );
 
     const salaryValue = Number(activePayrollMaster?.basic_salary || 0);
 
@@ -11182,6 +14108,211 @@ function calculateBatchStatutoryDeductionAmount(record = {}, context = {}) {
   return 0;
 }
 
+// DESCRIPTION ITEM 4 - STEP 5 FIX
+// Shared payroll date parser used by statutory deductions and Other Deductions.
+// It supports the normal HTML date format YYYY-MM-DD and also DD/MM/YYYY.
+// Keeping this helper here prevents payroll calculation from failing when
+// checking deduction effective dates and deduction duration windows.
+function parsePayrollEffectiveDateToTime(value = "") {
+  const rawValue = String(value || "").trim();
+
+  if (!rawValue) return NaN;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+    return new Date(`${rawValue}T00:00:00`).getTime();
+  }
+
+  const slashDateMatch = rawValue.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+  if (slashDateMatch) {
+    const [, day, month, year] = slashDateMatch;
+    return new Date(`${year}-${month}-${day}T00:00:00`).getTime();
+  }
+
+  return new Date(rawValue).getTime();
+}
+
+// DESCRIPTION ITEM 4 - STEP 5 FIX
+// Payroll Pay Date is the date used to decide whether a statutory or
+// other deduction setup is active for the manual payroll preview.
+function getCurrentPayrollCalculationDate() {
+  return String(state.dom.payrollPayDate?.value || "").trim() ||
+    new Date().toISOString().slice(0, 10);
+}
+
+// =========================================================
+// DESCRIPTION ITEM 4 - STEP 5
+// Other Deductions payroll calculation helpers.
+//
+// These helpers apply non-statutory deductions such as union dues,
+// cooperative deductions, salary advance repayments, and other approved
+// deductions during payroll calculation.
+//
+// Duration behaviour:
+// If a deduction starts in May with duration 2, it applies for May and June.
+// This follows monthly payroll-cycle behaviour rather than exact day counting.
+// =========================================================
+
+function getPayrollMonthIndexFromDateValue(dateValue = "") {
+  const time = parsePayrollEffectiveDateToTime(dateValue);
+
+  if (!Number.isFinite(time)) return null;
+
+  const date = new Date(time);
+
+  return (date.getFullYear() * 12) + date.getMonth();
+}
+
+function isPayrollOtherDeductionActiveForDate(record = {}, payrollDateValue = "") {
+  const status = normalizeText(record.status || "");
+  if (status !== "active") return false;
+
+  const deductionAmount = Number(record.deduction_amount || 0);
+  if (!Number.isFinite(deductionAmount) || deductionAmount <= 0) return false;
+
+  const durationMonths = Number(record.duration_months || 0);
+  if (!Number.isInteger(durationMonths) || durationMonths < 1) return false;
+
+  const payrollMonthIndex = getPayrollMonthIndexFromDateValue(payrollDateValue);
+  const startMonthIndex = getPayrollMonthIndexFromDateValue(record.start_date);
+
+  if (payrollMonthIndex === null || startMonthIndex === null) return false;
+
+  const monthsFromStart = payrollMonthIndex - startMonthIndex;
+
+  return monthsFromStart >= 0 && monthsFromStart < durationMonths;
+}
+
+function getActivePayrollOtherDeductionsForMaster(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  const masterId = String(payrollMasterRecordId || "").trim();
+
+  if (!masterId) return [];
+
+  return (state.payrollOtherDeductions || []).filter((record) => {
+    const isSamePayrollMaster =
+      String(record.payroll_master_record_id || "").trim() === masterId;
+
+    return (
+      isSamePayrollMaster &&
+      isPayrollOtherDeductionActiveForDate(record, payrollDateValue)
+    );
+  });
+}
+
+function calculateActivePayrollOtherDeductionTotalForMaster(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  return getActivePayrollOtherDeductionsForMaster(
+    payrollMasterRecordId,
+    payrollDateValue,
+  ).reduce((total, record) => {
+    const amount = Number(record.deduction_amount || 0);
+
+    return total + (Number.isFinite(amount) && amount > 0 ? amount : 0);
+  }, 0);
+}
+
+function getEffectivePayrollMasterRecordForEmployeeAtDate(
+  employeeId = "",
+  payrollDateValue = "",
+) {
+  const targetEmployeeId = String(employeeId || "").trim();
+  const payrollDateTime = parsePayrollEffectiveDateToTime(payrollDateValue);
+
+  if (!targetEmployeeId || !Number.isFinite(payrollDateTime)) {
+    return null;
+  }
+
+  const matchingRecords = (state.payrollMasterRecords || [])
+    .filter((record) => {
+      const recordEmployeeId = String(record.employee_id || "").trim();
+
+      const status = normalizeText(
+        record.status ||
+        record.salary_status ||
+        record.payroll_status ||
+        "active",
+      );
+
+      const effectiveDate =
+        record.salary_effective_date ||
+        record.effective_date ||
+        record.created_at;
+
+      const effectiveTime = parsePayrollEffectiveDateToTime(effectiveDate);
+
+      return (
+        recordEmployeeId === targetEmployeeId &&
+        status === "active" &&
+        Number.isFinite(effectiveTime) &&
+        effectiveTime <= payrollDateTime
+      );
+    })
+    .sort((a, b) => {
+      const aTime = parsePayrollEffectiveDateToTime(
+        a.salary_effective_date || a.effective_date || a.created_at,
+      );
+
+      const bTime = parsePayrollEffectiveDateToTime(
+        b.salary_effective_date || b.effective_date || b.created_at,
+      );
+
+      return (bTime || 0) - (aTime || 0);
+    });
+
+  return matchingRecords[0] || null;
+}
+
+function calculateActivePayrollOtherDeductionTotalForCurrentPayroll() {
+  const employeeId = String(state.dom.payrollEmployeeId?.value || "").trim();
+  const payrollDate = String(state.dom.payrollPayDate?.value || "").trim();
+
+  const activePayrollMaster = getEffectivePayrollMasterRecordForEmployeeAtDate(
+    employeeId,
+    payrollDate,
+  );
+
+  if (!activePayrollMaster?.id) return 0;
+
+  return calculateActivePayrollOtherDeductionTotalForMaster(
+    activePayrollMaster.id,
+    payrollDate,
+  );
+}
+
+function syncPayrollOtherDeductionsFieldFromSetup(systemAmount = 0) {
+  const field = state.dom.payrollOtherDeductions;
+  if (!field) return;
+
+  const amount = Number(systemAmount || 0);
+  const previousSystemAmount = Number(
+    field.dataset.systemOtherDeductionAmount || 0,
+  );
+
+  const currentAmount = Number(field.value || 0);
+  const userHasManualValue =
+    Number.isFinite(currentAmount) &&
+    currentAmount > 0 &&
+    Math.abs(currentAmount - previousSystemAmount) > 0.01;
+
+  if (Number.isFinite(amount) && amount > 0) {
+    setNumericFieldValue(field, amount);
+    field.dataset.systemOtherDeductionAmount = String(amount);
+    return;
+  }
+
+  // If the previous value came from setup and the setup no longer applies,
+  // clear it. If HR typed a manual value, leave it untouched.
+  if (previousSystemAmount > 0 && !userHasManualValue) {
+    setNumericFieldValue(field, 0);
+    field.dataset.systemOtherDeductionAmount = "0";
+  }
+}
+
 // DESCRIPTION ITEM 3 - STEP 2E-2A
 // Calculate statutory-controlled deduction totals for one prepared batch row.
 // If no active statutory deduction exists for the batch pay date, statutory
@@ -11224,7 +14355,23 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
   });
 
   const whtTax = 0;
-  const totalDeductions = payeTax + whtTax + employeePension + otherDeductions;
+
+  // DESCRIPTION ITEM 4 - STEP 5
+  // Add active non-statutory Other Deductions into the same batch deduction
+  // total used by Run Payroll and Batch Payroll CSV import.
+  // This keeps manual payroll, Run Payroll, and CSV import aligned.
+  const configuredOtherDeductions =
+    calculateActivePayrollOtherDeductionTotalForMaster(
+      context.payrollMasterRecordId,
+      context.payrollDate,
+    );
+
+  const combinedOtherDeductions =
+    otherDeductions + configuredOtherDeductions;
+
+  const totalDeductions =
+    payeTax + whtTax + employeePension + combinedOtherDeductions;
+
   const netPay = Number(context.grossPay || 0) - totalDeductions;
 
   return {
@@ -11232,7 +14379,7 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
     whtTax,
     employeePension,
     employerPension,
-    otherDeductions,
+    otherDeductions: combinedOtherDeductions,
     totalDeductions,
     netPay,
   };
@@ -11243,7 +14390,19 @@ function calculateBatchStatutoryDeductionTotals(context = {}) {
 // This route is used by Run Payroll selected employees, so it must also
 // pull active Allowance Components before final payroll records are created.
 function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
-  const baseSalary = Number(activePayrollMaster?.basic_salary || 0);
+  const resolvedBaseSalary = resolveBatchPayrollBaseSalaryWithEmployeeOverride(
+    activePayrollMaster?.id,
+    getCurrentBatchPayrollCalculationDate(),
+    Number(activePayrollMaster?.basic_salary || 0),
+  );
+
+  const baseSalary = resolvedBaseSalary.amount;
+
+  const employeeOverrideAuditSummary =
+    buildPayrollEmployeeOverrideAuditSummaryForMaster(
+      activePayrollMaster?.id,
+      getCurrentBatchPayrollCalculationDate(),
+    );
 
   if (
     !employee?.id ||
@@ -11322,12 +14481,14 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
   const totalDeductions = statutoryTotals.totalDeductions;
   const netPay = statutoryTotals.netPay;
 
-  return {
+  const preparedRow = {
     employee_id: employee.id,
     payroll_master_record_id: activePayrollMaster.id,
     pay_cycle: activePayrollMaster.pay_cycle || "",
     payroll_group: "REGULAR",
     payroll_model: "REGULAR",
+    employee_override_applied: resolvedBaseSalary.overrideApplied,
+    employee_override_audit_summary: employeeOverrideAuditSummary,
 
     base_salary: baseSalary,
     regular_increment_percent: 0,
@@ -11363,12 +14524,36 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
 
     currency: "NGN",
   };
+
+  return applyActivePayrollEmployeeOverridesToBatchPreparedRow(
+    preparedRow,
+    activePayrollMaster.id,
+    getCurrentBatchPayrollCalculationDate(),
+  );
+}
+
+// HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1A
+// Creates a readable payroll ID using the current date/time.
+// Example: PAY-20260507-142305
+// This is used as payroll_reference so HR can trace payroll records
+// without relying only on the database UUID.
+function buildDatestampedPayrollReference(prefix = "PAY") {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
+
+  return `${prefix}-${year}${month}${day}-${hours}${minutes}${seconds}`;
 }
 
 // BATCH PAYROLL DEFAULT - STEP 7
 // Converts one prepared batch preview row into a payroll_records payload.
 // This deliberately does not use the hidden individual payroll form fields.
-function buildBatchPayrollRecordPayload(preparedRow) {
+function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
   const payCycle = String(state.dom.batchPayrollPayCycle?.value || "").trim();
   const payDate = String(state.dom.batchPayrollPayDate?.value || "").trim();
 
@@ -11384,6 +14569,11 @@ function buildBatchPayrollRecordPayload(preparedRow) {
     employee_id: preparedRow.employee_id,
     pay_cycle: payCycle,
     pay_date: payDate || null,
+
+    // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1B
+    // Store one payroll ID/reference on each created payroll record.
+    // Batch submit will pass the same ID to every employee in the run.
+    payroll_reference: payrollReference || buildDatestampedPayrollReference("PAY"),
 
     employee_group: "REGULAR",
     payroll_model: "REGULAR",
@@ -11446,10 +14636,15 @@ function buildBatchPayrollRecordPayload(preparedRow) {
     status: "Authorised",
     is_finalised: true,
 
-    notes:
+    // DESCRIPTION ITEM 5 - STEP 5C
+    // Save the employee override audit summary on the final payroll snapshot.
+    // This makes the submitted Payroll Record traceable after batch submission.
+    notes: buildPayrollRecordNotesWithEmployeeOverrideAudit(
       preparedRow.source === "csv"
         ? "Created from Alpatech CSV batch payroll import."
         : "Created from batch payroll run.",
+      preparedRow.employee_override_audit_summary,
+    ),
 
     processed_by: state.currentUser?.id || null,
     approved_by: state.currentUser?.id || null,
@@ -13210,6 +16405,10 @@ function updateEmployeeBankDetailsSaveButtonState() {
 // Payroll Master Data button state.
 // Required fields match validatePayrollMasterForm().
 function updatePayrollMasterSaveButtonState() {
+  if (!canCurrentUserMaintainPayrollMasterData()) {
+    setPrimaryActionButtonReadyState(state.dom.savePayrollMasterBtn, false);
+    return;
+  }
   // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1J
   // Grade removed from Payroll Master readiness.
   // Payroll Master can save when employee, salary, effective date,
@@ -13221,7 +16420,10 @@ function updatePayrollMasterSaveButtonState() {
   const hasStatus = Boolean(String(state.dom.payrollMasterStatus?.value || "").trim());
 
   const salaryValue = Number(state.dom.payrollMasterBasicSalary?.value || 0);
-  const salaryIsValid = Number.isFinite(salaryValue) && salaryValue >= 0;
+  // DESCRIPTION ITEM 8 - STEP 8A
+  // Payroll Master salary setup must be a real positive salary value.
+  // Zero salary is not valid for an active monthly payroll master record.
+  const salaryIsValid = Number.isFinite(salaryValue) && salaryValue > 0;
 
   setPrimaryActionButtonReadyState(
     state.dom.savePayrollMasterBtn,
@@ -13245,7 +16447,10 @@ function updatePayrollAllowanceSaveButtonState() {
   const hasStatus = Boolean(String(state.dom.payrollAllowanceStatus?.value || "").trim());
 
   const amountValue = Number(state.dom.payrollAllowanceAmount?.value || 0);
-  const amountIsValid = Number.isFinite(amountValue) && amountValue >= 0;
+  // DESCRIPTION ITEM 8 - STEP 8B
+  // Allowance setup must be a positive amount.
+  // Zero allowance rows should not be saved as active payroll setup.
+  const amountIsValid = Number.isFinite(amountValue) && amountValue > 0;
 
   setPrimaryActionButtonReadyState(
     state.dom.savePayrollAllowanceBtn,
@@ -14629,6 +17834,81 @@ function renderPayrollRecordsLoadingState() {
   `;
 }
 
+function buildPayrollRecordSalarySnapshotCountByEmployee(records = []) {
+  const snapshotsByEmployee = new Map();
+
+  records.forEach((record) => {
+    const employeeId = String(record.employee_id || "").trim();
+    if (!employeeId) return;
+
+    const snapshotValue = Number(record.base_salary || record.gross_pay || 0);
+    const snapshotKey = Number.isFinite(snapshotValue)
+      ? snapshotValue.toFixed(2)
+      : "0.00";
+
+    if (!snapshotsByEmployee.has(employeeId)) {
+      snapshotsByEmployee.set(employeeId, new Set());
+    }
+
+    snapshotsByEmployee.get(employeeId).add(snapshotKey);
+  });
+
+  const counts = new Map();
+
+  snapshotsByEmployee.forEach((snapshots, employeeId) => {
+    counts.set(employeeId, snapshots.size);
+  });
+
+  return counts;
+}
+
+function buildPayrollRecordSourceDetailsHtml(
+  record = {},
+  employeeOverrideAuditSummary = "",
+) {
+  const currency = record.currency || "NGN";
+  const cleanOverrideAudit = String(employeeOverrideAuditSummary || "")
+    .replace("Employee override audit:", "")
+    .trim();
+
+  const sourceLabel = employeeOverrideAuditSummary
+    ? "Employee override + Payroll Master version"
+    : "Payroll Master version";
+
+  // DESCRIPTION ITEM 6 - STEP 6C
+  // Keep Payroll Records readable by hiding source/audit explanation
+  // behind a small expandable detail instead of adding more visible columns.
+  return `
+    <details class="small mt-1" style="max-width: 340px;">
+      <summary class="text-primary fw-semibold" style="cursor: pointer;">
+        Payroll source
+      </summary>
+
+      <div class="mt-1 text-secondary">
+        <div>
+          <span class="fw-semibold">Source:</span>
+          ${escapeHtml(sourceLabel)}
+        </div>
+        <div>
+          <span class="fw-semibold">Pay date basis:</span>
+          ${formatDate(record.pay_date)}
+        </div>
+        <div>
+          <span class="fw-semibold">Salary snapshot:</span>
+          ${formatCurrency(record.base_salary || record.gross_pay || 0, currency)}
+        </div>
+
+        ${cleanOverrideAudit
+      ? `<div class="mt-1 text-break">
+              <span class="fw-semibold">Override audit:</span>
+              ${escapeHtml(cleanOverrideAudit)}
+            </div>`
+      : ""}
+      </div>
+    </details>
+  `;
+}
+
 // MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A RECOVERY
 // Payroll Records must render payroll rows only.
 // This removes accidental Employee List checkbox/employee-variable code
@@ -14662,12 +17942,19 @@ function renderPayrollRecords(records) {
   // HR SAVE/EDIT BEHAVIOUR - PAYROLL RECORDS STEP 5
   // Render newly submitted/updated payroll records first.
   const recordsToRender = sortPayrollRecordsByLatestActivity(records);
+  const salarySnapshotCountByEmployee =
+    buildPayrollRecordSalarySnapshotCountByEmployee(recordsToRender);
 
   recordsToRender.forEach((record) => {
     const fullName =
       `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
       record.work_email ||
       "Unknown Employee";
+
+    // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1F RECOVERY
+    // Keep payroll reference in the same row-render scope where it is displayed.
+    // This prevents "payrollReference is not defined" when Payroll Records reload.
+    const payrollReference = String(record.payroll_reference || "").trim();
 
     // DESCRIPTION ITEM 4 - STEP 7
     // Prepare a safe payroll record id for inline table actions.
@@ -14676,6 +17963,15 @@ function renderPayrollRecords(records) {
     // DESCRIPTION ITEM 4 - STEP 7
     // Payslip preview should only be available for finalised payroll records.
     const canPreviewPayslip = Boolean(record.is_finalised);
+
+    const employeeOverrideAuditSummary =
+      getPayrollRecordEmployeeOverrideAuditSummary(record);
+
+    const employeeSalarySnapshotCount =
+      salarySnapshotCountByEmployee.get(String(record.employee_id || "").trim()) || 0;
+
+    const shouldShowPayrollSourceDetails =
+      Boolean(employeeOverrideAuditSummary) || employeeSalarySnapshotCount > 1;
 
     const row = document.createElement("tr");
 
@@ -14687,6 +17983,9 @@ function renderPayrollRecords(records) {
         <div class="fw-semibold">${escapeHtml(fullName)}</div>
         <div class="text-secondary small text-break">
           ${escapeHtml(record.work_email || "--")}
+        </div>
+        <div class="text-secondary small text-break">
+          Payroll ID: ${escapeHtml(payrollReference || "--")}
         </div>
         <div class="text-secondary small">
           ${escapeHtml(record.department || "--")} • ${escapeHtml(record.job_title || "--")}
@@ -14733,6 +18032,24 @@ function renderPayrollRecords(records) {
           <span class="text-secondary">Net:</span>
           <span class="fw-semibold">${formatCurrency(record.net_pay, record.currency || "NGN")}</span>
         </div>
+
+        ${shouldShowPayrollSourceDetails
+        ? `<div class="mt-1">
+              ${employeeOverrideAuditSummary
+          ? `<span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                    <i class="bi bi-shield-check me-1"></i>Override
+                  </span>`
+          : `<span class="badge bg-light text-secondary border">
+                    Versioned salary
+                  </span>`}
+
+              ${buildPayrollRecordSourceDetailsHtml(
+            record,
+            employeeOverrideAuditSummary,
+          )}
+            </div>`
+        : ""}
+
       </td>
 
       <td>
@@ -14926,25 +18243,10 @@ function populatePayrollFormFromEmployeeMaster(employeeId) {
   const employeeKey = String(employeeId || "").trim();
   if (!employeeKey) return;
 
-  const latestPayrollProfile = getLatestPayrollMasterProfileForEmployee(employeeKey);
-  if (!latestPayrollProfile) return;
-
-  if (state.dom.payrollBaseSalary) {
-    state.dom.payrollBaseSalary.value = latestPayrollProfile.basic_salary ?? "";
-  }
-
-  if (state.dom.payrollEmployeeGroup) {
-    state.dom.payrollEmployeeGroup.value = "REGULAR";
-  }
-
-  if (state.dom.payrollModel) {
-    state.dom.payrollModel.value = "REGULAR";
-  }
-
-  // SUBMIT PAYROLL - DESCRIPTION ITEM 2 - STEP 4 FIX
-  // Payroll master pay_cycle is pay frequency, e.g. Monthly.
-  // Submit Payroll pay_cycle is the payroll period, e.g. Jan 2026.
-  // Therefore, default the payroll period to the current month if HR has not selected one.
+  // DESCRIPTION ITEM 6 - STEP 6B
+  // Manual payroll must resolve Payroll Master by Pay Date.
+  // If HR has not selected a pay period yet, default it first so the
+  // correct month-end Pay Date is available before salary lookup.
   if (state.dom.payrollPayCycle && !state.dom.payrollPayCycle.value) {
     const monthLabels = [
       "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -14964,8 +18266,27 @@ function populatePayrollFormFromEmployeeMaster(employeeId) {
     }
   }
 
+  const payrollDate = getCurrentPayrollCalculationDate();
+
+  const effectivePayrollProfile =
+    getEffectivePayrollMasterRecordForEmployeeAtDate(employeeKey, payrollDate);
+
+  if (state.dom.payrollBaseSalary) {
+    state.dom.payrollBaseSalary.value =
+      effectivePayrollProfile?.basic_salary ?? "";
+  }
+
+  if (state.dom.payrollEmployeeGroup) {
+    state.dom.payrollEmployeeGroup.value = "REGULAR";
+  }
+
+  if (state.dom.payrollModel) {
+    state.dom.payrollModel.value = "REGULAR";
+  }
+
   updatePayrollModelUi("group");
   recalculatePayrollFormTotals();
+  updatePayrollSubmitButtonState();
 }
 
 // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 5
@@ -15995,12 +19316,17 @@ function getActiveStatutoryDeductionsForCurrentPayroll() {
 
   if (!employeeId) return [];
 
+  const payrollDateValue = getCurrentPayrollCalculationDate();
+
+  // DESCRIPTION ITEM 6 - STEP 6B
+  // Statutory deductions must follow the Payroll Master version that is
+  // effective for the selected manual payroll pay date.
   const activePayrollMaster =
-    getLatestActivePayrollMasterProfileForEmployee(employeeId);
+    getEffectivePayrollMasterRecordForEmployeeAtDate(employeeId, payrollDateValue);
 
   if (!activePayrollMaster?.id) return [];
 
-  const payrollDate = new Date(getCurrentPayrollCalculationDate()).getTime();
+  const payrollDate = parsePayrollEffectiveDateToTime(payrollDateValue);
 
   const validRows = (state.payrollStatutoryDeductions || []).filter((record) => {
     const isSameMaster =
@@ -16092,231 +19418,464 @@ function calculateStatutoryDeductionAmount(record = {}) {
   return 0;
 }
 
-// DESCRIPTION ITEM 3 - STEP 2E-1
-// Apply active statutory deductions to the visible Payroll Record form.
-// This connects saved statutory setup into payroll preview and therefore into
-// the eventual Payroll Record payload because payroll save uses these fields.
-function applyActivePayrollStatutoryDeductionsToPayrollForm() {
-  const activeDeductions = getActiveStatutoryDeductionsForCurrentPayroll();
-
-  if (!activeDeductions.length) {
-    return;
-  }
-
-  let otherStatutoryDeductions = 0;
-
-  activeDeductions.forEach((record) => {
-    const type = String(record.deduction_type || "").trim();
-    const amount = calculateStatutoryDeductionAmount(record);
-
-    if (!Number.isFinite(amount) || amount < 0) {
-      return;
-    }
-
-    if (type === "PAYE") {
-      setNumericFieldValue(state.dom.payrollPayeTax, amount);
-      return;
-    }
-
-    if (type === "EMPLOYEE_PENSION") {
-      setNumericFieldValue(state.dom.payrollEmployeePension, amount);
-      return;
-    }
-
-    if (type === "EMPLOYER_PENSION") {
-      setNumericFieldValue(state.dom.payrollEmployerPension, amount);
-      return;
-    }
-
-    // NHF and any future statutory deduction without its own visible field
-    // are grouped under Other Deductions for this payroll record.
-    otherStatutoryDeductions += amount;
-  });
-
-  if (otherStatutoryDeductions > 0) {
-    setNumericFieldValue(
-      state.dom.payrollOtherDeductions,
-      otherStatutoryDeductions,
-    );
-  }
-}
-
-// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-// Parse payroll dates safely for statutory deduction effective-date checks.
-// HTML date inputs normally return YYYY-MM-DD, but this also tolerates DD/MM/YYYY.
-function parsePayrollEffectiveDateToTime(value = "") {
-  const rawValue = String(value || "").trim();
-
-  if (!rawValue) return NaN;
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
-    return new Date(`${rawValue}T00:00:00`).getTime();
-  }
-
-  const slashDateMatch = rawValue.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-
-  if (slashDateMatch) {
-    const [, day, month, year] = slashDateMatch;
-    return new Date(`${year}-${month}-${day}T00:00:00`).getTime();
-  }
-
-  return new Date(rawValue).getTime();
-}
-
-// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-// Use Payroll Pay Date to decide which statutory deduction setup is active.
-// This makes statutory deductions effective-dated instead of permanently applied.
-function getCurrentPayrollCalculationDate() {
-  return String(state.dom.payrollPayDate?.value || "").trim() ||
-    new Date().toISOString().slice(0, 10);
-}
-
-// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-// Return the latest active statutory deduction per deduction type for the
-// selected employee's active Payroll Master Record.
-// A statutory record only applies when effective_date <= Payroll Pay Date.
-function getActiveStatutoryDeductionsForCurrentPayroll() {
-  const employeeId = String(state.dom.payrollEmployeeId?.value || "").trim();
-
-  if (!employeeId) return [];
-
-  const activePayrollMaster =
-    getLatestActivePayrollMasterProfileForEmployee(employeeId);
-
-  if (!activePayrollMaster?.id) return [];
-
-  const payrollDateTime = parsePayrollEffectiveDateToTime(
-    getCurrentPayrollCalculationDate(),
-  );
-
-  if (!Number.isFinite(payrollDateTime)) return [];
-
-  const validRows = (state.payrollStatutoryDeductions || []).filter((record) => {
-    const isSamePayrollMaster =
-      String(record.payroll_master_record_id || "").trim() ===
-      String(activePayrollMaster.id || "").trim();
-
-    const isActive = normalizeText(record.status) === "active";
-    const effectiveDateTime = parsePayrollEffectiveDateToTime(record.effective_date);
-
-    return (
-      isSamePayrollMaster &&
-      isActive &&
-      Number.isFinite(effectiveDateTime) &&
-      effectiveDateTime <= payrollDateTime
-    );
-  });
-
-  const latestByType = new Map();
-
-  validRows.forEach((record) => {
-    const type = String(record.deduction_type || "").trim();
-    if (!type) return;
-
-    const existing = latestByType.get(type);
-    const recordTime = parsePayrollEffectiveDateToTime(record.effective_date);
-    const existingTime = parsePayrollEffectiveDateToTime(existing?.effective_date);
-
-    if (!existing || recordTime >= existingTime) {
-      latestByType.set(type, record);
-    }
-  });
-
-  return Array.from(latestByType.values());
-}
-
-// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-// Choose the percentage base for statutory percentage deductions.
-function getStatutoryDeductionBaseAmount(deductionType = "") {
-  const type = String(deductionType || "").trim();
-
-  if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
-    return calculateRegularBht();
-  }
-
-  if (type === "NHF") {
-    return calculateRegularBasicPay();
-  }
-
-  return calculatePayrollGrossPay();
-}
-
-// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-// Convert one active statutory deduction setup row into a payroll amount.
-function calculateStatutoryDeductionAmount(record = {}) {
-  const type = String(record.deduction_type || "").trim();
-  const method = String(record.calculation_method || "").trim();
-  const configuredValue = Number(record.deduction_value || 0);
-
-  if (method === "AMOUNT") {
-    return Number.isFinite(configuredValue) ? configuredValue : 0;
-  }
-
-  if (method === "PERCENTAGE") {
-    const baseAmount = getStatutoryDeductionBaseAmount(type);
-
-    return Number.isFinite(configuredValue)
-      ? baseAmount * (configuredValue / 100)
-      : 0;
-  }
-
-  if (type === "PAYE") {
-    return calculateRegularPayeTax();
-  }
-
-  if (type === "EMPLOYEE_PENSION") {
-    return calculateRegularEmployeePension();
-  }
-
-  if (type === "EMPLOYER_PENSION") {
-    return calculateRegularEmployerPension();
-  }
-
-  if (type === "NHF") {
-    return calculateRegularBasicPay() * 0.025;
-  }
-
-  return 0;
-}
-
-// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-// Clear statutory-controlled preview values before applying the latest active setup.
-// This prevents old PAYE/Pension values from staying on the form when HR changes
-// Pay Date to a date before the statutory deduction effective date.
+// DESCRIPTION ITEM 4 - STEP 5 FIX
+// Clear statutory-controlled preview values before reapplying payroll setup.
+// This prevents old PAYE/Pension/NHF values from staying on the form when HR
+// changes employee, pay cycle, or pay date.
 function clearPayrollStatutoryDeductionPreviewValues() {
   setNumericFieldValue(state.dom.payrollPayeTax, 0);
   setNumericFieldValue(state.dom.payrollEmployeePension, 0);
   setNumericFieldValue(state.dom.payrollEmployerPension, 0);
-
-  const previousStatutoryOther = Number(
-    state.dom.payrollOtherDeductions?.dataset?.statutoryAppliedOtherDeductions || 0,
-  );
-
-  if (state.dom.payrollOtherDeductions && previousStatutoryOther > 0) {
-    const currentOtherDeductions = Number(state.dom.payrollOtherDeductions.value || 0);
-
-    setNumericFieldValue(
-      state.dom.payrollOtherDeductions,
-      Math.max(currentOtherDeductions - previousStatutoryOther, 0),
-    );
-  }
 
   if (state.dom.payrollOtherDeductions) {
     state.dom.payrollOtherDeductions.dataset.statutoryAppliedOtherDeductions = "0";
   }
 }
 
-// DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-// Apply active statutory deductions into the manual Payroll Record preview.
-// If no active statutory setup exists for the selected Pay Date, statutory
-// fields remain zero so expired/not-yet-effective deductions do not leak forward.
+// =========================================================
+// DESCRIPTION ITEM 5 - STEP 5A
+// Employee Payroll Override calculation helpers.
+// These apply active employee-specific exceptions to manual payroll preview.
+// This step only wires the manual Create Payroll Record form.
+// Run Payroll batch and CSV import will be checked/wired after this is confirmed.
+// =========================================================
+
+function isPayrollEmployeeOverrideActiveForDate(record = {}, payrollDateValue = "") {
+  const status = normalizeText(record.status || "");
+  if (status !== "active") return false;
+
+  const payrollDateTime = parsePayrollEffectiveDateToTime(payrollDateValue);
+  const effectiveDateTime = parsePayrollEffectiveDateToTime(record.effective_date);
+  const endDateTime = record.end_date
+    ? parsePayrollEffectiveDateToTime(record.end_date)
+    : null;
+
+  if (!Number.isFinite(payrollDateTime) || !Number.isFinite(effectiveDateTime)) {
+    return false;
+  }
+
+  if (payrollDateTime < effectiveDateTime) return false;
+  if (endDateTime !== null && Number.isFinite(endDateTime) && payrollDateTime > endDateTime) {
+    return false;
+  }
+
+  return true;
+}
+
+function getActivePayrollEmployeeOverridesForMaster(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  const masterId = String(payrollMasterRecordId || "").trim();
+
+  if (!masterId) return [];
+
+  return (state.payrollEmployeeOverrides || [])
+    .filter((record) => {
+      return (
+        String(record.payroll_master_record_id || "").trim() === masterId &&
+        isPayrollEmployeeOverrideActiveForDate(record, payrollDateValue)
+      );
+    })
+    .sort((a, b) => {
+      const aEffective = parsePayrollEffectiveDateToTime(a.effective_date) || 0;
+      const bEffective = parsePayrollEffectiveDateToTime(b.effective_date) || 0;
+
+      if (bEffective !== aEffective) return bEffective - aEffective;
+
+      const aUpdated = new Date(a.updated_at || a.created_at || 0).getTime() || 0;
+      const bUpdated = new Date(b.updated_at || b.created_at || 0).getTime() || 0;
+
+      return bUpdated - aUpdated;
+    });
+}
+
+function calculatePayrollEmployeeOverrideValue(record = {}, currentAmount = 0) {
+  const method = String(record.override_method || "").trim();
+  const value = Number(record.override_value || 0);
+  const current = Number(currentAmount || 0);
+
+  if (method === "EXEMPTION") {
+    return 0;
+  }
+
+  if (method === "FIXED_AMOUNT") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (method === "PERCENTAGE") {
+    if (!Number.isFinite(value) || !Number.isFinite(current)) return null;
+    return current * (value / 100);
+  }
+
+  // Rule replacement is stored for traceability in this step.
+  // It needs a defined calculation rule before it can safely change payroll values.
+  return null;
+}
+
+function resolveBatchPayrollBaseSalaryWithEmployeeOverride(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+  standardBaseSalary = 0,
+) {
+  const standardAmount = Number(standardBaseSalary || 0);
+
+  const result = {
+    amount: Number.isFinite(standardAmount) ? standardAmount : 0,
+    overrideApplied: false,
+  };
+
+  const baseSalaryOverride = getActivePayrollEmployeeOverridesForMaster(
+    payrollMasterRecordId,
+    payrollDateValue,
+  ).find((record) => String(record.override_element || "").trim() === "BASIC_SALARY");
+
+  if (!baseSalaryOverride) return result;
+
+  const overrideAmount = calculatePayrollEmployeeOverrideValue(
+    baseSalaryOverride,
+    result.amount,
+  );
+
+  if (overrideAmount === null || !Number.isFinite(overrideAmount) || overrideAmount < 0) {
+    return result;
+  }
+
+  // DESCRIPTION ITEM 5 - STEP 5B
+  // Batch payroll must apply the same Basic Salary override as manual payroll
+  // before the fixed payroll structure split is calculated.
+  return {
+    amount: overrideAmount,
+    overrideApplied: true,
+  };
+}
+
+function recalculateBatchPayrollPreparedRowTotals(preparedRow = {}) {
+  const grossPay =
+    Number(preparedRow.basic_pay || 0) +
+    Number(preparedRow.housing_allowance || 0) +
+    Number(preparedRow.transport_allowance || 0) +
+    Number(preparedRow.utility_allowance || 0) +
+    Number(preparedRow.medical_allowance || 0) +
+    Number(preparedRow.other_allowance || 0) +
+    Number(preparedRow.bonus || 0) +
+    Number(preparedRow.overtime || 0) +
+    Number(preparedRow.logistics_allowance || 0) +
+    Number(preparedRow.data_airtime_allowance || 0);
+
+  const totalDeductions =
+    Number(preparedRow.paye_tax || 0) +
+    Number(preparedRow.wht_tax || 0) +
+    Number(preparedRow.employee_pension || 0) +
+    Number(preparedRow.other_deductions || 0);
+
+  preparedRow.bht =
+    Number(preparedRow.basic_pay || 0) +
+    Number(preparedRow.housing_allowance || 0) +
+    Number(preparedRow.transport_allowance || 0);
+
+  preparedRow.gross_pay = grossPay;
+  preparedRow.total_deductions = totalDeductions;
+  preparedRow.net_pay = grossPay - totalDeductions;
+
+  preparedRow.monthly_salary_plus_logistics =
+    Number(preparedRow.logistics_allowance || 0) > 0
+      ? Math.max(
+        preparedRow.net_pay - Number(preparedRow.data_airtime_allowance || 0),
+        0,
+      )
+      : preparedRow.monthly_salary_plus_logistics ?? null;
+
+  return preparedRow;
+}
+
+function applyActivePayrollEmployeeOverridesToBatchPreparedRow(
+  preparedRow = {},
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  const activeOverrides = getActivePayrollEmployeeOverridesForMaster(
+    payrollMasterRecordId,
+    payrollDateValue,
+  );
+
+  if (!activeOverrides.length) {
+    return preparedRow;
+  }
+
+  activeOverrides.forEach((record) => {
+    const element = String(record.override_element || "").trim();
+
+    // DESCRIPTION ITEM 5 - STEP 5B
+    // Basic Salary is handled before the batch salary split is calculated.
+    // The remaining overrides are applied to the prepared row before submit.
+    if (element === "BASIC_SALARY") return;
+
+    const fieldMap = {
+      HOUSING_ALLOWANCE: "housing_allowance",
+      TRANSPORT_ALLOWANCE: "transport_allowance",
+      UTILITY_ALLOWANCE: "utility_allowance",
+      MEDICAL_ALLOWANCE: "medical_allowance",
+      OTHER_ALLOWANCE: "other_allowance",
+      BONUS: "bonus",
+      OVERTIME: "overtime",
+
+      PAYE: "paye_tax",
+      WHT: "wht_tax",
+      EMPLOYEE_PENSION: "employee_pension",
+      EMPLOYER_PENSION: "employer_pension",
+
+      NHF: "other_deductions",
+      UNION_DUES: "other_deductions",
+      COOPERATIVE: "other_deductions",
+      SALARY_ADVANCE: "other_deductions",
+      OTHER: "other_deductions",
+    };
+
+    const fieldName = fieldMap[element];
+    if (!fieldName) return;
+
+    const overrideAmount = calculatePayrollEmployeeOverrideValue(
+      record,
+      Number(preparedRow[fieldName] || 0),
+    );
+
+    if (overrideAmount === null || !Number.isFinite(overrideAmount) || overrideAmount < 0) {
+      return;
+    }
+
+    preparedRow[fieldName] = overrideAmount;
+    preparedRow.employee_override_applied = true;
+  });
+
+  return recalculateBatchPayrollPreparedRowTotals(preparedRow);
+}
+
+function isPayrollEmployeeOverrideAuditable(record = {}) {
+  const method = String(record.override_method || "").trim();
+
+  const supportedElements = new Set([
+    "BASIC_SALARY",
+    "HOUSING_ALLOWANCE",
+    "TRANSPORT_ALLOWANCE",
+    "UTILITY_ALLOWANCE",
+    "MEDICAL_ALLOWANCE",
+    "OTHER_ALLOWANCE",
+    "BONUS",
+    "OVERTIME",
+    "PAYE",
+    "WHT",
+    "EMPLOYEE_PENSION",
+    "EMPLOYER_PENSION",
+    "NHF",
+    "UNION_DUES",
+    "COOPERATIVE",
+    "SALARY_ADVANCE",
+    "OTHER",
+  ]);
+
+  // DESCRIPTION ITEM 5 - STEP 5C
+  // Only show overrides that can actually affect payroll values.
+  // Rule Replacement is stored for traceability but is not yet calculated.
+  return (
+    supportedElements.has(String(record.override_element || "").trim()) &&
+    ["FIXED_AMOUNT", "PERCENTAGE", "EXEMPTION"].includes(method)
+  );
+}
+
+function buildPayrollEmployeeOverrideAuditSummaryForMaster(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  const auditLines = getActivePayrollEmployeeOverridesForMaster(
+    payrollMasterRecordId,
+    payrollDateValue,
+  )
+    .filter(isPayrollEmployeeOverrideAuditable)
+    .map((record) => {
+      const originalValue =
+        record.original_value_snapshot === null ||
+          record.original_value_snapshot === undefined
+          ? "--"
+          : String(record.original_value_snapshot);
+
+      const approvalReference = String(record.approval_reference || "").trim();
+
+      return [
+        `${formatPayrollEmployeeOverrideElement(record.override_element)}`,
+        `${formatPayrollEmployeeOverrideMethod(record.override_method)}`,
+        `Override ${formatPayrollEmployeeOverrideValue(record)}`,
+        `Original ${originalValue}`,
+        `Effective ${formatDate(record.effective_date)}`,
+        record.end_date ? `Ends ${formatDate(record.end_date)}` : "Open ended",
+        approvalReference ? `Approval ${approvalReference}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+    });
+
+  if (!auditLines.length) return "";
+
+  // DESCRIPTION ITEM 5 - STEP 5C
+  // Store a compact audit line on the final payroll record snapshot so HR
+  // can see which approved employee override affected the submitted payroll.
+  return `Employee override audit: ${auditLines.join(" || ")}`;
+}
+
+function getManualPayrollEmployeeOverrideAuditSummary() {
+  const payrollDate = String(state.dom.payrollPayDate?.value || "").trim();
+  const activePayrollMaster = getCurrentManualPayrollMasterForOverride();
+
+  if (!activePayrollMaster?.id || !payrollDate) return "";
+
+  return buildPayrollEmployeeOverrideAuditSummaryForMaster(
+    activePayrollMaster.id,
+    payrollDate,
+  );
+}
+
+function stripPayrollEmployeeOverrideAuditFromNotes(notes = "") {
+  return String(notes || "")
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !String(line || "")
+          .trim()
+          .startsWith("Employee override audit:"),
+    )
+    .join("\n")
+    .trim();
+}
+
+function buildPayrollRecordNotesWithEmployeeOverrideAudit(
+  baseNotes = "",
+  overrideAuditSummary = "",
+) {
+  const cleanBaseNotes = stripPayrollEmployeeOverrideAuditFromNotes(baseNotes);
+  const cleanAuditSummary = String(overrideAuditSummary || "").trim();
+
+  return [cleanBaseNotes, cleanAuditSummary].filter(Boolean).join("\n") || null;
+}
+
+function getPayrollRecordEmployeeOverrideAuditSummary(record = {}) {
+  return String(record.notes || "")
+    .split(/\r?\n/)
+    .find((line) =>
+      String(line || "").trim().startsWith("Employee override audit:"),
+    ) || "";
+}
+
+function getCurrentManualPayrollMasterForOverride() {
+  const employeeId = String(state.dom.payrollEmployeeId?.value || "").trim();
+  const payrollDate = String(state.dom.payrollPayDate?.value || "").trim();
+
+  if (!employeeId || !payrollDate) return null;
+
+  return getEffectivePayrollMasterRecordForEmployeeAtDate(employeeId, payrollDate);
+}
+
+function applyActivePayrollEmployeeBaseSalaryOverrideToPayrollForm() {
+  const payrollDate = String(state.dom.payrollPayDate?.value || "").trim();
+  const activePayrollMaster = getCurrentManualPayrollMasterForOverride();
+
+  if (!activePayrollMaster?.id) return;
+
+  const standardBaseSalary = Number(activePayrollMaster.basic_salary || 0);
+
+  if (Number.isFinite(standardBaseSalary) && standardBaseSalary > 0) {
+    setNumericFieldValue(state.dom.payrollBaseSalary, standardBaseSalary);
+  }
+
+  const baseSalaryOverride = getActivePayrollEmployeeOverridesForMaster(
+    activePayrollMaster.id,
+    payrollDate,
+  ).find((record) => String(record.override_element || "").trim() === "BASIC_SALARY");
+
+  if (!baseSalaryOverride) return;
+
+  const overrideAmount = calculatePayrollEmployeeOverrideValue(
+    baseSalaryOverride,
+    standardBaseSalary,
+  );
+
+  if (overrideAmount === null || !Number.isFinite(overrideAmount) || overrideAmount < 0) {
+    return;
+  }
+
+  // DESCRIPTION ITEM 5 - STEP 5A
+  // A Basic Salary override replaces the source Monthly Gross Salary
+  // before the structured payroll split is recalculated.
+  setNumericFieldValue(state.dom.payrollBaseSalary, overrideAmount);
+}
+
+function applyPayrollEmployeeOverrideToField(record = {}, field) {
+  if (!field) return;
+
+  const currentAmount = Number(field.value || 0);
+  const overrideAmount = calculatePayrollEmployeeOverrideValue(record, currentAmount);
+
+  if (overrideAmount === null || !Number.isFinite(overrideAmount) || overrideAmount < 0) {
+    return;
+  }
+
+  setNumericFieldValue(field, overrideAmount);
+}
+
+function applyActivePayrollEmployeeOverridesToPayrollForm() {
+  const payrollDate = String(state.dom.payrollPayDate?.value || "").trim();
+  const activePayrollMaster = getCurrentManualPayrollMasterForOverride();
+
+  if (!activePayrollMaster?.id || !payrollDate) return;
+
+  const activeOverrides = getActivePayrollEmployeeOverridesForMaster(
+    activePayrollMaster.id,
+    payrollDate,
+  );
+
+  if (!activeOverrides.length) return;
+
+  activeOverrides.forEach((record) => {
+    const element = String(record.override_element || "").trim();
+
+    // Basic Salary is handled before the payroll structure is recalculated.
+    if (element === "BASIC_SALARY") return;
+
+    const fieldMap = {
+      HOUSING_ALLOWANCE: state.dom.payrollHousingAllowance,
+      TRANSPORT_ALLOWANCE: state.dom.payrollTransportAllowance,
+      UTILITY_ALLOWANCE: state.dom.payrollUtilityAllowance,
+      MEDICAL_ALLOWANCE: state.dom.payrollMedicalAllowance,
+      OTHER_ALLOWANCE: state.dom.payrollOtherAllowance,
+      BONUS: state.dom.payrollBonus,
+      OVERTIME: state.dom.payrollOvertime,
+
+      PAYE: state.dom.payrollPayeTax,
+      WHT: state.dom.payrollWhtTax,
+      EMPLOYEE_PENSION: state.dom.payrollEmployeePension,
+      EMPLOYER_PENSION: state.dom.payrollEmployerPension,
+
+      // Aggregated deduction bucket for elements that do not have their own
+      // visible field on the manual payroll form.
+      NHF: state.dom.payrollOtherDeductions,
+      UNION_DUES: state.dom.payrollOtherDeductions,
+      COOPERATIVE: state.dom.payrollOtherDeductions,
+      SALARY_ADVANCE: state.dom.payrollOtherDeductions,
+      OTHER: state.dom.payrollOtherDeductions,
+    };
+
+    applyPayrollEmployeeOverrideToField(record, fieldMap[element]);
+  });
+}
+
+// DESCRIPTION ITEM 4 - STEP 5 FIX
+// Apply both statutory deductions and configured Other Deductions
+// into the manual Payroll Record preview.
+// Other Deductions must still apply even when no statutory deduction
+// setup exists for the selected employee/pay date.
 function applyActivePayrollStatutoryDeductionsToPayrollForm() {
   clearPayrollStatutoryDeductionPreviewValues();
 
   const activeDeductions = getActiveStatutoryDeductionsForCurrentPayroll();
-
-  if (!activeDeductions.length) return;
-
   let otherStatutoryDeductions = 0;
 
   activeDeductions.forEach((record) => {
@@ -16340,19 +19899,24 @@ function applyActivePayrollStatutoryDeductionsToPayrollForm() {
       return;
     }
 
-    // NHF and future statutory deductions without a dedicated visible field
-    // are grouped under Other Deductions for the payroll record.
+    // DESCRIPTION ITEM 4 - STEP 5 FIX
+    // Statutory deductions without a dedicated visible field, such as NHF,
+    // are grouped into the visible Other Deductions field.
     otherStatutoryDeductions += amount;
   });
 
-  if (state.dom.payrollOtherDeductions && otherStatutoryDeductions > 0) {
-    const currentOtherDeductions = Number(state.dom.payrollOtherDeductions.value || 0);
+  // DESCRIPTION ITEM 4 - STEP 5 FIX
+  // Add configured non-statutory Other Deductions such as union dues,
+  // cooperative deductions, and salary advance repayments.
+  const configuredOtherDeductions =
+    calculateActivePayrollOtherDeductionTotalForCurrentPayroll();
 
-    setNumericFieldValue(
-      state.dom.payrollOtherDeductions,
-      currentOtherDeductions + otherStatutoryDeductions,
-    );
+  const totalOtherDeductions =
+    otherStatutoryDeductions + configuredOtherDeductions;
 
+  syncPayrollOtherDeductionsFieldFromSetup(totalOtherDeductions);
+
+  if (state.dom.payrollOtherDeductions) {
     state.dom.payrollOtherDeductions.dataset.statutoryAppliedOtherDeductions =
       String(otherStatutoryDeductions);
   }
@@ -16771,6 +20335,12 @@ function recalculatePayrollFormTotals() {
   // Lock calculated fields before refreshing values.
   syncPayrollCalculatedFieldLockState();
 
+  // DESCRIPTION ITEM 5 - STEP 5A
+  // Apply Basic Salary override before structured Regular payroll fields
+  // are recalculated. This lets the salary split use the employee-specific
+  // override instead of the standard Payroll Master salary.
+  applyActivePayrollEmployeeBaseSalaryOverrideToPayrollForm();
+
   if (isAlpatechRegularSelected()) {
     applyAlpatechRegularRev2DerivedFields();
   }
@@ -16778,8 +20348,12 @@ function recalculatePayrollFormTotals() {
   // DESCRIPTION ITEM 3 - STEP 2E-1 FIX
   // Regular payroll still derives earnings first, but statutory deductions
   // now come from active statutory setup by Pay Date.
-  // This clears PAYE/Pension when no effective statutory setup applies.
   applyActivePayrollStatutoryDeductionsToPayrollForm();
+
+  // DESCRIPTION ITEM 5 - STEP 5A
+  // Apply employee-specific overrides after standard earnings/deductions
+  // have been calculated, so the override is the final manual payroll value.
+  applyActivePayrollEmployeeOverridesToPayrollForm();
 
   const grossPay = calculatePayrollGrossPay();
   const totalDeductions = calculatePayrollTotalDeductions();
@@ -17154,6 +20728,16 @@ function buildPayrollPayload() {
         ? "CONTRACT"
         : null);
 
+  const employeeOverrideAuditSummary =
+    getManualPayrollEmployeeOverrideAuditSummary();
+  // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1D
+  // Manual payroll also needs a payroll ID.
+  // Preserve an existing reference during edit; otherwise generate a new one.
+  const manualPayrollReference =
+    String(state.dom.payrollReference?.value || "").trim() ||
+    String(state.currentEditingPayroll?.payroll_reference || "").trim() ||
+    buildDatestampedPayrollReference("PAY");
+
   const payrollModelFields =
     resolvedPayrollModel === "REGULAR"
       ? buildRegularPayrollModelFields()
@@ -17195,8 +20779,9 @@ function buildPayrollPayload() {
     // Keep "Authorised" because this is the current valid status used by the app,
     // while final completion is represented by is_finalised = true below.
     status: "Authorised",
-    payroll_reference:
-      String(state.dom.payrollReference?.value || "").trim() || null,
+    // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1E
+    // Save the generated or preserved payroll ID on the payroll record.
+    payroll_reference: manualPayrollReference,
 
     base_salary: toNullableNumber(state.dom.payrollBaseSalary?.value),
     basic_pay: toNullableNumber(state.dom.payrollBasicPay?.value),
@@ -17229,7 +20814,13 @@ function buildPayrollPayload() {
     // This allows payroll to be prepared as non-finalised when bank details
     // are not ready, while finalisation remains protected.
     is_finalised: Boolean(state.dom.payrollIsFinalised?.checked),
-    notes: String(state.dom.payrollNotes?.value || "").trim() || null,
+    // DESCRIPTION ITEM 5 - STEP 5C
+    // Keep manual payroll notes, but append a final override audit snapshot
+    // when an active employee-specific override affected this payroll record.
+    notes: buildPayrollRecordNotesWithEmployeeOverrideAudit(
+      String(state.dom.payrollNotes?.value || "").trim(),
+      employeeOverrideAuditSummary,
+    ),
     processed_by: state.currentUser?.id || null,
     approved_by: Boolean(state.dom.payrollIsFinalised?.checked)
       ? state.currentUser?.id || null
@@ -17398,8 +20989,13 @@ async function handleBatchPayrollSubmit() {
   try {
     setBatchPayrollSubmitLoading(true);
 
+    // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1C
+    // Generate one payroll run ID for this batch so all employee payroll
+    // records created together can be traced as one payroll run.
+    const payrollBatchReference = buildDatestampedPayrollReference("PAY");
+
     const batchPayload = preparedRows.map((preparedRow) =>
-      buildBatchPayrollRecordPayload(preparedRow),
+      buildBatchPayrollRecordPayload(preparedRow, payrollBatchReference),
     );
 
     const supabase = getSupabaseClient();
