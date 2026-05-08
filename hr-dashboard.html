@@ -1596,89 +1596,90 @@
           <!-- EMPLOYEE BANK DETAILS - STEP 2
          Keep this collapsed by default so Payroll workspace remains tidy. -->
           <div id="employeeBankDetailsCardCollapse" class="d-none mt-4">
-            <form id="employeeBankDetailsForm" class="dashboard-form" novalidate>
-              <input type="hidden" id="editingEmployeeBankDetailsId" />
+            <input type="hidden" id="editingEmployeeBankDetailsId" />
 
-              <div class="row g-4">
-                <div class="col-md-6 col-xl-4">
-                  <label for="employeeBankEmployeeId" class="form-label fw-semibold">
-                    Employee <span class="text-danger">*</span>
-                  </label>
-                  <select id="employeeBankEmployeeId" class="form-select dashboard-input" required>
-                    <option value="">Select employee</option>
-                  </select>
-                  <div class="invalid-feedback">Please select an employee.</div>
-                </div>
-
-                <div class="col-md-6 col-xl-4">
-                  <label for="employeeBankBankId" class="form-label fw-semibold">
-                    Bank Name <span class="text-danger">*</span>
-                  </label>
-                  <select id="employeeBankBankId" class="form-select dashboard-input" required>
-                    <option value="">Select bank from Bank Directory</option>
-                  </select>
-                  <div class="invalid-feedback">Please select a bank.</div>
-                </div>
-
-                <div class="col-md-6 col-xl-4">
-                  <label for="employeeBankCode" class="form-label fw-semibold">
-                    Bank Code <span class="text-danger">*</span>
-                  </label>
-                  <input type="text" id="employeeBankCode" class="form-control dashboard-input"
-                    placeholder="Auto-filled from selected bank" readonly required />
-                  <div class="invalid-feedback">Bank code is required.</div>
-                </div>
-
-                <div class="col-md-6 col-xl-4">
-                  <label for="employeeBankAccountNumber" class="form-label fw-semibold">
-                    Account Number <span class="text-danger">*</span>
-                  </label>
-                  <input type="text" id="employeeBankAccountNumber" class="form-control dashboard-input"
-                    placeholder="Enter account number" inputmode="numeric" required />
-                  <div class="invalid-feedback">Account number is required.</div>
-                </div>
-
-                <div class="col-md-6 col-xl-4">
-                  <label for="employeeBankAccountName" class="form-label fw-semibold">
-                    Account Name <span class="text-danger">*</span>
-                  </label>
-                  <input type="text" id="employeeBankAccountName" class="form-control dashboard-input"
-                    placeholder="Enter account name" required />
-                  <div class="invalid-feedback">Account name is required.</div>
-                </div>
-
-                <div class="col-md-6 col-xl-4">
-                  <label for="employeeBankStatus" class="form-label fw-semibold">
-                    Status <span class="text-danger">*</span>
-                  </label>
-                  <select id="employeeBankStatus" class="form-select dashboard-input" required>
-                    <option value="Active" selected>Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                  <div class="invalid-feedback">Status is required.</div>
-                </div>
+            <!-- HRP-83 RECOVERY - STEP 1A
+                   Restore Employee Bank Details to its correct employee-bank form.
+                   The Create Payroll select-all checkbox must not live inside this card. -->
+            <div class="row g-4">
+              <div class="col-md-6 col-xl-4">
+                <label for="employeeBankEmployeeId" class="form-label fw-semibold">
+                  Employee <span class="text-danger">*</span>
+                </label>
+                <select id="employeeBankEmployeeId" class="form-select dashboard-input" required>
+                  <option value="">Select employee</option>
+                </select>
+                <div class="invalid-feedback">Please select an employee.</div>
+              </div>
+              <div class="col-md-6 col-xl-4">
+                <label for="employeeBankBankId" class="form-label fw-semibold">
+                  Bank Name <span class="text-danger">*</span>
+                </label>
+                <select id="employeeBankBankId" class="form-select dashboard-input" required>
+                  <option value="">Select bank from Bank Directory</option>
+                </select>
+                <div class="invalid-feedback">Please select a bank.</div>
               </div>
 
-              <div class="d-flex flex-wrap gap-2 justify-content-end mt-4">
-                <!-- EMPLOYEE BANK DETAILS - STEP 2
+              <div class="col-md-6 col-xl-4">
+                <label for="employeeBankCode" class="form-label fw-semibold">
+                  Bank Code <span class="text-danger">*</span>
+                </label>
+                <input type="text" id="employeeBankCode" class="form-control dashboard-input"
+                  placeholder="Auto-filled from selected bank" readonly required />
+                <div class="invalid-feedback">Bank code is required.</div>
+              </div>
+
+              <div class="col-md-6 col-xl-4">
+                <label for="employeeBankAccountNumber" class="form-label fw-semibold">
+                  Account Number <span class="text-danger">*</span>
+                </label>
+                <input type="text" id="employeeBankAccountNumber" class="form-control dashboard-input"
+                  placeholder="Enter account number" inputmode="numeric" required />
+                <div class="invalid-feedback">Account number is required.</div>
+              </div>
+
+              <div class="col-md-6 col-xl-4">
+                <label for="employeeBankAccountName" class="form-label fw-semibold">
+                  Account Name <span class="text-danger">*</span>
+                </label>
+                <input type="text" id="employeeBankAccountName" class="form-control dashboard-input"
+                  placeholder="Enter account name" required />
+                <div class="invalid-feedback">Account name is required.</div>
+              </div>
+
+              <div class="col-md-6 col-xl-4">
+                <label for="employeeBankStatus" class="form-label fw-semibold">
+                  Status <span class="text-danger">*</span>
+                </label>
+                <select id="employeeBankStatus" class="form-select dashboard-input" required>
+                  <option value="Active" selected>Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                <div class="invalid-feedback">Status is required.</div>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 justify-content-end mt-4">
+              <!-- EMPLOYEE BANK DETAILS - STEP 2
                Disabled until save logic is wired in the next step. -->
-                <!-- EMPLOYEE BANK DETAILS - STEP 7
+              <!-- EMPLOYEE BANK DETAILS - STEP 7
      Make the button submit the Employee Bank Details form.
      The JS save handler will persist the record to Supabase. -->
-                <button type="submit" id="saveEmployeeBankDetailsBtn" class="btn btn-primary dashboard-action-btn"
-                  disabled>
-                  <i class="bi bi-save me-2"></i>
-                  <span id="employeeBankDetailsSubmitLabel">Save Employee Bank Details</span>
-                </button>
+              <button type="submit" id="saveEmployeeBankDetailsBtn" class="btn btn-primary dashboard-action-btn"
+                disabled>
+                <i class="bi bi-save me-2"></i>
+                <span id="employeeBankDetailsSubmitLabel">Save Employee Bank Details</span>
+              </button>
 
-                <!-- EMPLOYEE BANK DETAILS - STEP 5
+              <!-- EMPLOYEE BANK DETAILS - STEP 5
      Keep a visible Cancel button so HR can abandon account entry
      before saving anything to Supabase. -->
-                <button type="button" id="cancelEmployeeBankDetailsEditBtn"
-                  class="btn btn-outline-secondary dashboard-action-btn">
-                  <i class="bi bi-x-circle me-2"></i>Cancel
-                </button>
-              </div>
+              <button type="button" id="cancelEmployeeBankDetailsEditBtn"
+                class="btn btn-outline-secondary dashboard-action-btn">
+                <i class="bi bi-x-circle me-2"></i>Cancel
+              </button>
+            </div>
             </form>
 
             <hr class="my-4" />
@@ -3086,6 +3087,10 @@
      and avoids confusing it with Basic Pay. -->
                   <thead>
                     <tr>
+                      <!-- HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1A
+         Show a clear include/exclude checkbox beside each employee in the
+         Batch Payroll Review table. -->
+                      <th class="text-center text-nowrap">Include</th>
                       <th>Employee</th>
                       <th>Dept.</th>
                       <th>Job</th>
@@ -3096,7 +3101,7 @@
                   </thead>
                   <tbody id="batchPayrollReviewTableBody">
                     <tr>
-                      <td colspan="6" class="text-center text-secondary py-4">
+                      <td colspan="7" class="text-center text-secondary py-4">
                         No employees selected for batch payroll.
                       </td>
                     </tr>
@@ -3155,6 +3160,28 @@
                     <option value="">Select employee</option>
                   </select>
                   <div class="invalid-feedback">Please select an employee.</div>
+                </div>
+
+                <!-- HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1A
+                     This belongs inside the real Create Payroll form, not Employee Bank Details.
+                     It prepares all active employees through Batch Payroll Review. -->
+                <div class="col-md-6 col-xl-4">
+                  <label class="form-label fw-semibold">
+                    Batch Selection
+                  </label>
+
+                  <div class="border rounded-4 p-3 bg-light-subtle">
+                    <div class="form-check">
+                      <input type="checkbox" id="selectAllPayrollEmployeesFromCreateCard" class="form-check-input" />
+                      <label for="selectAllPayrollEmployeesFromCreateCard" class="form-check-label fw-semibold">
+                        Select all active employees
+                      </label>
+                    </div>
+
+                    <div class="form-text">
+                      Sends all active employees into Batch Payroll Review. Inactive employees are excluded.
+                    </div>
+                  </div>
                 </div>
 
                 <div class="col-12">

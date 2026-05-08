@@ -114,10 +114,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       toggleEmployeePayrollSelection(employeeId, isChecked);
     };
 
-    // BATCH PAYROLL DEFAULT - STEP 11
-    // Expose the remove action used by the Batch Payroll Review table.
-    window.hrRemoveEmployeeFromPayrollBatch = (employeeId) => {
-      removeEmployeeFromCurrentPayrollBatch(employeeId);
+    // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1B
+    // Expose row checkbox selection from the Batch Payroll Review table.
+    window.hrToggleBatchPayrollReviewEmployeeSelection = (employeeId, isChecked) => {
+      toggleBatchPayrollReviewEmployeeSelection(employeeId, isChecked);
     };
 
     window.hrOpenEmployeeDocument = async (documentId) => {
@@ -1129,7 +1129,19 @@ function cacheDomElements() {
     // a valid active Payroll Master setup for batch payroll.
     batchPayrollSetupWarning: document.getElementById("batchPayrollSetupWarning"),
 
-    payrollEmployeeId: document.getElementById("payrollEmployeeId"),
+    // HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1B RECOVERY
+    // Scope the manual payroll Employee dropdown to the real Create Payroll form.
+    // This prevents duplicate/hidden payrollEmployeeId fields from breaking the visible dropdown.
+    payrollEmployeeId:
+      document
+        .getElementById("payrollCreateForm")
+        ?.querySelector("#payrollEmployeeId") || null,
+
+    // HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1B
+    // Cache the checkbox inside the real Create Payroll card only.
+    selectAllPayrollEmployeesFromCreateCard: document.getElementById(
+      "selectAllPayrollEmployeesFromCreateCard",
+    ),
 
     // DESCRIPTION ITEM 2 - STEP 1
     // Read-only payroll employee reference panel sourced from HR.
@@ -4614,6 +4626,13 @@ function bindEvents() {
     syncPayrollStatutorySelectedMasterContext();
   });
 
+  // STATUTORY DEDUCTION DEFAULTS - STEP 1D
+  // Selecting a statutory deduction type applies the standard method/default value:
+  // PAYE = Rule Based, Employee Pension = 8%, Employer Pension = 10%, NHF = 2.5%.
+  state.dom.payrollStatutoryDeductionType?.addEventListener("change", () => {
+    syncPayrollStatutoryDefaultFromDeductionType();
+  });
+
   // DESCRIPTION ITEM 3 - STEP 2B WIRING CLEANUP
   // Configuration Source must immediately refresh the grade/rule warning
   // when HR switches between Employee Specific and Inherited setup.
@@ -4898,11 +4917,28 @@ function bindEvents() {
   // DESCRIPTION ITEM 2 - STEP 1
   // Whenever payroll selects an employee, refresh the read-only HR reference panel.
   state.dom.payrollEmployeeId?.addEventListener("change", () => {
+    // HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1C
+    // Manual single payroll and Create Payroll select-all must not run together.
+    // Choosing one employee clears the batch select-all checkbox.
+    if (
+      String(state.dom.payrollEmployeeId?.value || "").trim() &&
+      state.dom.selectAllPayrollEmployeesFromCreateCard?.checked
+    ) {
+      clearCreatePayrollCardSelectAllSelection({ hideReview: true });
+    }
+
     renderPayrollSelectedEmployeeReference();
 
     // SUBMIT PAYROLL - DESCRIPTION ITEM 2 - STEP 4
     // Also populate payroll values when HR manually chooses one employee.
     populatePayrollFormFromEmployeeMaster(state.dom.payrollEmployeeId?.value || "");
+  });
+
+  // HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1C
+  // Selecting all from the Create Payroll card uses Batch Payroll Review,
+  // not the manual single payroll save path.
+  state.dom.selectAllPayrollEmployeesFromCreateCard?.addEventListener("change", (event) => {
+    handleCreatePayrollCardSelectAllEmployees(Boolean(event.target.checked));
   });
 
   state.dom.resetPayrollFormBtn?.addEventListener("click", async () => {
@@ -8352,6 +8388,65 @@ function renderPayrollStatutoryRecords(records = []) {
   });
 }
 
+// STATUTORY DEDUCTION DEFAULTS - STEP 1A
+// Provides standard default statutory percentage values.
+// PAYE remains Rule Based because it is calculated from tax rules,
+// not from one flat percentage.
+function getDefaultStatutoryDeductionSetup(deductionType = "") {
+  const type = String(deductionType || "").trim();
+
+  const defaults = {
+    PAYE: {
+      method: "RULE_BASED",
+      value: "",
+      help: "PAYE is calculated from the statutory tax rule, not a flat percentage.",
+    },
+    EMPLOYEE_PENSION: {
+      method: "PERCENTAGE",
+      value: "8",
+      help: "Default employee pension contribution is 8%.",
+    },
+    EMPLOYER_PENSION: {
+      method: "PERCENTAGE",
+      value: "10",
+      help: "Default employer pension contribution is 10%.",
+    },
+    NHF: {
+      method: "PERCENTAGE",
+      value: "2.5",
+      help: "Default NHF contribution is 2.5%.",
+    },
+  };
+
+  return defaults[type] || {
+    method: "RULE_BASED",
+    value: "",
+    help: "Select a deduction type to apply the correct statutory setup.",
+  };
+}
+
+// STATUTORY DEDUCTION DEFAULTS - STEP 1B
+// When HR selects a statutory deduction type, apply the safest default method/value.
+// HR can still change Percentage or Amount manually after the default is applied.
+function syncPayrollStatutoryDefaultFromDeductionType() {
+  const deductionType = String(
+    state.dom.payrollStatutoryDeductionType?.value || "",
+  ).trim();
+
+  const setup = getDefaultStatutoryDeductionSetup(deductionType);
+
+  if (state.dom.payrollStatutoryCalculationMethod) {
+    state.dom.payrollStatutoryCalculationMethod.value = setup.method;
+  }
+
+  if (state.dom.payrollStatutoryDeductionValue) {
+    state.dom.payrollStatutoryDeductionValue.value = setup.value;
+  }
+
+  syncPayrollStatutoryCalculationMethodUi();
+  updatePayrollStatutorySaveButtonState();
+}
+
 // DESCRIPTION ITEM 3 - STEP 2A-5
 // Make Calculation Method control Deduction Value behaviour.
 // HR/payroll standard:
@@ -8363,6 +8458,10 @@ function syncPayrollStatutoryCalculationMethodUi() {
     state.dom.payrollStatutoryCalculationMethod?.value || "RULE_BASED",
   ).trim();
 
+  const deductionType = String(
+    state.dom.payrollStatutoryDeductionType?.value || "",
+  ).trim();
+
   const valueInput = state.dom.payrollStatutoryDeductionValue;
   const requiredMarker = state.dom.payrollStatutoryDeductionValueRequiredMarker;
   const helpText = state.dom.payrollStatutoryDeductionValueHelp;
@@ -8372,6 +8471,7 @@ function syncPayrollStatutoryCalculationMethodUi() {
   const isRuleBased = method === "RULE_BASED";
   const isPercentage = method === "PERCENTAGE";
   const isAmount = method === "AMOUNT";
+  const defaultSetup = getDefaultStatutoryDeductionSetup(deductionType);
 
   valueInput.readOnly = isRuleBased;
   valueInput.required = !isRuleBased;
@@ -8386,20 +8486,31 @@ function syncPayrollStatutoryCalculationMethodUi() {
 
     if (helpText) {
       helpText.textContent =
-        "No manual value is required for rule-based statutory deductions.";
+        defaultSetup.help || "No manual value is required for rule-based statutory deductions.";
     }
 
+    updatePayrollStatutorySaveButtonState();
     return;
   }
 
   if (isPercentage) {
+    // STATUTORY DEDUCTION DEFAULTS - STEP 1C
+    // Auto-fill known statutory percentages when the deduction type has a standard rate.
+    // PAYE has no flat percentage, so it remains manually entered if HR overrides it.
+    if (!String(valueInput.value || "").trim() && defaultSetup.method === "PERCENTAGE") {
+      valueInput.value = defaultSetup.value;
+    }
+
     valueInput.placeholder = "Enter percentage, e.g. 8";
 
     if (helpText) {
       helpText.textContent =
-        "Enter the deduction percentage only. Example: enter 8 for 8%.";
+        defaultSetup.method === "PERCENTAGE"
+          ? defaultSetup.help
+          : "Enter the deduction percentage only. Example: enter 8 for 8%.";
     }
 
+    updatePayrollStatutorySaveButtonState();
     return;
   }
 
@@ -8410,6 +8521,8 @@ function syncPayrollStatutoryCalculationMethodUi() {
       helpText.textContent =
         "Enter the fixed deduction amount for this payroll master record.";
     }
+
+    updatePayrollStatutorySaveButtonState();
   }
 }
 
@@ -10834,6 +10947,20 @@ ${preparedRow.employee_override_applied
   });
 
   state.dom.batchPayrollReviewPanel?.classList.remove("d-none");
+  // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I
+// When Batch Payroll Review is visible, hide the manual single-payroll form.
+// HR should either process the batch review or clear batch mode before manual entry.
+state.dom.payrollCreateForm?.classList.add("d-none");
+setPayrollRecordToolbarForBatchMode();
+
+if (state.dom.payrollFormTitle) {
+  state.dom.payrollFormTitle.textContent = "Create Payroll Batch";
+}
+
+if (state.dom.payrollFormSubtext) {
+  state.dom.payrollFormSubtext.textContent =
+    "Review selected employees in Batch Payroll Review before submitting payroll records.";
+}
 
   if (state.dom.batchPayrollSetupWarning) {
     if (skippedRows.length) {
@@ -11040,7 +11167,12 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
       .filter(Boolean),
   );
 
-  const selectedEmployees = (state.employees || []).filter((employee) => {
+  // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1E
+  // Show all employees in the review table after Select All is clicked,
+  // but only active checked employees are prepared for payroll.
+  const employeesToRender = sortEmployeeRecordsByLatestActivity(state.employees || []);
+
+  const selectedEmployees = employeesToRender.filter((employee) => {
     const employeeId = String(employee.id || "").trim();
     const isSelected = selectedIdSet.has(employeeId);
     const isActive = normalizeText(employee.status) === "active";
@@ -11066,34 +11198,42 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
   // it clear that missing/inactive Payroll Master setup must be fixed first.
   renderBatchPayrollSetupWarning(selectedEmployees);
 
-  if (!selectedEmployees.length) {
+  if (!employeesToRender.length) {
     tbody.innerHTML = `
-      <tr>
-        <td colspan="6" class="text-center text-secondary py-4">
-          No active selected employees are available for batch payroll.
-        </td>
-      </tr>
-    `;
+    <tr>
+      <td colspan="7" class="text-center text-secondary py-4">
+        No employees are available for batch payroll review.
+      </td>
+    </tr>
+  `;
 
     state.dom.batchPayrollReviewPanel?.classList.remove("d-none");
     return;
   }
 
-  selectedEmployees.forEach((employee) => {
+  employeesToRender.forEach((employee) => {
     const fullName =
       `${employee.first_name || ""} ${employee.last_name || ""}`.trim() ||
       employee.work_email ||
       "Unknown Employee";
 
+    // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1F
+    // Each employee row gets its own include checkbox.
+    // Only active checked employees are prepared for payroll.
+    const employeeKey = String(employee.id || "").trim();
+    const safeEmployeeId = employeeKey.replaceAll("'", "\\'");
+    const isActiveEmployee = normalizeText(employee.status) === "active";
+    const isSelectedForPayroll = isActiveEmployee && selectedIdSet.has(employeeKey);
+
     // DESCRIPTION ITEM 4 - STEP 5 FIX
     // Batch payroll must use the Payroll Master record that is active
     // for the selected batch pay date, not just the latest active record.
-    // This keeps Run Payroll aligned with manual payroll behaviour.
-    const activePayrollMaster =
-      getEffectivePayrollMasterRecordForEmployeeAtDate(
+    const activePayrollMaster = isActiveEmployee
+      ? getEffectivePayrollMasterRecordForEmployeeAtDate(
         employee.id,
         getCurrentBatchPayrollCalculationDate(),
-      );
+      )
+      : null;
 
     const salaryValue = Number(activePayrollMaster?.basic_salary || 0);
     const hasValidActiveMaster =
@@ -11101,12 +11241,12 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
       Number.isFinite(salaryValue) &&
       salaryValue > 0;
 
-    // BATCH PAYROLL DEFAULT - STEP 5
-    // Prepare this employee's calculated payroll row from their own
-    // active Payroll Master salary. Nothing is saved yet.
-    const preparedPayrollRow = hasValidActiveMaster
-      ? buildBatchPayrollPreparedRow(employee, activePayrollMaster)
-      : null;
+    // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1F
+    // Unchecked rows remain visible for review but are not submitted.
+    const preparedPayrollRow =
+      isSelectedForPayroll && hasValidActiveMaster
+        ? buildBatchPayrollPreparedRow(employee, activePayrollMaster)
+        : null;
 
     if (preparedPayrollRow) {
       state.batchPayrollPreparedRows.push(preparedPayrollRow);
@@ -11115,26 +11255,31 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
     const row = document.createElement("tr");
 
     row.innerHTML = `
-      <td>
-        <div class="fw-semibold">${escapeHtml(fullName)}</div>
+  <td class="text-center align-middle">
+    <!-- HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1G
+         Active employees can be included/excluded directly from Batch Payroll Review.
+         Inactive employees are visible but disabled for payroll processing. -->
+    <input
+      type="checkbox"
+      class="form-check-input mt-0"
+      aria-label="Include employee in payroll batch"
+      ${isSelectedForPayroll ? "checked" : ""}
+      ${isActiveEmployee ? "" : "disabled"}
+      onchange="window.hrToggleBatchPayrollReviewEmployeeSelection('${safeEmployeeId}', this.checked)"
+    />
+  </td>
 
-        <div class="text-secondary small text-break">
-          ${escapeHtml(employee.work_email || "--")}
-        </div>
+  <td>
+    <div class="fw-semibold">${escapeHtml(fullName)}</div>
 
-        <div class="text-secondary small">
-          Staff No: ${escapeHtml(employee.employee_number || "--")}
-        </div>
+    <div class="text-secondary small text-break">
+      ${escapeHtml(employee.work_email || "--")}
+    </div>
 
-        <!-- BATCH PAYROLL DEFAULT - STEP 11
-             Let HR remove this employee from the current batch without
-             returning to the employee list. -->
-        <button type="button"
-          class="btn btn-sm btn-outline-danger mt-2"
-          onclick="window.hrRemoveEmployeeFromPayrollBatch('${String(employee.id || "").replaceAll("'", "\\'")}')">
-          <i class="bi bi-x-circle me-1"></i>Remove
-        </button>
-      </td>
+    <div class="text-secondary small">
+      Staff No: ${escapeHtml(employee.employee_number || "--")}
+    </div>
+  </td>
 
       <td>${escapeHtml(employee.department || "--")}</td>
 
@@ -11187,19 +11332,23 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
       }
       </td>
 
-      <td>
-        ${hasValidActiveMaster
-        ? `<span class="badge text-bg-success">Ready</span>`
-        : `<span class="badge text-bg-warning">Missing active setup</span>`
+<td>
+  ${!isActiveEmployee
+        ? `<span class="badge text-bg-secondary">Inactive - excluded</span>`
+        : !isSelectedForPayroll
+          ? `<span class="badge text-bg-light border text-secondary">Not selected</span>`
+          : hasValidActiveMaster
+            ? `<span class="badge text-bg-success">Ready</span>`
+            : `<span class="badge text-bg-warning">Missing active setup</span>`
       }
 
-        ${activePayrollMaster?.salary_effective_date
+  ${activePayrollMaster?.salary_effective_date
         ? `<div class="text-secondary small mt-1 text-nowrap">
-                Effective ${formatDate(activePayrollMaster.salary_effective_date)}
-              </div>`
+          Effective ${formatDate(activePayrollMaster.salary_effective_date)}
+        </div>`
         : ""
       }
-      </td>
+</td>
     `;
 
     tbody.appendChild(row);
@@ -11210,6 +11359,9 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
   // BATCH PAYROLL DEFAULT - STEP 7
   // Refresh the submit button state after the ready/missing payroll rows
   // have been recalculated for the current selected employees.
+  // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1H
+  // Keep the top Select All checkbox checked/partial/cleared based on row choices.
+  syncCreatePayrollCardSelectAllCheckboxState();
   updateSubmitBatchPayrollButtonState();
 }
 
@@ -13822,6 +13974,61 @@ function removeEmployeeFromCurrentPayrollBatch(employeeId) {
   );
 }
 
+// HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1C
+// Keeps the Create Payroll "Select all active employees" checkbox visually
+// aligned with the row checkboxes inside Batch Payroll Review.
+function syncCreatePayrollCardSelectAllCheckboxState() {
+  const checkbox = state.dom.selectAllPayrollEmployeesFromCreateCard;
+  if (!checkbox) return;
+
+  const activeEmployeeIds = getActiveEmployeeIdsForCreatePayrollSelectAll();
+  const selectedActiveCount = activeEmployeeIds.filter((employeeId) =>
+    state.selectedEmployeesForPayroll.has(employeeId),
+  ).length;
+
+  checkbox.checked =
+    activeEmployeeIds.length > 0 &&
+    selectedActiveCount === activeEmployeeIds.length;
+
+  checkbox.indeterminate =
+    selectedActiveCount > 0 &&
+    selectedActiveCount < activeEmployeeIds.length;
+}
+
+// HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1C
+// Toggling a row checkbox includes or excludes that employee from the payroll batch.
+// Inactive employees remain excluded because payroll should only process active staff.
+function toggleBatchPayrollReviewEmployeeSelection(employeeId, isChecked) {
+  const employeeKey = String(employeeId || "").trim();
+  if (!employeeKey) return;
+
+  const employee = (state.employees || []).find(
+    (row) => String(row.id || "").trim() === employeeKey,
+  );
+
+  if (!employee || normalizeText(employee.status) !== "active") {
+    return;
+  }
+
+  if (isChecked) {
+    state.selectedEmployeesForPayroll.add(employeeKey);
+  } else {
+    state.selectedEmployeesForPayroll.delete(employeeKey);
+  }
+
+  const selectedEmployeeIds = Array.from(state.selectedEmployeesForPayroll || [])
+    .map((selectedId) => String(selectedId || "").trim())
+    .filter(Boolean);
+
+  clearPageAlert();
+  hideDashboardToast();
+
+  renderBatchPayrollReviewTable(selectedEmployeeIds);
+  syncSelectAllEmployeesForPayrollCheckbox();
+  syncCreatePayrollCardSelectAllCheckboxState();
+  updateSubmitBatchPayrollButtonState();
+}
+
 // DESCRIPTION ITEM 9 - STEP 2
 // Select or clear all employees currently visible in the list.
 // Re-render keeps every row checkbox visually in sync immediately.
@@ -13838,6 +14045,292 @@ function toggleAllVisibleEmployeesForPayroll(isChecked) {
 
   renderEmployeeRecords(state.filteredEmployees);
 }
+
+// HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1D RECOVERY
+// Return active employees only because inactive staff should not be prepared
+// for a new payroll run in a standard HR/payroll process.
+function getActiveEmployeeIdsForCreatePayrollSelectAll() {
+  return (state.employees || [])
+    .filter((employee) => normalizeText(employee.status) === "active")
+    .map((employee) => String(employee.id || "").trim())
+    .filter(Boolean);
+}
+
+// HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1D RECOVERY
+// Clear only the Create Payroll select-all working state.
+// This does not delete saved payroll records.
+function clearCreatePayrollCardSelectAllSelection({ hideReview = false } = {}) {
+  if (state.dom.selectAllPayrollEmployeesFromCreateCard) {
+    // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1D
+    // Clear both checked and partial/indeterminate states when batch selection resets.
+    state.dom.selectAllPayrollEmployeesFromCreateCard.checked = false;
+    state.dom.selectAllPayrollEmployeesFromCreateCard.indeterminate = false;
+  }
+
+  state.selectedEmployeesForPayroll.clear();
+  state.batchPayrollPreparedRows = [];
+
+  if (state.dom.batchPayrollReviewCount) {
+    state.dom.batchPayrollReviewCount.textContent = "0 selected";
+  }
+
+  if (state.dom.batchPayrollReviewTableBody) {
+    state.dom.batchPayrollReviewTableBody.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center text-secondary py-4">
+          No employees selected for batch payroll.
+        </td>
+      </tr>
+    `;
+  }
+
+  if (state.dom.batchPayrollSetupWarning) {
+    state.dom.batchPayrollSetupWarning.classList.add("d-none");
+    state.dom.batchPayrollSetupWarning.innerHTML = "";
+  }
+
+  if (hideReview) {
+    state.dom.batchPayrollReviewPanel?.classList.add("d-none");
+
+    // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I RECOVERY
+    // Restore manual payroll entry when batch mode is cleared.
+    state.dom.payrollCreateForm?.classList.remove("d-none");
+    setPayrollRecordToolbarForManualMode();
+
+    if (state.dom.payrollFormTitle) {
+      state.dom.payrollFormTitle.textContent = "Create Payroll Record";
+    }
+
+    if (state.dom.payrollFormSubtext) {
+      state.dom.payrollFormSubtext.textContent =
+        "Enter payroll details for an employee. Core monetary fields use NGN.";
+    }
+  }
+
+  updateSubmitBatchPayrollButtonState();
+  syncSelectAllEmployeesForPayrollCheckbox();
+}
+
+// HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1D RECOVERY
+// Move all active employees into the existing Batch Payroll Review panel
+// so HR can review before submitting payroll.
+function handleCreatePayrollCardSelectAllEmployees(isChecked) {
+  clearPageAlert();
+  hideDashboardToast();
+
+  if (!isChecked) {
+    clearCreatePayrollCardSelectAllSelection({ hideReview: true });
+    return;
+  }
+
+  const activeEmployeeIds = getActiveEmployeeIdsForCreatePayrollSelectAll();
+
+  if (!activeEmployeeIds.length) {
+    clearCreatePayrollCardSelectAllSelection({ hideReview: true });
+
+    showPageAlert(
+      "warning",
+      "No active employees are available for payroll selection.",
+    );
+
+    return;
+  }
+
+  // HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1D RECOVERY
+  // Clear manual single employee selection because this path is batch payroll.
+  if (state.dom.payrollEmployeeId) {
+    state.dom.payrollEmployeeId.value = "";
+  }
+
+  renderPayrollSelectedEmployeeReference("");
+
+  // HRP-83 - BATCH MODE UI CLEANUP - STEP 1D
+  // Once Select All starts a batch payroll run, hide the manual single-payroll form.
+  // Batch payroll should be reviewed and submitted from Batch Payroll Review only.
+  if (state.dom.payrollCreateForm) {
+    state.dom.payrollCreateForm.classList.add("d-none");
+  }
+
+  // HRP-83 - BATCH MODE UI CLEANUP - STEP 1D
+  // Use the same batch toolbar behaviour as CSV import / Run Payroll.
+  setPayrollRecordToolbarForBatchMode();
+
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Create Payroll Batch";
+  }
+
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Review selected employees in Batch Payroll Review before submitting payroll records.";
+  }
+
+  state.isRunPayrollSelectionMode = true;
+  state.selectedEmployeesForPayroll = new Set(activeEmployeeIds);
+
+  // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I RECOVERY
+  // Select All is now a batch payroll flow.
+  // After the Batch Payroll Review table is rendered, hide the manual
+  // single-payroll form so HR does not see two payroll entry modes at once.
+  renderBatchPayrollReviewTable(activeEmployeeIds);
+
+  state.dom.payrollCreateForm?.classList.add("d-none");
+  setPayrollRecordToolbarForBatchMode();
+
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Create Payroll Batch";
+  }
+
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Review selected employees in Batch Payroll Review before submitting payroll records.";
+  }
+
+  syncSelectAllEmployeesForPayrollCheckbox();
+  updateSubmitBatchPayrollButtonState();
+
+  state.dom.batchPayrollReviewPanel?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
+// HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1D
+// Returns active employees only because inactive staff should not be prepared
+// for a new payroll run in a standard HR/payroll process.
+function getActiveEmployeeIdsForCreatePayrollSelectAll() {
+  return (state.employees || [])
+    .filter((employee) => normalizeText(employee.status) === "active")
+    .map((employee) => String(employee.id || "").trim())
+    .filter(Boolean);
+}
+
+// HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I FINAL
+// Hide the manual single-payroll form when HR is working in batch mode.
+// This keeps Batch Payroll Review and Manual Single Payroll Entry from showing together.
+function setCreatePayrollBatchModeUi() {
+  state.dom.payrollCreateForm?.classList.add("d-none");
+  setPayrollRecordToolbarForBatchMode();
+
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Create Payroll Batch";
+  }
+
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Review selected employees in Batch Payroll Review before submitting payroll records.";
+  }
+}
+
+// HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I FINAL
+// Restore the manual single-payroll form only when batch mode is cleared.
+function setCreatePayrollManualModeUi() {
+  state.dom.payrollCreateForm?.classList.remove("d-none");
+  setPayrollRecordToolbarForManualMode();
+
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Create Payroll Record";
+  }
+
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Enter payroll details for an employee. Core monetary fields use NGN.";
+  }
+}
+
+// HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I FINAL
+// Clears the Create Payroll select-all batch state without deleting saved payroll records.
+function clearCreatePayrollCardSelectAllSelection({ hideReview = false } = {}) {
+  if (state.dom.selectAllPayrollEmployeesFromCreateCard) {
+    state.dom.selectAllPayrollEmployeesFromCreateCard.checked = false;
+    state.dom.selectAllPayrollEmployeesFromCreateCard.indeterminate = false;
+  }
+
+  state.selectedEmployeesForPayroll.clear();
+  state.batchPayrollPreparedRows = [];
+
+  if (state.dom.batchPayrollReviewCount) {
+    state.dom.batchPayrollReviewCount.textContent = "0 selected";
+  }
+
+  if (state.dom.batchPayrollReviewTableBody) {
+    state.dom.batchPayrollReviewTableBody.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center text-secondary py-4">
+          No employees selected for batch payroll.
+        </td>
+      </tr>
+    `;
+  }
+
+  if (state.dom.batchPayrollSetupWarning) {
+    state.dom.batchPayrollSetupWarning.classList.add("d-none");
+    state.dom.batchPayrollSetupWarning.innerHTML = "";
+  }
+
+  if (hideReview) {
+    state.dom.batchPayrollReviewPanel?.classList.add("d-none");
+    setCreatePayrollManualModeUi();
+  }
+
+  syncSelectAllEmployeesForPayrollCheckbox();
+  syncCreatePayrollCardSelectAllCheckboxState?.();
+  updateSubmitBatchPayrollButtonState();
+}
+
+// HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I FINAL
+// Select All starts a batch payroll flow, populates the batch period,
+// renders all employees for review, and hides the manual payroll form.
+function handleCreatePayrollCardSelectAllEmployees(isChecked) {
+  clearPageAlert();
+  hideDashboardToast();
+
+  if (!isChecked) {
+    clearCreatePayrollCardSelectAllSelection({ hideReview: true });
+    return;
+  }
+
+  const activeEmployeeIds = getActiveEmployeeIdsForCreatePayrollSelectAll();
+
+  if (!activeEmployeeIds.length) {
+    clearCreatePayrollCardSelectAllSelection({ hideReview: true });
+
+    showPageAlert(
+      "warning",
+      "No active employees are available for payroll selection.",
+    );
+
+    return;
+  }
+
+  if (state.dom.payrollEmployeeId) {
+    state.dom.payrollEmployeeId.value = "";
+  }
+
+  renderPayrollSelectedEmployeeReference("");
+
+  state.isRunPayrollSelectionMode = true;
+  state.selectedEmployeesForPayroll = new Set(activeEmployeeIds);
+
+  populateBatchPayrollPayCycleOptions();
+  updateBatchPayDateFromPayCycle();
+
+  renderBatchPayrollReviewTable(activeEmployeeIds);
+
+  // HRP-84 - STEP 1I FINAL
+  // This must run after renderBatchPayrollReviewTable so the visible
+  // batch review remains open while the manual payroll form is hidden.
+  setCreatePayrollBatchModeUi();
+
+  syncSelectAllEmployeesForPayrollCheckbox();
+  syncCreatePayrollCardSelectAllCheckboxState?.();
+  updateSubmitBatchPayrollButtonState();
+
+  state.dom.batchPayrollReviewPanel?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
 
 // DESCRIPTION ITEM 5 - SYNC FOUNDATION STEP 3C
 // Use the latest payroll master record as a fallback source for payroll-owned
@@ -13955,6 +14448,123 @@ function renderBatchPayrollSetupWarning(selectedEmployees = []) {
   warning.classList.remove("d-none");
 }
 
+// HRP-84 - BATCH PAYROLL SUBMIT SUMMARY - STEP 2A
+// Build clear batch counts for HR before submission.
+// Ready = rows that will actually be inserted into Payroll Records.
+// Selected = active employees currently checked for this batch.
+// Need setup = selected active employees without valid Payroll Master setup.
+// Excluded = inactive employees plus active employees HR unticked.
+function getBatchPayrollSubmitSummaryCounts() {
+  const employeesToReview = Array.isArray(state.employees)
+    ? state.employees
+    : [];
+
+  const selectedIds = new Set(
+    Array.from(state.selectedEmployeesForPayroll || [])
+      .map((employeeId) => String(employeeId || "").trim())
+      .filter(Boolean),
+  );
+
+  const readyCount = Array.isArray(state.batchPayrollPreparedRows)
+    ? state.batchPayrollPreparedRows.length
+    : 0;
+
+  // CSV-import batch payroll may prepare rows without using the select-all set.
+  // In that case, treat prepared rows as both selected and ready.
+  if (!selectedIds.size && readyCount > 0) {
+    return {
+      readyCount,
+      selectedCount: readyCount,
+      needsSetupCount: 0,
+      excludedCount: 0,
+    };
+  }
+
+  const activeEmployees = employeesToReview.filter(
+    (employee) => normalizeText(employee.status) === "active",
+  );
+
+  const inactiveEmployees = employeesToReview.filter(
+    (employee) => normalizeText(employee.status) !== "active",
+  );
+
+  const selectedActiveEmployees = activeEmployees.filter((employee) =>
+    selectedIds.has(String(employee.id || "").trim()),
+  );
+
+  const unselectedActiveEmployees = activeEmployees.filter(
+    (employee) => !selectedIds.has(String(employee.id || "").trim()),
+  );
+
+  const selectedCount = selectedActiveEmployees.length;
+  const needsSetupCount = Math.max(selectedCount - readyCount, 0);
+  const excludedCount =
+    inactiveEmployees.length + unselectedActiveEmployees.length;
+
+  return {
+    readyCount,
+    selectedCount,
+    needsSetupCount,
+    excludedCount,
+  };
+}
+
+// HRP-84 - BATCH PAYROLL SUBMIT SUMMARY - STEP 2A
+// Keep the existing bottom helper text, but make it operationally useful.
+function updateBatchPayrollSubmitSummary() {
+  const button = state.dom.submitBatchPayrollBtn;
+  if (!button) return;
+
+  const actionRow = button.closest(".d-flex");
+  if (!actionRow) return;
+
+  let summary = document.getElementById("batchPayrollSubmitSummary");
+
+  if (!summary) {
+    summary =
+      actionRow.querySelector(".small.text-secondary") ||
+      document.createElement("div");
+
+    summary.id = "batchPayrollSubmitSummary";
+    summary.className = "small text-secondary";
+
+    if (!summary.parentElement) {
+      actionRow.insertBefore(summary, button);
+    }
+  }
+
+  const {
+    readyCount,
+    selectedCount,
+    needsSetupCount,
+    excludedCount,
+  } = getBatchPayrollSubmitSummaryCounts();
+
+  const readyClass = readyCount > 0 ? "text-success" : "text-secondary";
+  const setupClass = needsSetupCount > 0 ? "text-warning" : "text-secondary";
+
+  summary.innerHTML = `
+    <!-- HRP-84 - BATCH PAYROLL SUBMIT SUMMARY - STEP 2A
+         Clear operational count before HR submits the payroll batch. -->
+    <span class="fw-semibold">Batch submit summary:</span>
+    <span class="${readyClass} fw-semibold">${readyCount} ready</span>
+    <span class="mx-1">/</span>
+    <span>${selectedCount} selected</span>
+    <span class="mx-1">/</span>
+    <span class="${setupClass}">${needsSetupCount} need setup</span>
+    <span class="mx-1">/</span>
+    <span>${excludedCount} excluded</span>
+    <div class="mt-1">
+      Only ready employees will be submitted into Payroll Records.
+    </div>
+  `;
+
+  if (state.dom.batchPayrollReviewCount) {
+    state.dom.batchPayrollReviewCount.textContent =
+      `${readyCount} ready / ${selectedCount} selected`;
+  }
+}
+
 // BATCH PAYROLL DEFAULT - STEP 7
 // Enables Submit Batch Payroll only when the batch has:
 // 1. at least one prepared payroll row,
@@ -13974,6 +14584,11 @@ function updateSubmitBatchPayrollButtonState() {
   );
 
   button.disabled = !(hasPreparedRows && hasPayCycle && hasPayDate);
+
+  // HRP-84 - BATCH PAYROLL SUBMIT SUMMARY - STEP 2B
+  // Refresh the visible ready/selected/excluded count every time
+  // the Submit Batch Payroll button state is recalculated.
+  updateBatchPayrollSubmitSummary();
 }
 
 // DESCRIPTION ITEM 3 - STEP 2E-2A
@@ -14532,11 +15147,10 @@ function buildBatchPayrollPreparedRow(employee, activePayrollMaster) {
   );
 }
 
-// HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1A
-// Creates a readable payroll ID using the current date/time.
-// Example: PAY-20260507-142305
-// This is used as payroll_reference so HR can trace payroll records
-// without relying only on the database UUID.
+// HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1G
+// Creates a readable payroll ID using date + time.
+// Example: PAY-2026-05-07-113453
+// The hyphenated date is easier for HR/payroll users to read.
 function buildDatestampedPayrollReference(prefix = "PAY") {
   const now = new Date();
 
@@ -14547,7 +15161,25 @@ function buildDatestampedPayrollReference(prefix = "PAY") {
   const minutes = String(now.getMinutes()).padStart(2, "0");
   const seconds = String(now.getSeconds()).padStart(2, "0");
 
-  return `${prefix}-${year}${month}${day}-${hours}${minutes}${seconds}`;
+  return `${prefix}-${year}-${month}-${day}-${hours}${minutes}${seconds}`;
+}
+
+// HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1G
+// Displays older compact payroll IDs in the cleaner readable format.
+// Example: PAY-20260507-113453 becomes PAY-2026-05-07-113453.
+// This is display-only and does not rewrite existing database records.
+function formatPayrollReferenceForDisplay(value) {
+  const reference = String(value || "").trim();
+  if (!reference) return "--";
+
+  const compactMatch = reference.match(/^([A-Za-z]+)-(\d{4})(\d{2})(\d{2})-(\d{6})$/);
+
+  if (!compactMatch) {
+    return reference;
+  }
+
+  const [, prefix, year, month, day, time] = compactMatch;
+  return `${prefix.toUpperCase()}-${year}-${month}-${day}-${time}`;
 }
 
 // BATCH PAYROLL DEFAULT - STEP 7
@@ -17954,7 +18586,9 @@ function renderPayrollRecords(records) {
     // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1F RECOVERY
     // Keep payroll reference in the same row-render scope where it is displayed.
     // This prevents "payrollReference is not defined" when Payroll Records reload.
-    const payrollReference = String(record.payroll_reference || "").trim();
+    // HRP-82 - PAYROLL ID WITH DATESTAMP - STEP 1G
+    // Show Payroll ID in a cleaner HR-readable format.
+    const payrollReference = formatPayrollReferenceForDisplay(record.payroll_reference);
 
     // DESCRIPTION ITEM 4 - STEP 7
     // Prepare a safe payroll record id for inline table actions.
@@ -17984,9 +18618,11 @@ function renderPayrollRecords(records) {
         <div class="text-secondary small text-break">
           ${escapeHtml(record.work_email || "--")}
         </div>
-        <div class="text-secondary small text-break">
-          Payroll ID: ${escapeHtml(payrollReference || "--")}
-        </div>
+<div class="small mt-1">
+  <span class="badge rounded-pill text-bg-light border text-secondary">
+    Payroll ID: ${escapeHtml(payrollReference)}
+  </span>
+</div>
         <div class="text-secondary small">
           ${escapeHtml(record.department || "--")} • ${escapeHtml(record.job_title || "--")}
         </div>
@@ -18451,6 +19087,12 @@ function resetPayrollForm() {
   // If HR returns to the normal individual payroll form, restore the correct
   // toolbar and hide the batch-only review panel.
   setPayrollRecordToolbarForManualMode();
+
+  // HRP-83 - CREATE PAYROLL SELECT ALL - STEP 1E RECOVERY
+  // Clear the Create Payroll select-all batch state when HR clears the form.
+  // This prevents old batch selections from carrying into a new payroll run.
+  clearCreatePayrollCardSelectAllSelection({ hideReview: true });
+
   state.dom.batchPayrollReviewPanel?.classList.add("d-none");
   state.dom.batchPayrollSetupWarning?.classList.add("d-none");
   state.dom.payrollCreateForm?.classList.remove("d-none");
