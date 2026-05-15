@@ -347,6 +347,11 @@ const state = {
   // Holds the single company/organization settings record loaded from Supabase.
   organizationSettings: null,
 
+  // ADMIN COMPANY IDENTITY WIRING - STEP 1M-B
+  // Holds the Admin-controlled tenant/company record for the logged-in HR user.
+  // This is now the display source for company name across HR and payslip preview.
+  currentTenantCompany: null,
+
   // MANAGE ORGANIZATION - HR/PAYROLL STANDARD STEP 1B
   // Stores the editable organization values as last loaded/saved.
   // The Update button should only turn blue when HR changes an editable field.
@@ -699,6 +704,127 @@ function applyCurrentTenantFilter(query) {
 
   return query.eq("tenant_id", tenantId);
 }
+
+function getCurrentTenantIdForCompanyIdentity() {
+  // ADMIN COMPANY IDENTITY WIRING - STEP 1M-B
+  // Prefer the validated login tenant context, then fall back to the latest
+  // signed-in profile tenant_id. This keeps HR company identity tied to Admin.
+  const tenantContext = getCurrentTenantContext();
+
+  return String(
+    tenantContext?.tenantId ||
+    state.currentProfile?.tenant_id ||
+    "",
+  ).trim();
+}
+
+async function loadCurrentTenantCompanyForHr() {
+  // ADMIN COMPANY IDENTITY WIRING - STEP 1M-C FINAL
+  // Admin > Companies is the source of truth for the company display name.
+  // First use the safe Supabase RPC so HR does not need direct SELECT access
+  // to the tenants table. Direct tenant lookup remains as a fallback only.
+  const supabase = getSupabaseClient();
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "get_current_tenant_company_for_hr",
+  );
+
+  if (!rpcError) {
+    const resolvedCompany = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+
+    if (resolvedCompany?.company_name) {
+      state.currentTenantCompany = resolvedCompany;
+      return state.currentTenantCompany;
+    }
+  } else {
+    console.warn("Admin company identity RPC could not be used.", rpcError);
+  }
+
+  // ADMIN COMPANY IDENTITY WIRING - STEP 1M-C FINAL FALLBACK
+  // Keep the previous browser-side lookup as a fallback for environments
+  // where tenants are readable to the logged-in HR user.
+  const tenantContext = getCurrentTenantContext();
+
+  const uniqueCleanValues = (values = []) =>
+    Array.from(
+      new Set(
+        values
+          .map((value) => String(value || "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+  const tenantIdCandidates = uniqueCleanValues([
+    state.currentProfile?.tenant_id,
+    tenantContext?.tenantId,
+  ]);
+
+  const tenantCodeCandidates = uniqueCleanValues([
+    state.currentProfile?.tenant_code,
+    tenantContext?.tenantCode,
+  ]);
+
+  const selectColumns = "id, company_name, tenant_code, status, updated_at";
+
+  for (const tenantId of tenantIdCandidates) {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select(selectColumns)
+      .eq("id", tenantId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Admin company lookup by tenant_id failed.", error);
+      continue;
+    }
+
+    if (data?.company_name) {
+      state.currentTenantCompany = data;
+      return state.currentTenantCompany;
+    }
+  }
+
+  for (const tenantCode of tenantCodeCandidates) {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select(selectColumns)
+      .ilike("tenant_code", tenantCode)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Admin company lookup by tenant_code failed.", error);
+      continue;
+    }
+
+    if (data?.company_name) {
+      state.currentTenantCompany = data;
+      return state.currentTenantCompany;
+    }
+  }
+
+  state.currentTenantCompany = null;
+
+  console.warn("Admin company identity could not be resolved for HR.", {
+    tenantIdCandidates,
+    tenantCodeCandidates,
+  });
+
+  return null;
+}
+
+function getAdminControlledOrganizationName() {
+  // ADMIN COMPANY IDENTITY WIRING - STEP 1M-C FINAL
+  // Do not fall back to organization_settings.organization_name here.
+  // That field may contain the old HR snapshot, such as Pinehearst.
+  // Company display identity must come from Admin > Companies only.
+  return (
+    String(state.currentTenantCompany?.company_name || "").trim() ||
+    "Organization not set"
+  );
+}
+
 
 function cacheDomElements() {
   state.dom = {
@@ -4416,6 +4542,10 @@ function bindEvents() {
   state.dom.saveHrProfileImageBtn?.addEventListener("click", async () => {
     await uploadHrProfileImage();
   });
+
+  // ADMIN UI CLEANUP - STEP 1D-HR PARITY
+  // Start HR profile photo upload greyed out until a valid file is selected.
+  updateHrProfileImageSaveButtonState();
 
   state.dom.resetEmployeeFormBtn?.addEventListener("click", async () => {
     await handleEmployeeFormClear();
@@ -14563,29 +14693,56 @@ function setProfileSaveLoading(isLoading) {
   updateHrProfileSaveButtonState();
 }
 
+function updateHrProfileImageSaveButtonState() {
+  const button = state.dom.saveHrProfileImageBtn;
+  if (!button || button.dataset.isLoading === "true") return;
+
+  const hasValidPendingFile = Boolean(state.pendingProfileImageFile);
+
+  button.disabled = !hasValidPendingFile;
+  button.className = hasValidPendingFile
+    ? "btn btn-outline-primary dashboard-action-btn"
+    : "btn btn-secondary dashboard-action-btn";
+}
+
 function setProfileImageSaveLoading(isLoading) {
   const button = state.dom.saveHrProfileImageBtn;
   if (!button) return;
 
-  button.disabled = isLoading;
+  button.dataset.isLoading = isLoading ? "true" : "false";
+  button.disabled = true;
 
   if (isLoading) {
-    button.dataset.originalHtml = button.innerHTML;
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.className = "btn btn-secondary dashboard-action-btn";
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       Uploading...
     `;
-  } else if (button.dataset.originalHtml) {
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
     delete button.dataset.originalHtml;
   }
+
+  delete button.dataset.isLoading;
+  updateHrProfileImageSaveButtonState();
 }
 
 function handlePendingProfileImage(file) {
   state.pendingProfileImageFile = null;
 
   if (!file) {
-    if (state.currentProfile) renderHrProfile(state.currentProfile, state.currentUser);
+    if (state.currentProfile) {
+      renderHrProfile(state.currentProfile, state.currentUser);
+    }
+
+    updateHrProfileImageSaveButtonState();
     return;
   }
 
@@ -14594,19 +14751,31 @@ function handlePendingProfileImage(file) {
 
   if (!allowedTypes.includes(file.type)) {
     showPageAlert("warning", "Only PNG, JPG, JPEG, and WEBP images are allowed.");
-    if (state.dom.hrProfileImageInput) state.dom.hrProfileImageInput.value = "";
+
+    if (state.dom.hrProfileImageInput) {
+      state.dom.hrProfileImageInput.value = "";
+    }
+
+    updateHrProfileImageSaveButtonState();
     return;
   }
 
   if (file.size > maxBytes) {
     showPageAlert("warning", "Profile image must be 5MB or smaller.");
-    if (state.dom.hrProfileImageInput) state.dom.hrProfileImageInput.value = "";
+
+    if (state.dom.hrProfileImageInput) {
+      state.dom.hrProfileImageInput.value = "";
+    }
+
+    updateHrProfileImageSaveButtonState();
     return;
   }
 
   state.pendingProfileImageFile = file;
+  updateHrProfileImageSaveButtonState();
 
   const reader = new FileReader();
+
   reader.onload = () => {
     if (state.dom.hrProfileImagePreview) {
       state.dom.hrProfileImagePreview.src = reader.result;
@@ -14626,6 +14795,7 @@ function handlePendingProfileImage(file) {
       state.dom.hrInitials.classList.add("d-none");
     }
   };
+
   reader.readAsDataURL(file);
 }
 
@@ -15637,6 +15807,10 @@ async function refreshOrganizationSettingsWorkspace() {
   try {
     const supabase = getSupabaseClient();
 
+    // ADMIN COMPANY IDENTITY WIRING - STEP 1M-B
+    // Load Admin Company Identity first so HR renders the latest company name.
+    await loadCurrentTenantCompanyForHr();
+
     const { data, error } = await supabase
       .from("organization_settings")
       .select("*")
@@ -15660,10 +15834,13 @@ async function refreshOrganizationSettingsWorkspace() {
 // Render summary values and form values from the saved organization record.
 function renderOrganizationSettingsCard() {
   const record = state.organizationSettings || null;
+  const adminControlledOrganizationName = getAdminControlledOrganizationName();
 
   if (state.dom.organizationSummaryName) {
+    // ADMIN COMPANY IDENTITY WIRING - STEP 1M-B
+    // Summary name now follows Admin > Companies.
     state.dom.organizationSummaryName.textContent =
-      record?.organization_name || "Not set";
+      adminControlledOrganizationName;
   }
 
   if (state.dom.organizationSummaryCurrency) {
@@ -15691,7 +15868,9 @@ function renderOrganizationSettingsCard() {
   }
 
   if (state.dom.organizationName) {
-    state.dom.organizationName.value = record?.organization_name || "Pineharst";
+    // ADMIN COMPANY IDENTITY WIRING - STEP 1M-A
+    // HR can view the company name but cannot rename it here.
+    state.dom.organizationName.value = adminControlledOrganizationName;
   }
 
   if (state.dom.organizationEmail) {
@@ -15913,7 +16092,12 @@ function validateOrganizationSettingsForm() {
 function buildOrganizationSettingsPayload(isEditMode = false) {
   const payload = {
     singleton_key: true,
-    organization_name: String(state.dom.organizationName?.value || "").trim(),
+
+    // ADMIN COMPANY IDENTITY WIRING - STEP 1M-A
+    // Store the Admin-controlled company name as the organization snapshot.
+    // HR must not overwrite company identity from Manage Organization.
+    organization_name: getAdminControlledOrganizationName(),
+
     organization_email: String(state.dom.organizationEmail?.value || "").trim() || null,
     phone_number: String(state.dom.organizationPhoneNumber?.value || "").trim() || null,
     payroll_contact_email: String(state.dom.organizationPayrollContactEmail?.value || "").trim() || null,
@@ -21977,9 +22161,11 @@ function renderPayslipPreview(payrollRecord) {
   // Pull saved Organization details into the payslip preview header.
   // This is display-only and does not change payroll records or email sending.
   const organization = state.organizationSettings || {};
-  const organizationName =
-    organization.organization_name ||
-    "Organization not set";
+
+  // ADMIN COMPANY IDENTITY WIRING - STEP 1M-B
+  // Payslip Preview must show the same Admin-controlled company name
+  // shown in HR Manage Organization.
+  const organizationName = getAdminControlledOrganizationName();
 
   const organizationContactLines = [
     organization.organization_email,
@@ -22195,6 +22381,15 @@ async function openPayslipPreview(payrollId) {
   }
 
   clearPageAlert();
+
+  // ADMIN COMPANY IDENTITY WIRING - STEP 1M-C
+  // Refresh company identity before rendering the payslip, so Admin renames
+  // appear immediately without waiting for a full HR dashboard reload.
+  try {
+    await loadCurrentTenantCompanyForHr();
+  } catch (companyError) {
+    console.warn("Unable to refresh company identity before payslip preview:", companyError);
+  }
 
   let payrollRecord = selectedRow;
 

@@ -143,8 +143,11 @@
                   <div class="d-grid gap-2">
                     <input type="file" id="hrProfileImageInput" class="form-control" accept=".png,.jpg,.jpeg,.webp" />
 
-                    <button type="button" id="saveHrProfileImageBtn"
-                      class="btn btn-outline-primary dashboard-action-btn">
+                    <!-- ADMIN UI CLEANUP - STEP 1D-HR PARITY
+     Match Admin behaviour: keep HR profile photo upload grey/disabled
+     until HR selects a valid image file. -->
+                    <button type="button" id="saveHrProfileImageBtn" class="btn btn-secondary dashboard-action-btn"
+                      disabled>
                       <i class="bi bi-image me-2"></i>Upload Profile Photo
                     </button>
                   </div>
@@ -178,7 +181,10 @@
                     <label for="hrProfileRole" class="form-label fw-semibold">
                       Role
                     </label>
-                    <input type="text" id="hrProfileRole" class="form-control" readonly />
+                    <!-- ADMIN UI CLEANUP - STEP 1D-HR PARITY
+     Role is system-controlled, so keep it readonly and visually greyed out
+     like the Admin profile role field. -->
+                    <input type="text" id="hrProfileRole" class="form-control bg-light" readonly />
                   </div>
 
                   <div class="col-md-6">
@@ -329,7 +335,7 @@
                   <input type="text" id="organizationName" class="form-control bg-light"
                     placeholder="Loaded from saved organisation record" readonly required />
                   <div class="form-text">
-                    Controlled organisation identity. Contact an administrator if the legal organisation name changes.
+                    Admin-controlled company identity. Update the company name from Admin &gt; Companies if it changes.
                   </div>
                 </div>
 
@@ -1227,99 +1233,99 @@
                   <input type="text" id="hmoPlan" class="form-control" placeholder="Enter HMO plan" />
                 </div>
 
-<div class="col-md-6 col-xl-4">
-  <label for="hmoNumber" class="form-label fw-semibold">
-    HMO Number
-  </label>
-  <input type="text" id="hmoNumber" class="form-control" placeholder="Enter HMO number" />
-</div>
+                <div class="col-md-6 col-xl-4">
+                  <label for="hmoNumber" class="form-label fw-semibold">
+                    HMO Number
+                  </label>
+                  <input type="text" id="hmoNumber" class="form-control" placeholder="Enter HMO number" />
+                </div>
 
-<!-- EMPLOYEE BIODATA COMPLETION - STEP 6D-1
+                <!-- EMPLOYEE BIODATA COMPLETION - STEP 6D-1
      Beneficiaries / Dependants are repeatable HR records.
      They stay separate from the employee's own HMO provider/plan/number fields. -->
-<div class="col-12">
-  <h3 class="h6 fw-bold mb-2 mt-2">Beneficiaries / Dependants</h3>
-  <p class="text-secondary small mb-0">
-    Add people linked to the employee for HR benefits, HMO dependant tracking, or beneficiary records.
-  </p>
-</div>
+                <div class="col-12">
+                  <h3 class="h6 fw-bold mb-2 mt-2">Beneficiaries / Dependants</h3>
+                  <p class="text-secondary small mb-0">
+                    Add people linked to the employee for HR benefits, HMO dependant tracking, or beneficiary records.
+                  </p>
+                </div>
 
-<div class="col-12">
-  <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle">
-    <div class="row g-3 align-items-end">
-      <div class="col-md-6 col-xl-3">
-        <label for="employeeDependantFullName" class="form-label fw-semibold">
-          Full Name
-        </label>
-        <input type="text" id="employeeDependantFullName" class="form-control"
-          placeholder="Enter dependant or beneficiary name" />
-      </div>
+                <div class="col-12">
+                  <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle">
+                    <div class="row g-3 align-items-end">
+                      <div class="col-md-6 col-xl-3">
+                        <label for="employeeDependantFullName" class="form-label fw-semibold">
+                          Full Name
+                        </label>
+                        <input type="text" id="employeeDependantFullName" class="form-control"
+                          placeholder="Enter dependant or beneficiary name" />
+                      </div>
 
-      <div class="col-md-6 col-xl-3">
-        <label for="employeeDependantRelationship" class="form-label fw-semibold">
-          Relationship
-        </label>
-        <select id="employeeDependantRelationship" class="form-select">
-          <option value="">Select relationship</option>
-          <option value="Spouse">Spouse</option>
-          <option value="Child">Child</option>
-          <option value="Parent">Parent</option>
-          <option value="Sibling">Sibling</option>
-          <option value="Relative">Relative</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
+                      <div class="col-md-6 col-xl-3">
+                        <label for="employeeDependantRelationship" class="form-label fw-semibold">
+                          Relationship
+                        </label>
+                        <select id="employeeDependantRelationship" class="form-select">
+                          <option value="">Select relationship</option>
+                          <option value="Spouse">Spouse</option>
+                          <option value="Child">Child</option>
+                          <option value="Parent">Parent</option>
+                          <option value="Sibling">Sibling</option>
+                          <option value="Relative">Relative</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
 
-      <div class="col-md-6 col-xl-3">
-        <label for="employeeDependantDateOfBirth" class="form-label fw-semibold">
-          Date of Birth
-        </label>
-        <input type="date" id="employeeDependantDateOfBirth" class="form-control" />
-      </div>
+                      <div class="col-md-6 col-xl-3">
+                        <label for="employeeDependantDateOfBirth" class="form-label fw-semibold">
+                          Date of Birth
+                        </label>
+                        <input type="date" id="employeeDependantDateOfBirth" class="form-control" />
+                      </div>
 
-      <div class="col-md-6 col-xl-3">
-        <label for="employeeDependantPhoneNumber" class="form-label fw-semibold">
-          Phone Number
-        </label>
-        <input type="tel" id="employeeDependantPhoneNumber" class="form-control"
-          placeholder="Optional phone number" />
-      </div>
+                      <div class="col-md-6 col-xl-3">
+                        <label for="employeeDependantPhoneNumber" class="form-label fw-semibold">
+                          Phone Number
+                        </label>
+                        <input type="tel" id="employeeDependantPhoneNumber" class="form-control"
+                          placeholder="Optional phone number" />
+                      </div>
 
-<!-- EMPLOYEE BIODATA COMPLETION - STEP 6D-1
+                      <!-- EMPLOYEE BIODATA COMPLETION - STEP 6D-1
      Keep dependant/beneficiary classification simple.
      Emergency contact is already covered by Next of Kin, so it is not duplicated here. -->
-<div class="col-md-6 col-xl-3">
-  <label for="employeeDependantCoverageType" class="form-label fw-semibold">
-    Type
-  </label>
-  <select id="employeeDependantCoverageType" class="form-select">
-    <option value="">Select type</option>
-    <option value="Beneficiary">Beneficiary</option>
-    <option value="HMO Dependant">HMO Dependant</option>
-  </select>
-</div>
+                      <div class="col-md-6 col-xl-3">
+                        <label for="employeeDependantCoverageType" class="form-label fw-semibold">
+                          Type
+                        </label>
+                        <select id="employeeDependantCoverageType" class="form-select">
+                          <option value="">Select type</option>
+                          <option value="Beneficiary">Beneficiary</option>
+                          <option value="HMO Dependant">HMO Dependant</option>
+                        </select>
+                      </div>
 
-<div class="col-md-12 col-xl-9 d-flex justify-content-xl-end">
-        <button type="button" id="addEmployeeDependantRecordBtn"
-          class="btn btn-sm btn-outline-primary dashboard-action-btn">
-          <i class="bi bi-plus-circle me-1"></i>Add Beneficiary / Dependant
-        </button>
-      </div>
-    </div>
+                      <div class="col-md-12 col-xl-9 d-flex justify-content-xl-end">
+                        <button type="button" id="addEmployeeDependantRecordBtn"
+                          class="btn btn-sm btn-outline-primary dashboard-action-btn">
+                          <i class="bi bi-plus-circle me-1"></i>Add Beneficiary / Dependant
+                        </button>
+                      </div>
+                    </div>
 
-    <div class="mt-4">
-      <div class="fw-semibold mb-2">Saved Beneficiaries / Dependants</div>
+                    <div class="mt-4">
+                      <div class="fw-semibold mb-2">Saved Beneficiaries / Dependants</div>
 
-      <div id="employeeDependantsEmptyState" class="text-secondary small">
-        No beneficiaries or dependants saved for this employee yet.
-      </div>
+                      <div id="employeeDependantsEmptyState" class="text-secondary small">
+                        No beneficiaries or dependants saved for this employee yet.
+                      </div>
 
-      <div id="employeeDependantsRecordsList" class="list-group d-none"></div>
-    </div>
-  </div>
-</div>
+                      <div id="employeeDependantsRecordsList" class="list-group d-none"></div>
+                    </div>
+                  </div>
+                </div>
 
-<!-- EMPLOYEE BIODATA COMPLETION - STEP 4B
+                <!-- EMPLOYEE BIODATA COMPLETION - STEP 4B
      Address Details are stored in employee_addresses, not flat employee columns.
      The biodata form shows the two standard HR address types: Current and Permanent. -->
                 <div class="col-12">

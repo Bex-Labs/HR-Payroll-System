@@ -32,7 +32,15 @@
         </div>
 
         <div class="d-flex flex-column align-items-lg-end gap-2">
-          <div class="dashboard-avatar" id="adminInitials">AD</div>
+          <!-- ADMIN UI CLEANUP - STEP 1D
+       Admin now supports the same profile image display pattern as HR.
+       adminInitials remains the fallback when no profile image is available. -->
+          <div class="position-relative">
+            <div class="dashboard-avatar" id="adminInitials">AD</div>
+            <img id="adminHeroImage" src="" alt="Admin profile avatar" class="dashboard-avatar d-none"
+              style="width: 68px; height: 68px; object-fit: cover;" />
+          </div>
+
           <button id="logoutBtn" class="btn btn-light dashboard-action-btn">
             <i class="bi bi-box-arrow-right me-2"></i>Logout
           </button>
@@ -62,30 +70,34 @@
     <div id="pageAlert" class="alert d-none mb-4" role="alert"></div>
 
     <!-- =========================================================
-           WORKSPACE NAV
-           ========================================================= -->
-    <section class="card dashboard-section-card mb-4">
+       WORKSPACE NAV
+       ========================================================= -->
+    <!-- ADMIN UI CLEANUP - STEP 1A
+     Align Admin navigation with the cleaner HR dashboard workspace switcher.
+     Existing button IDs are preserved so current JS event bindings keep working. -->
+    <section class="card dashboard-section-card workspace-switcher-card mb-4">
       <div class="card-body p-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
           <div>
             <h2 class="section-heading h4 mb-1">Admin Workspace</h2>
             <p class="section-subtext mb-0">
-              Switch between your profile and administrator session overview.
+              Switch between your profile, platform overview, company setup, and user-to-company access.
             </p>
           </div>
 
-          <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-primary dashboard-action-btn" id="adminTabProfileBtn">
+          <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-lg-end">
+            <button type="button" class="btn btn-primary dashboard-action-btn text-nowrap" id="adminTabProfileBtn">
               <i class="bi bi-person-circle me-2"></i>Profile
             </button>
 
-            <button type="button" class="btn btn-outline-primary dashboard-action-btn" id="adminTabOverviewBtn">
-              <i class="bi bi-grid me-2"></i>Administrative Overview
+            <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
+              id="adminTabOverviewBtn">
+              <i class="bi bi-grid me-2"></i>Overview
             </button>
-            <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
-     Admin can create and maintain tenant/company records before tenant-based login is wired. -->
-            <button type="button" class="btn btn-outline-primary dashboard-action-btn" id="adminTabTenantsBtn">
-              <i class="bi bi-building me-2"></i>Tenants
+
+            <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
+              id="adminTabTenantsBtn">
+              <i class="bi bi-building me-2"></i>Companies
             </button>
           </div>
         </div>
@@ -119,10 +131,30 @@
                 </p>
 
                 <div class="small text-secondary mb-2">Profile Photo</div>
+
+                <!-- ADMIN UI CLEANUP - STEP 1D
+     Replace the Admin placeholder with real profile photo upload controls.
+     These IDs are Admin-specific and do not touch the HR dashboard. -->
                 <div class="border rounded-4 p-3 bg-light-subtle">
-                  <div class="fw-semibold mb-1">Upload coming next step</div>
-                  <div class="text-secondary small">
-                    Profile photo upload will be added in the next safe step.
+                  <div class="mb-3">
+                    <img id="adminProfileImagePreview" src="" alt="Admin profile preview"
+                      class="img-fluid rounded-circle d-none" style="width: 96px; height: 96px; object-fit: cover;" />
+                  </div>
+
+                  <div class="d-grid gap-2">
+                    <input type="file" id="adminProfileImageInput" class="form-control"
+                      accept=".png,.jpg,.jpeg,.webp" />
+
+                    <!-- ADMIN UI CLEANUP - STEP 1D RECOVERY
+     Keep upload disabled/grey until Admin selects a valid image file. -->
+                    <button type="button" id="saveAdminProfileImageBtn" class="btn btn-secondary dashboard-action-btn"
+                      disabled>
+                      <i class="bi bi-image me-2"></i>Upload Profile Photo
+                    </button>
+                  </div>
+
+                  <div class="text-secondary small mt-3">
+                    Allowed: PNG, JPG, JPEG, WEBP. Maximum file size: 5MB.
                   </div>
                 </div>
               </div>
@@ -150,7 +182,9 @@
                     <label for="adminProfileRole" class="form-label fw-semibold">
                       Role
                     </label>
-                    <input type="text" id="adminProfileRole" class="form-control" readonly />
+                    <!-- ADMIN UI CLEANUP - STEP 1D-ADMIN PARITY
+     Role is system-controlled, so keep it readonly and visually greyed out. -->
+                    <input type="text" id="adminProfileRole" class="form-control bg-light" readonly />
                   </div>
 
                   <div class="col-md-6">
@@ -162,7 +196,10 @@
                   </div>
 
                   <div class="col-12">
-                    <button type="submit" id="saveAdminProfileBtn" class="btn btn-primary dashboard-action-btn">
+                    <!-- ADMIN UI CLEANUP - STEP 1D RECOVERY
+     Keep Save Profile Changes grey until Admin edits profile text fields. -->
+                    <button type="submit" id="saveAdminProfileBtn" class="btn btn-secondary dashboard-action-btn"
+                      disabled>
                       <i class="bi bi-save me-2"></i>
                       <span id="saveAdminProfileBtnText">
                         Save Profile Changes
@@ -178,17 +215,87 @@
     </section>
 
     <!-- =========================================================
-           OVERVIEW SECTION
-           ========================================================= -->
+       OVERVIEW SECTION
+       ========================================================= -->
     <section id="adminOverviewSection" class="workspace-section d-none">
+      <!-- ADMIN UI CLEANUP - STEP 1E
+       Admin Overview should summarise platform/company access health,
+       not only repeat the signed-in user's profile values. -->
+      <section class="card dashboard-section-card mb-4 shadow-sm">
+        <div class="card-body p-4 p-lg-5">
+          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+            <div>
+              <h2 class="section-heading h4 mb-1">Platform Overview</h2>
+              <p class="section-subtext mb-0">
+                Quick view of company workspaces and user-to-company access setup.
+              </p>
+            </div>
+
+            <span class="badge rounded-pill text-bg-light border px-3 py-2">
+              Live Admin Summary
+            </span>
+          </div>
+
+          <div class="row g-4">
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Company Workspaces</div>
+                <div class="summary-tile-value" id="adminOverviewCompanyCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Active Companies</div>
+                <div class="summary-tile-value" id="adminOverviewActiveCompanyCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Linked Users</div>
+                <div class="summary-tile-value" id="adminOverviewLinkedUserCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Unlinked Users</div>
+                <div class="summary-tile-value" id="adminOverviewUnlinkedUserCount">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ADMIN UI CLEANUP - STEP 1G
+           Show a clear access-health message based on user/company linking.
+           This is display-only and uses already-loaded profile/tenant data. -->
+          <div id="adminOverviewAccessHealthPanel" class="alert alert-light border mt-4 mb-0">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+              <div>
+                <div class="fw-semibold" id="adminOverviewAccessHealthTitle">
+                  Checking user access setup...
+                </div>
+                <div class="small" id="adminOverviewAccessHealthMessage">
+                  User access setup summary will appear here.
+                </div>
+              </div>
+
+              <button type="button" id="adminOverviewOpenCompaniesBtn"
+                class="btn btn-outline-primary dashboard-action-btn text-nowrap">
+                <i class="bi bi-building me-2"></i>Open Companies
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="card dashboard-section-card mb-4 shadow-sm">
         <div class="card-body p-4 p-lg-5">
           <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
-              <h2 class="section-heading h4 mb-1">Signed-in User</h2>
+              <h2 class="section-heading h4 mb-1">Signed-in Admin</h2>
               <p class="section-subtext mb-0">
-                Current admin session details loaded from your authenticated
-                profile.
+                Current administrator session details loaded from your authenticated profile.
               </p>
             </div>
 
@@ -235,18 +342,16 @@
     </section>
 
     <!-- =========================================================
-           HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
-           Tenant / Company management is controlled by Admin.
-           This creates the company/workspace record used later by login.
+           COMPANY SETUP SECTION
            ========================================================= -->
     <section id="adminTenantsSection" class="workspace-section d-none">
       <section class="card dashboard-section-card mb-4 shadow-sm">
         <div class="card-body p-4 p-lg-5">
           <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
             <div>
-              <h2 class="section-heading h4 mb-1">Tenant / Company Setup</h2>
+              <h2 class="section-heading h4 mb-1">Company Setup</h2>
               <p class="section-subtext mb-0">
-                Create company workspaces that users will later use during login with their Company/Tenant ID.
+                Create and maintain company workspaces, company names, Company/Tenant IDs, and user-to-company access.
               </p>
             </div>
 
@@ -255,200 +360,282 @@
             </span>
           </div>
 
-          <form id="tenantCreateForm" novalidate>
-            <input type="hidden" id="editingTenantId" />
-
-            <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1D ALIGNMENT FIX
-     Align tenant setup fields from the top so helper text under Tenant ID
-     does not push Company Name and Status lower on the row. -->
-            <div class="row g-4 align-items-start">
-              <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1D ALIGNMENT
-     Keep the tenant setup fields in one clean row on large screens.
-     This mirrors the cleaner HR dashboard form layout and removes the awkward
-     empty space caused by the removed Notes field. -->
-              <div class="col-lg-5">
-                <label for="tenantCompanyName" class="form-label fw-semibold">
-                  Company Name <span class="text-danger">*</span>
-                </label>
-                <input type="text" id="tenantCompanyName" class="form-control" placeholder="Example: Alpatech Limited"
-                  required />
-                <div class="invalid-feedback">Company name is required.</div>
-              </div>
-
-              <div class="col-lg-4">
-                <label for="tenantCode" class="form-label fw-semibold">
-                  Tenant ID / Company ID <span class="text-danger">*</span>
-                </label>
-                <input type="text" id="tenantCode" class="form-control" placeholder="Example: ALPATECH"
-                  autocomplete="off" required />
-                <div class="form-text">
-                  Use letters, numbers, hyphen, or underscore only. This will be used during login.
+          <div class="border rounded-4 p-4 bg-white mb-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
+              <div class="d-flex align-items-start gap-3">
+                <div
+                  class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
+                  style="width: 40px; height: 40px;">
+                  <i class="bi bi-building-add text-primary"></i>
                 </div>
-                <div class="invalid-feedback">Tenant ID / Company ID is required.</div>
-              </div>
 
-              <div class="col-lg-3">
-                <label for="tenantStatus" class="form-label fw-semibold">
-                  Status <span class="text-danger">*</span>
-                </label>
-                <select id="tenantStatus" class="form-select" required>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-
-              <div class="col-12">
-                <div class="d-flex flex-wrap gap-2">
-                  <button type="submit" id="saveTenantBtn" class="btn btn-secondary dashboard-action-btn" disabled>
-                    <i class="bi bi-save me-2"></i>
-                    <span id="saveTenantBtnText">Create Tenant</span>
-                  </button>
-
-                  <button type="button" id="cancelTenantEditBtn"
-                    class="btn btn-outline-secondary dashboard-action-btn d-none">
-                    <i class="bi bi-x-circle me-2"></i>
-                    Cancel Edit
-                  </button>
-
-                  <button type="button" id="refreshTenantsBtn" class="btn btn-outline-primary dashboard-action-btn">
-                    <i class="bi bi-arrow-clockwise me-2"></i>
-                    Refresh Tenants
-                  </button>
+                <div>
+                  <h3 class="h5 fw-bold mb-1">Company Identity</h3>
+                  <p class="text-secondary small mb-0">
+                    Maintain company name, login Company ID, workspace status, and saved records.
+                  </p>
                 </div>
               </div>
-            </div>
-          </form>
 
-          <hr class="my-5" />
-
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
-            <div>
-              <h3 class="h5 fw-bold mb-1" id="tenantRecordsHeader">Tenant Records</h3>
-              <p class="text-secondary small mb-0">
-                Saved tenants/companies will be used later for tenant-based login and data segmentation.
-              </p>
-            </div>
-          </div>
-
-          <div id="tenantRecordsEmptyState" class="alert alert-light border mb-0">
-            No tenant/company records have been created yet.
-          </div>
-
-          <div id="tenantRecordsTableWrapper" class="table-responsive d-none">
-            <table class="table align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Company</th>
-                  <th>Tenant ID</th>
-                  <th>Status</th>
-                  <th>Updated</th>
-                  <th class="text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody id="tenantRecordsTableBody"></tbody>
-            </table>
-          </div>
-          <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
-     Link existing user profiles to a tenant/company before tenant-based
-     login validation is wired. This keeps the setup flow Admin-controlled. -->
-          <hr class="my-5" />
-
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
-            <div>
-              <h3 class="section-heading h5 mb-1">User Tenant Assignment</h3>
-              <p class="section-subtext mb-0">
-                Link a user profile to the company workspace they should belong to during login.
-              </p>
+              <button type="button" id="toggleAdminCompanyIdentityCardBtn"
+                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                aria-controls="adminCompanyIdentityCollapse">
+                <i class="bi bi-chevron-up me-2"></i>
+                <span>Collapse</span>
+              </button>
             </div>
 
-            <span class="badge rounded-pill text-bg-light border px-3 py-2">
-              Profile linking
-            </span>
-          </div>
+            <div id="adminCompanyIdentityCollapse">
+              <form id="tenantCreateForm" novalidate>
+                <input type="hidden" id="editingTenantId" />
 
-          <form id="profileTenantLinkForm" novalidate>
-            <input type="hidden" id="editingProfileTenantLinkProfileId" />
+                <div class="row g-4 align-items-start">
+                  <div class="col-lg-5">
+                    <label for="tenantCompanyName" class="form-label fw-semibold">
+                      Company Name <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" id="tenantCompanyName" class="form-control"
+                      placeholder="Example: Alpatech Limited" required />
+                    <div class="invalid-feedback">Company name is required.</div>
+                  </div>
 
-            <div class="row g-4 align-items-start">
-              <div class="col-lg-6">
-                <label for="profileTenantProfileId" class="form-label fw-semibold">
-                  User / Profile <span class="text-danger">*</span>
-                </label>
-                <select id="profileTenantProfileId" class="form-select" required>
-                  <option value="">Select user/profile</option>
-                </select>
-                <div class="invalid-feedback">Select a user/profile.</div>
-              </div>
+                  <div class="col-lg-4">
+                    <label for="tenantCode" class="form-label fw-semibold">
+                      Tenant ID / Company ID <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" id="tenantCode" class="form-control" placeholder="Example: ALPATECH"
+                      autocomplete="off" required />
+                    <div class="form-text">
+                      Use letters, numbers, hyphen, or underscore only. This will be used during login.
+                    </div>
+                    <div class="invalid-feedback">Tenant ID / Company ID is required.</div>
+                  </div>
 
-              <div class="col-lg-6">
-                <label for="profileTenantTenantId" class="form-label fw-semibold">
-                  Tenant / Company <span class="text-danger">*</span>
-                </label>
-                <select id="profileTenantTenantId" class="form-select" required>
-                  <option value="">Select tenant/company</option>
-                </select>
-                <div class="invalid-feedback">Select a tenant/company.</div>
-              </div>
+                  <div class="col-lg-3">
+                    <label for="tenantStatus" class="form-label fw-semibold">
+                      Status <span class="text-danger">*</span>
+                    </label>
+                    <select id="tenantStatus" class="form-select" required>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
 
-              <div class="col-12">
-                <div class="d-flex flex-wrap gap-2">
-                  <button type="submit" id="saveProfileTenantLinkBtn" class="btn btn-secondary dashboard-action-btn"
-                    disabled>
-                    <i class="bi bi-link-45deg me-2"></i>
-                    <span id="saveProfileTenantLinkBtnText">Save Tenant Link</span>
-                  </button>
+                  <div class="col-12">
+                    <div class="d-flex flex-wrap gap-2">
+                      <button type="submit" id="saveTenantBtn" class="btn btn-secondary dashboard-action-btn" disabled>
+                        <i class="bi bi-save me-2"></i>
+                        <span id="saveTenantBtnText">Create Company</span>
+                      </button>
 
-                  <button type="button" id="cancelProfileTenantLinkEditBtn"
-                    class="btn btn-outline-secondary dashboard-action-btn d-none">
-                    <i class="bi bi-x-circle me-2"></i>
-                    Cancel Edit
-                  </button>
+                      <button type="button" id="cancelTenantEditBtn"
+                        class="btn btn-outline-secondary dashboard-action-btn d-none">
+                        <i class="bi bi-x-circle me-2"></i>
+                        Cancel Edit
+                      </button>
 
-                  <button type="button" id="refreshProfileTenantLinksBtn"
-                    class="btn btn-outline-primary dashboard-action-btn">
-                    <i class="bi bi-arrow-clockwise me-2"></i>
-                    Refresh Links
-                  </button>
+                      <button type="button" id="refreshTenantsBtn" class="btn btn-outline-primary dashboard-action-btn">
+                        <i class="bi bi-arrow-clockwise me-2"></i>
+                        Refresh Companies
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+
+              <hr class="my-5" />
+
+              <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+                <div>
+                  <h3 class="h5 fw-bold mb-1" id="tenantRecordsHeader">Company Records</h3>
+                  <p class="text-secondary small mb-0">
+                    Saved company workspaces are used for Company/Tenant ID login and company-level data segmentation.
+                  </p>
                 </div>
               </div>
-            </div>
-          </form>
 
-          <div class="mt-5">
-            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
-              <div>
-                <h4 class="h6 fw-semibold mb-1" id="profileTenantLinksHeader">
-                  User Tenant Links
-                </h4>
-                <p class="text-secondary small mb-0">
-                  Shows which tenant/company each user profile is currently linked to.
-                </p>
+              <div id="tenantRecordsEmptyState" class="alert alert-light border mb-0">
+                No company records have been created yet.
+              </div>
+
+              <div id="tenantRecordsTableWrapper" class="table-responsive d-none">
+                <table class="table align-middle dashboard-table mb-0">
+                  <thead>
+                    <tr>
+                      <th>Company</th>
+                      <th>Company ID</th>
+                      <th>Status</th>
+                      <th>Updated</th>
+                      <th class="text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tenantRecordsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="border rounded-4 p-4 bg-white">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
+              <div class="d-flex align-items-start gap-3">
+                <div
+                  class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
+                  style="width: 40px; height: 40px;">
+                  <i class="bi bi-person-check text-primary"></i>
+                </div>
+
+                <div>
+                  <h3 class="section-heading h5 mb-1">User Access Setup</h3>
+                  <p class="section-subtext mb-0">
+                    Control which company workspace each user can access during login.
+                  </p>
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge rounded-pill text-bg-light border px-3 py-2">
+                  Access control
+                </span>
+
+                <button type="button" id="toggleAdminUserCompanyAssignmentCardBtn"
+                  class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                  aria-controls="adminUserCompanyAssignmentCollapse">
+                  <i class="bi bi-chevron-up me-2"></i>
+                  <span>Collapse</span>
+                </button>
               </div>
             </div>
 
-            <div id="profileTenantLinksEmptyState" class="alert alert-light border mb-0">
-              No user profiles are available for tenant assignment.
-            </div>
+            <div id="adminUserCompanyAssignmentCollapse">
+              <form id="profileTenantLinkForm" novalidate>
+                <input type="hidden" id="editingProfileTenantLinkProfileId" />
 
-            <div id="profileTenantLinksTableWrapper" class="table-responsive d-none">
-              <table class="table align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th>Tenant / Company</th>
-                    <th>Tenant ID</th>
-                    <th class="text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody id="profileTenantLinksTableBody"></tbody>
-              </table>
+                <div class="row g-4 align-items-start">
+                  <div class="col-lg-6">
+                    <label for="profileTenantProfileId" class="form-label fw-semibold">
+                      User / Profile <span class="text-danger">*</span>
+                    </label>
+                    <select id="profileTenantProfileId" class="form-select" required>
+                      <option value="">Select user/profile</option>
+                    </select>
+                    <div class="invalid-feedback">Select a user/profile.</div>
+                  </div>
+
+                  <div class="col-lg-6">
+                    <label for="profileTenantTenantId" class="form-label fw-semibold">
+                      Company <span class="text-danger">*</span>
+                    </label>
+                    <select id="profileTenantTenantId" class="form-select" required>
+                      <option value="">Select company</option>
+                    </select>
+                    <div class="invalid-feedback">Select a company.</div>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="d-flex flex-wrap gap-2">
+                      <button type="submit" id="saveProfileTenantLinkBtn" class="btn btn-secondary dashboard-action-btn"
+                        disabled>
+                        <i class="bi bi-link-45deg me-2"></i>
+                        <span id="saveProfileTenantLinkBtnText">Save Access Setup</span>
+                      </button>
+
+                      <button type="button" id="cancelProfileTenantLinkEditBtn"
+                        class="btn btn-outline-secondary dashboard-action-btn d-none">
+                        <i class="bi bi-x-circle me-2"></i>
+                        Cancel Edit
+                      </button>
+
+                      <button type="button" id="refreshProfileTenantLinksBtn"
+                        class="btn btn-outline-primary dashboard-action-btn">
+                        <i class="bi bi-arrow-clockwise me-2"></i>
+                        Refresh Access Records
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+
+              <div class="mt-5">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+                  <div>
+                    <h4 class="h6 fw-semibold mb-1" id="profileTenantLinksHeader">
+                      User Access Records
+                    </h4>
+                    <p class="text-secondary small mb-0">
+                      Shows the company workspace currently assigned to each user profile.
+                    </p>
+                  </div>
+                </div>
+
+                <div id="profileTenantLinksEmptyState" class="alert alert-light border mb-0">
+                  No user profiles are available for tenant assignment.
+                </div>
+
+                <div id="profileTenantLinksTableWrapper" class="table-responsive d-none">
+                  <table class="table align-middle dashboard-table mb-0">
+                    <thead>
+                      <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Company</th>
+                        <th>Company ID</th>
+                        <th class="text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="profileTenantLinksTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
     </section>
   </main>
+
+  <!-- ADMIN UI CLEANUP - STEP 1H
+       Floating Back to Top button for long Admin pages.
+       This matches the HR dashboard behaviour without changing any form data. -->
+  <button type="button" id="backToTopBtn" class="btn btn-primary rounded-circle shadow d-none" aria-label="Back to top"
+    title="Back to top"
+    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px;">
+    <i class="bi bi-arrow-up"></i>
+  </button>
+
+  <!-- ADMIN UI CLEANUP - STEP 1H
+       Floating dashboard notification for important Admin feedback.
+       This keeps save/link feedback visible even when Admin is scrolled away from the top alert. -->
+  <div id="dashboardToast" class="d-none position-fixed" role="status" aria-live="polite"
+    style="right: 1.5rem; bottom: 5rem; z-index: 1065; max-width: 430px; width: calc(100% - 3rem);">
+    <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+      <div id="dashboardToastAccent" class="bg-warning" style="height: 4px;"></div>
+
+      <div class="card-body p-3">
+        <div class="d-flex align-items-start gap-3">
+          <div id="dashboardToastIcon"
+            class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 text-bg-warning"
+            style="width: 36px; height: 36px;">
+            <i class="bi bi-exclamation-triangle"></i>
+          </div>
+
+          <div class="flex-grow-1">
+            <div id="dashboardToastTitle" class="fw-bold mb-1">
+              Notification
+            </div>
+
+            <div id="dashboardToastMessage" class="small text-secondary">
+              --
+            </div>
+          </div>
+
+          <button type="button" id="dashboardToastCloseBtn" class="btn btn-sm btn-light border rounded-circle"
+            aria-label="Close notification">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/app.js"></script>
