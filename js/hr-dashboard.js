@@ -82,6 +82,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         "bi bi-bank",
       );
 
+            // HRP-85 - STEP 1E
+      // Email integration configuration belongs under Setup, not Payroll operations.
+      // HRP-85 - STEP 1E CLEANUP
+      // Keep the Jira reference internal. The visible Setup group should use
+      // business-friendly wording, not implementation or ticket labels.
+      const communicationSetupHeader = createSetupWorkspaceGroupHeader(
+        "setupCommunicationGroupHeader",
+        "Email / Communication Setup",
+        "Manage approved validation recipients and review email delivery health.",
+        "bi bi-envelope-check",
+      );
+
       const organizationCards = [
         state.dom.organizationSettingsCardCollapse?.closest(".dashboard-section-card"),
       ].filter(Boolean);
@@ -99,6 +111,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         state.dom.employeeBankDetailsCardCollapse?.closest(".dashboard-section-card"),
       ].filter(Boolean);
 
+            // HRP-85 - STEP 1E
+      // Keep the Email Integration card in the final Setup group.
+      const communicationSetupCards = [
+        state.dom.hrp85EmailIntegrationCard,
+      ].filter(Boolean);
+
       [
         organizationSetupHeader,
         ...organizationCards,
@@ -106,6 +124,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         ...payrollSetupCards,
         paymentSetupHeader,
         ...paymentSetupCards,
+        communicationSetupHeader,
+        ...communicationSetupCards,
       ].forEach((card) => {
         card.classList.add("mb-4");
         setupSection.appendChild(card);
@@ -210,6 +230,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // are already available, so the Employee Bank Records table is populated
     // when HR opens the payroll workspace.
     await refreshEmployeeBankDetailsWorkspace();
+
+        // HRP-85 - STEP 1E
+    // Load approved Bex recipients and recent delivery logs for the
+    // Email / Communication Setup card. This does not send payslips and
+    // does not load salary, deduction, or bank data.
+    await refreshHrp85EmailIntegrationWorkspace();
 
     window.hrEditEmployee = (employeeId) => {
       startEmployeeEdit(employeeId);
@@ -328,6 +354,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 const EMPLOYEE_DOCUMENTS_BUCKET = "employee-documents";
 const PROFILE_IMAGES_BUCKET = "profile-images";
 
+// HRP-85 - STEP 1E CLEANUP
+// The validation email body is fixed so users cannot accidentally enter
+// payroll, salary, deduction, or bank information into a test email.
+const HRP85_STANDARD_VALIDATION_MESSAGE =
+  "This is a controlled email integration validation from the HR & Payroll System. No payslip, salary, deduction, or bank data is included.";
+
 // HRP-80 - TENANT DATA SEGMENTATION - STEP 7C
 // Tenant context is written by the login flow after Tenant ID validation.
 // HR-created employee records must inherit this tenant automatically.
@@ -413,6 +445,13 @@ const state = {
   // Pending to Sent/Failed when real email delivery is configured.
   payslipEmailLogs: [],
   filteredPayslipEmailLogs: [],
+
+  // HRP-85 - STEP 1E
+  // Holds approved Bex test recipients and delivery logs for the
+  // Email / Communication Setup card. These records are separate from
+  // payroll records and do not contain payslip, salary, deduction, or bank data.
+  hrp85TestRecipients: [],
+  hrp85DeliveryLogs: [],
 
   // =========================================================
   // DESCRIPTION ITEM 1
@@ -855,6 +894,33 @@ function cacheDomElements() {
     // Setup section receives existing setup/master-data cards at runtime.
     hrSetupSection: document.getElementById("hrSetupSection"),
     hrSetupLandingCard: document.getElementById("hrSetupLandingCard"),
+
+    // HRP-85 - STEP 1E
+    // Email / Communication Setup card and controls.
+    hrp85EmailIntegrationCard: document.getElementById("hrp85EmailIntegrationCard"),
+    toggleHrp85EmailIntegrationCardBtn: document.getElementById("toggleHrp85EmailIntegrationCardBtn"),
+    hrp85EmailIntegrationCardCollapse: document.getElementById("hrp85EmailIntegrationCardCollapse"),
+    hrp85RecipientCountValue: document.getElementById("hrp85RecipientCountValue"),
+    hrp85DeliveryLogCountValue: document.getElementById("hrp85DeliveryLogCountValue"),
+        // HRP-85 - STEP 1E CLEANUP
+    // Professional summary value for the latest email validation outcome.
+    hrp85LastResultValue: document.getElementById("hrp85LastResultValue"),
+    hrp85SentLogCountValue: document.getElementById("hrp85SentLogCountValue"),
+    hrp85FailedLogCountValue: document.getElementById("hrp85FailedLogCountValue"),
+    hrp85EmailIntegrationForm: document.getElementById("hrp85EmailIntegrationForm"),
+    hrp85TestRecipientSelect: document.getElementById("hrp85TestRecipientSelect"),
+    hrp85TestSubject: document.getElementById("hrp85TestSubject"),
+    hrp85TestMessage: document.getElementById("hrp85TestMessage"),
+    hrp85SendTestEmailBtn: document.getElementById("hrp85SendTestEmailBtn"),
+    hrp85RefreshRecipientsBtn: document.getElementById("hrp85RefreshRecipientsBtn"),
+    hrp85RefreshDeliveryLogsBtn: document.getElementById("hrp85RefreshDeliveryLogsBtn"),
+    hrp85EmailIntegrationStatus: document.getElementById("hrp85EmailIntegrationStatus"),
+    hrp85RecipientsEmptyState: document.getElementById("hrp85RecipientsEmptyState"),
+    hrp85RecipientsTableWrapper: document.getElementById("hrp85RecipientsTableWrapper"),
+    hrp85RecipientsTableBody: document.getElementById("hrp85RecipientsTableBody"),
+    hrp85DeliveryLogsEmptyState: document.getElementById("hrp85DeliveryLogsEmptyState"),
+    hrp85DeliveryLogsTableWrapper: document.getElementById("hrp85DeliveryLogsTableWrapper"),
+    hrp85DeliveryLogsTableBody: document.getElementById("hrp85DeliveryLogsTableBody"),
 
     hrPayrollSection: document.getElementById("hrPayrollSection"),
 
@@ -1713,6 +1779,11 @@ function getDashboardWorkingCardPairs() {
     // Payroll Records can become long, so it should collapse by default
     // and support the same double-click collapse shortcut.
     [state.dom.togglePayrollRecordsCardBtn, state.dom.payrollRecordsCardCollapse],
+
+    // HRP-85 - STEP 1E
+    // Email / Communication Setup is a real setup card and should follow
+    // the same collapse behaviour as other long HR setup cards.
+    [state.dom.toggleHrp85EmailIntegrationCardBtn, state.dom.hrp85EmailIntegrationCardCollapse],
   ];
 }
 
@@ -1856,6 +1927,587 @@ function hideDashboardToast() {
   if (state.dashboardToastTimeoutId) {
     window.clearTimeout(state.dashboardToastTimeoutId);
     state.dashboardToastTimeoutId = null;
+  }
+}
+
+// HRP-85 - STEP 1E
+// Shows local status inside Email / Communication Setup.
+// This keeps HRP-85 feedback separate from Payroll Records and Send Payslips.
+function setHrp85EmailIntegrationStatus(type = "info", message = "") {
+  const status = state.dom.hrp85EmailIntegrationStatus;
+  if (!status) return;
+
+  if (!message) {
+    status.className = "alert alert-light border d-none mb-0";
+    status.textContent = "";
+    return;
+  }
+
+  status.className = `alert alert-${type} border mb-0`;
+  status.textContent = message;
+}
+
+// HRP-85 - STEP 1E FINAL COSMETIC FIX
+// Personal mailboxes were used only for safe validation.
+// This display helper removes placeholder "Bex Test Recipient" labels from
+// the UI while keeping future official Bex recipient names database-driven.
+function getHrp85RecipientDisplayNameByEmail(email = "", fallbackName = "") {
+  const normalisedEmail = String(email || "").trim().toLowerCase();
+  const fallback = String(fallbackName || "").trim();
+
+  const personalValidationLabels = {
+    "okworidams@yahoo.com": "Personal Test Mailbox - Yahoo",
+    "okworidams@gmail.com": "Personal Test Mailbox - Gmail",
+  };
+
+  return personalValidationLabels[normalisedEmail] || fallback || normalisedEmail || "--";
+}
+
+// HRP-85 - STEP 1E
+// Keep recipient parsing tolerant of small column-name differences while the
+// table remains protected by Supabase RLS and approved-recipient policies.
+function mapHrp85TestRecipient(row = {}) {
+  const recipientEmail = String(
+    row.recipient_email ||
+    row.email ||
+    row.email_address ||
+    row.test_email ||
+    row.bex_email ||
+    "",
+  ).trim().toLowerCase();
+
+  // HRP-85 - STEP 1E FINAL COSMETIC FIX
+  // Use a clean display label for the personal validation mailboxes.
+  // Future official Bex addresses still use the saved database label.
+  const savedRecipientName = String(
+    row.recipient_name ||
+    row.full_name ||
+    row.name ||
+    row.display_name ||
+    recipientEmail,
+  ).trim();
+
+  const recipientName = getHrp85RecipientDisplayNameByEmail(
+    recipientEmail,
+    savedRecipientName,
+  );
+
+  return {
+    id: String(row.id || recipientEmail).trim(),
+    recipientName,
+    recipientEmail,
+    raw: row,
+  };
+}
+
+// HRP-85 - STEP 1E
+// Render approved test recipients in both the dropdown and review table.
+function renderHrp85TestRecipients() {
+  const select = state.dom.hrp85TestRecipientSelect;
+  const tbody = state.dom.hrp85RecipientsTableBody;
+  const recipients = Array.isArray(state.hrp85TestRecipients)
+    ? state.hrp85TestRecipients
+    : [];
+
+  if (state.dom.hrp85RecipientCountValue) {
+    state.dom.hrp85RecipientCountValue.textContent = String(recipients.length);
+  }
+
+  if (select) {
+    // HRP-85 - STEP 1E FINAL COSMETIC FIX
+    // Keep the visible wording generic because current validation uses personal
+    // mailboxes, while future Bex mailboxes can be added later.
+    select.innerHTML = `<option value="">Select approved recipient</option>`;
+
+    recipients.forEach((recipient) => {
+      const option = document.createElement("option");
+
+      option.value = recipient.recipientEmail;
+      option.dataset.recipientId = recipient.id;
+      option.dataset.recipientName = recipient.recipientName;
+      option.textContent = `${recipient.recipientName} — ${recipient.recipientEmail}`;
+
+      select.appendChild(option);
+    });
+  }
+
+  if (tbody) {
+    tbody.innerHTML = "";
+
+    if (!recipients.length) {
+      state.dom.hrp85RecipientsEmptyState?.classList.remove("d-none");
+      state.dom.hrp85RecipientsTableWrapper?.classList.add("d-none");
+    } else {
+      state.dom.hrp85RecipientsEmptyState?.classList.add("d-none");
+      state.dom.hrp85RecipientsTableWrapper?.classList.remove("d-none");
+
+      recipients.forEach((recipient) => {
+        const row = document.createElement("tr");
+
+        row.innerHTML = `
+          <td>${escapeHtml(recipient.recipientName || "--")}</td>
+          <td class="text-break">${escapeHtml(recipient.recipientEmail || "--")}</td>
+        `;
+
+        tbody.appendChild(row);
+      });
+    }
+  }
+
+  updateHrp85SendTestEmailButtonState();
+}
+
+// HRP-85 - STEP 1E
+// Load approved Bex recipients from the dedicated HRP-85 table.
+// RLS/policies remain the source of access control.
+async function refreshHrp85TestRecipients(options = {}) {
+  const { showAlert = false } = options;
+  const button = state.dom.hrp85RefreshRecipientsBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Refreshing...");
+    setHrp85EmailIntegrationStatus("info", "Loading approved Bex test recipients...");
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("email_integration_test_recipients")
+      .select("*");
+
+    if (error) throw error;
+
+    state.hrp85TestRecipients = (Array.isArray(data) ? data : [])
+      .map(mapHrp85TestRecipient)
+      .filter((recipient) => recipient.recipientEmail)
+      .sort((a, b) => a.recipientName.localeCompare(b.recipientName));
+
+    renderHrp85TestRecipients();
+
+    const message = `${state.hrp85TestRecipients.length} approved Bex test recipient(s) loaded.`;
+    setHrp85EmailIntegrationStatus(
+      state.hrp85TestRecipients.length ? "success" : "warning",
+      state.hrp85TestRecipients.length
+        ? message
+        : "No approved Bex test recipients were returned for this user.",
+    );
+
+    if (showAlert) {
+      showPageAlert(
+        state.hrp85TestRecipients.length ? "success" : "warning",
+        state.hrp85TestRecipients.length
+          ? message
+          : "No approved Bex test recipients were returned for this user.",
+      );
+    }
+  } catch (error) {
+    console.error("Error loading HRP-85 test recipients:", error);
+
+    state.hrp85TestRecipients = [];
+    renderHrp85TestRecipients();
+
+    setHrp85EmailIntegrationStatus(
+      "danger",
+      error.message || "Approved Bex test recipients could not be loaded.",
+    );
+  } finally {
+    await waitForMinimumLoadingFeedback(startedAt);
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
+// HRP-85 - STEP 1E
+// Delivery-log badge colours for the Email / Communication Setup table.
+function getHrp85DeliveryStatusBadgeClass(status = "") {
+  const normalisedStatus = normalizeText(status);
+
+  if (normalisedStatus === "sent") return "text-bg-success";
+  if (normalisedStatus === "failed") return "text-bg-danger";
+  if (normalisedStatus === "pending") return "text-bg-secondary";
+
+  return "text-bg-light border text-dark";
+}
+
+// HRP-85 - STEP 1E
+// Format delivery timestamps with date and time for validation evidence.
+function formatHrp85DateTime(value) {
+  if (!value) return "--";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// HRP-85 - STEP 1E
+// Render recent delivery logs from email_delivery_logs.
+// HRP-85 - STEP 1E CLEANUP
+// Translate technical provider errors into professional, business-readable notes.
+function getHrp85DeliveryLogDisplayNote(record = {}) {
+  const status = normalizeText(record.status || "");
+  const rawError = normalizeText(record.error_message || "");
+
+  if (status === "sent") {
+    return "Delivered successfully.";
+  }
+
+  if (status === "pending") {
+    return "Awaiting delivery confirmation.";
+  }
+
+  if (rawError.includes("insufficient authentication scopes")) {
+    return "Mailbox connection needs re-authorisation.";
+  }
+
+  if (rawError.includes("template id") || rawError.includes("template not found")) {
+    return "Email template configuration needs review.";
+  }
+
+  if (rawError.includes("non-browser") || rawError.includes("api access")) {
+    return "Email provider API access setting needs review.";
+  }
+
+  if (status === "failed") {
+    return "Delivery failed. Review email provider configuration.";
+  }
+
+  return "--";
+}
+
+// HRP-85 - STEP 1E CLEANUP
+// Update the Last Result summary tile from the newest delivery record.
+function updateHrp85LastResultSummary(logs = []) {
+  const target = state.dom.hrp85LastResultValue;
+  if (!target) return;
+
+  const latest = Array.isArray(logs) && logs.length ? logs[0] : null;
+
+  if (!latest) {
+    target.textContent = "--";
+    target.className = "summary-tile-value h6 mb-0";
+    return;
+  }
+
+  const status = normalizeText(latest.status || "");
+
+  if (status === "sent") {
+    target.textContent = "Successful";
+    target.className = "summary-tile-value h6 mb-0 text-success";
+    return;
+  }
+
+  if (status === "failed") {
+    target.textContent = "Needs Review";
+    target.className = "summary-tile-value h6 mb-0 text-danger";
+    return;
+  }
+
+  if (status === "pending") {
+    target.textContent = "Pending";
+    target.className = "summary-tile-value h6 mb-0 text-secondary";
+    return;
+  }
+
+  target.textContent = formatStatusLabel(latest.status || "--");
+  target.className = "summary-tile-value h6 mb-0";
+}
+
+// HRP-85 - STEP 1E CLEANUP
+// Render recent delivery logs without exposing raw provider errors in the UI.
+function renderHrp85DeliveryLogs(records = []) {
+  const tbody = state.dom.hrp85DeliveryLogsTableBody;
+  if (!tbody) return;
+
+  const logs = Array.isArray(records) ? records : [];
+  const sentCount = logs.filter((log) => normalizeText(log.status) === "sent").length;
+  const failedCount = logs.filter((log) => normalizeText(log.status) === "failed").length;
+
+  if (state.dom.hrp85DeliveryLogCountValue) {
+    state.dom.hrp85DeliveryLogCountValue.textContent = String(logs.length);
+  }
+
+  if (state.dom.hrp85SentLogCountValue) {
+    state.dom.hrp85SentLogCountValue.textContent = String(sentCount);
+  }
+
+  if (state.dom.hrp85FailedLogCountValue) {
+    state.dom.hrp85FailedLogCountValue.textContent = String(failedCount);
+  }
+
+  updateHrp85LastResultSummary(logs);
+
+  tbody.innerHTML = "";
+
+  if (!logs.length) {
+    state.dom.hrp85DeliveryLogsEmptyState?.classList.remove("d-none");
+    state.dom.hrp85DeliveryLogsTableWrapper?.classList.add("d-none");
+    return;
+  }
+
+  state.dom.hrp85DeliveryLogsEmptyState?.classList.add("d-none");
+  state.dom.hrp85DeliveryLogsTableWrapper?.classList.remove("d-none");
+
+  logs.forEach((record) => {
+    const recipientEmail = String(
+      record.recipient_email ||
+      record.email ||
+      record.to_email ||
+      "",
+    ).trim();
+
+    // HRP-85 - STEP 1E FINAL COSMETIC FIX
+    // Existing historical log rows may still contain old placeholder names.
+    // Display clean mailbox labels by email without rewriting delivery history.
+    const savedRecipientName = String(
+      record.recipient_name ||
+      record.full_name ||
+      record.name ||
+      "",
+    ).trim();
+
+    const recipientName = getHrp85RecipientDisplayNameByEmail(
+      recipientEmail,
+      savedRecipientName,
+    );
+
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>
+        <div class="fw-semibold">${escapeHtml(recipientName || recipientEmail || "--")}</div>
+        <div class="text-secondary small text-break">
+          ${escapeHtml(recipientEmail || "--")}
+        </div>
+      </td>
+
+      <td>
+        <span class="badge ${getHrp85DeliveryStatusBadgeClass(record.status)}">
+          ${escapeHtml(formatStatusLabel(record.status || "Pending"))}
+        </span>
+      </td>
+
+      <td class="text-nowrap">
+        ${formatHrp85DateTime(record.sent_at || record.created_at)}
+      </td>
+
+      <td class="text-break small">
+        ${escapeHtml(getHrp85DeliveryLogDisplayNote(record))}
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+}
+
+// HRP-85 - STEP 1E
+// Load recent HRP-85 delivery logs. This is read-only and does not send email.
+async function refreshHrp85DeliveryLogs(options = {}) {
+  const { showAlert = false } = options;
+  const button = state.dom.hrp85RefreshDeliveryLogsBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Refreshing...");
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from("email_delivery_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(25);
+
+    if (error) throw error;
+
+    state.hrp85DeliveryLogs = Array.isArray(data) ? data : [];
+    renderHrp85DeliveryLogs(state.hrp85DeliveryLogs);
+
+    if (showAlert) {
+      showPageAlert(
+        "success",
+        `${state.hrp85DeliveryLogs.length} HRP-85 delivery log(s) loaded.`,
+      );
+    }
+  } catch (error) {
+    console.error("Error loading HRP-85 delivery logs:", error);
+
+    state.hrp85DeliveryLogs = [];
+    renderHrp85DeliveryLogs([]);
+
+    setHrp85EmailIntegrationStatus(
+      "danger",
+      error.message || "HRP-85 delivery logs could not be loaded.",
+    );
+  } finally {
+    await waitForMinimumLoadingFeedback(startedAt);
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
+// HRP-85 - STEP 1E
+// Refresh both approved recipients and recent delivery logs.
+async function refreshHrp85EmailIntegrationWorkspace() {
+  await refreshHrp85TestRecipients();
+  await refreshHrp85DeliveryLogs();
+}
+
+
+// HRP-85 - STEP 1E CLEANUP
+// Send is enabled from recipient + subject only because the validation
+// email body is fixed and controlled by the system.
+function updateHrp85SendTestEmailButtonState() {
+  const canSend = Boolean(
+    String(state.dom.hrp85TestRecipientSelect?.value || "").trim() &&
+    String(state.dom.hrp85TestSubject?.value || "").trim(),
+  );
+
+  setPrimaryActionButtonReadyState(state.dom.hrp85SendTestEmailBtn, canSend);
+}
+
+// HRP-85 - STEP 1E CLEANUP
+// Validate only the fields HR can safely control.
+function validateHrp85EmailIntegrationForm() {
+  [
+    state.dom.hrp85TestRecipientSelect,
+    state.dom.hrp85TestSubject,
+  ].forEach((field) => {
+    field?.classList.remove("is-invalid");
+  });
+
+  const recipientEmail = String(state.dom.hrp85TestRecipientSelect?.value || "").trim();
+  const subject = String(state.dom.hrp85TestSubject?.value || "").trim();
+
+  if (!recipientEmail) {
+    state.dom.hrp85TestRecipientSelect?.classList.add("is-invalid");
+    setHrp85EmailIntegrationStatus("warning", "Select an approved recipient.");
+    return false;
+  }
+
+  if (!subject) {
+    state.dom.hrp85TestSubject?.classList.add("is-invalid");
+    setHrp85EmailIntegrationStatus("warning", "Enter a subject for the validation email.");
+    return false;
+  }
+
+  return true;
+}
+
+// HRP-85 - STEP 1E
+// Loading state for the Send Test Email button.
+function setHrp85SendTestEmailLoading(isLoading) {
+  const button = state.dom.hrp85SendTestEmailBtn;
+  if (!button) return;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
+    button.className = "btn btn-secondary dashboard-action-btn";
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Sending...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+
+  updateHrp85SendTestEmailButtonState();
+}
+
+// HRP-85 - STEP 1E
+// Send a controlled validation email through the secure Supabase Edge Function.
+// This does not touch real payslip sending and does not pass payroll data.
+async function handleHrp85EmailIntegrationSubmit() {
+  if (!validateHrp85EmailIntegrationForm()) return;
+
+  const select = state.dom.hrp85TestRecipientSelect;
+  const selectedOption = select?.selectedOptions?.[0];
+
+  const recipientEmail = String(select?.value || "").trim().toLowerCase();
+  const recipientName = String(
+    selectedOption?.dataset?.recipientName ||
+    selectedOption?.textContent?.split("—")?.[0] ||
+    recipientEmail,
+  ).trim();
+
+  const recipientId = String(selectedOption?.dataset?.recipientId || "").trim();
+  const subject = String(state.dom.hrp85TestSubject?.value || "").trim();
+  // HRP-85 - STEP 1E CLEANUP
+  // Message body is fixed to prevent payroll/salary/bank content being typed
+  // into an email validation test.
+  const message = HRP85_STANDARD_VALIDATION_MESSAGE;
+
+  try {
+    setHrp85SendTestEmailLoading(true);
+    setHrp85EmailIntegrationStatus("info", "Sending validation email...");
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.functions.invoke(
+      "hrp85-send-test-email",
+      {
+        body: {
+          recipientId,
+          recipient_id: recipientId,
+          recipientEmail,
+          recipient_email: recipientEmail,
+          recipientName,
+          recipient_name: recipientName,
+          subject,
+          message,
+        },
+      },
+    );
+
+    if (error) throw error;
+
+    if (data?.success === false) {
+      throw new Error(data?.error || data?.message || "HRP-85 test email was not sent.");
+    }
+
+    const sentStatus = data?.status || "Sent";
+
+    setHrp85EmailIntegrationStatus(
+      "success",
+`Validation email sent successfully to ${recipientEmail}. Check that mailbox, including Spam/Junk. Status: ${sentStatus}.`,
+    );
+
+    showDashboardToast(
+      "success",
+      "Email validation sent",
+      `Validation email sent to ${escapeHtml(recipientEmail)}.`,
+    );
+
+    await refreshHrp85DeliveryLogs();
+  } catch (error) {
+    console.error("Error sending HRP-85 test email:", error);
+
+    setHrp85EmailIntegrationStatus(
+      "danger",
+      error.message || "Validation email could not be sent.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Email validation failed",
+      escapeHtml(error.message || "The validation email could not be sent."),
+    );
+
+    await refreshHrp85DeliveryLogs();
+  } finally {
+    setHrp85SendTestEmailLoading(false);
   }
 }
 
@@ -4453,6 +5105,39 @@ function bindEvents() {
     hideDashboardToast();
   });
 
+    // HRP-85 - STEP 1E
+  // Bind Email / Communication Setup controls.
+  // This is a setup feature and remains separate from Send Payslips.
+  bindCardCollapseToggle(
+    state.dom.toggleHrp85EmailIntegrationCardBtn,
+    state.dom.hrp85EmailIntegrationCardCollapse,
+  );
+
+  state.dom.hrp85RefreshRecipientsBtn?.addEventListener("click", async () => {
+    await refreshHrp85TestRecipients({ showAlert: true });
+  });
+
+  state.dom.hrp85RefreshDeliveryLogsBtn?.addEventListener("click", async () => {
+    await refreshHrp85DeliveryLogs({ showAlert: true });
+  });
+
+  // HRP-85 - STEP 1E CLEANUP
+  // Message body is fixed, so only recipient and subject affect send readiness.
+  [
+    state.dom.hrp85TestRecipientSelect,
+    state.dom.hrp85TestSubject,
+  ].forEach((field) => {
+    field?.addEventListener("input", updateHrp85SendTestEmailButtonState);
+    field?.addEventListener("change", updateHrp85SendTestEmailButtonState);
+  });
+
+  state.dom.hrp85EmailIntegrationForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await handleHrp85EmailIntegrationSubmit();
+  });
+
+  updateHrp85SendTestEmailButtonState();
+
   window.addEventListener("scroll", () => {
     updateBackToTopButtonVisibility();
   });
@@ -6760,7 +7445,11 @@ function applyAssignedLineManagerSelection() {
       ? String(selectedManager.work_email || "").trim().toLowerCase()
       : String(selectedOption?.dataset?.managerEmail || "").trim().toLowerCase();
 
-  if (!managerName || !managerEmail) {
+  // QUICK FIX - APPROVER EMAIL BYPASS
+  // A manager name can exist without an approver email while workflow mailboxes
+  // are still being prepared. Keep the manager snapshot, but allow approver
+  // email to remain blank.
+  if (!managerName) {
     if (state.dom.lineManager) state.dom.lineManager.value = "";
     if (state.dom.approverEmail) state.dom.approverEmail.value = "";
     updateEmployeeSaveButtonState();
@@ -6772,7 +7461,7 @@ function applyAssignedLineManagerSelection() {
   }
 
   if (state.dom.approverEmail) {
-    state.dom.approverEmail.value = managerEmail;
+    state.dom.approverEmail.value = managerEmail || "";
   }
 
   state.dom.lineManager?.classList.remove("is-invalid");
@@ -18557,10 +19246,10 @@ function validateEmployeeForm() {
     if (!firstInvalidField) firstInvalidField = state.dom.exitDate;
   }
 
-  if (!validateEmailField(state.dom.approverEmail, { required: false })) {
-    isValid = false;
-    if (!firstInvalidField) firstInvalidField = state.dom.approverEmail;
-  }
+  // QUICK FIX - APPROVER EMAIL BYPASS
+  // Primary Approver Email is optional while approver mailboxes are not ready.
+  // It must not block employee create/update, even when empty.
+  state.dom.approverEmail?.classList.remove("is-invalid");
 
   if (!isValid && firstInvalidField?.focus) {
     firstInvalidField.focus();
@@ -18570,9 +19259,17 @@ function validateEmployeeForm() {
 }
 
 function buildEmployeePayload() {
-  const approverEmail = String(state.dom.approverEmail?.value || "")
+  // QUICK FIX - APPROVER EMAIL BYPASS
+  // Approver Email is optional for now. If it is empty or not a valid email,
+  // save it as null so employee submission is not blocked by workflow email setup.
+  const rawApproverEmail = String(state.dom.approverEmail?.value || "")
     .trim()
     .toLowerCase();
+
+  const employeeEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const approverEmail = employeeEmailPattern.test(rawApproverEmail)
+    ? rawApproverEmail
+    : "";
 
   const rawStatus = String(
     state.dom.employmentStatus?.value || "active",
@@ -21219,6 +21916,35 @@ async function refreshPayslipEmailLogs(options = {}) {
   }
 }
 
+// PAYROLL EMAIL DELIVERY - STEP 2C AUTO-REFRESH FIX
+// After the secure backend prepares payslip email logs, the first immediate
+// read can sometimes return before the new rows are visible to the UI.
+// Retry briefly so HR sees Pending rows without clicking Refresh Status.
+async function refreshPayslipEmailLogsAfterPreparation(expectedMinimumRows = 0) {
+  const minimumRows = Math.max(Number(expectedMinimumRows || 0), 0);
+  const maxAttempts = minimumRows > 0 ? 3 : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (attempt > 1) {
+      await waitForMinimumLoadingFeedback(Date.now(), 600);
+    }
+
+    await refreshPayslipEmailLogs();
+
+    const loadedRows = Array.isArray(state.filteredPayslipEmailLogs)
+      ? state.filteredPayslipEmailLogs.length
+      : 0;
+
+    if (!minimumRows || loadedRows >= minimumRows) {
+      return loadedRows;
+    }
+  }
+
+  return Array.isArray(state.filteredPayslipEmailLogs)
+    ? state.filteredPayslipEmailLogs.length
+    : 0;
+}
+
 // DESCRIPTION ITEM 4 - STEP 4
 // Resolve a readable employee name for validation and messages.
 function getPayrollRecordEmployeeName(record) {
@@ -21229,35 +21955,65 @@ function getPayrollRecordEmployeeName(record) {
   );
 }
 
-// DESCRIPTION ITEM 4 - STEP 4
-// Build one audit payload for a payroll record.
-// The status is Pending because actual delivery is handled separately
-// by the secure email sending function.
-function buildPayslipEmailLogPayload(record) {
-  return {
-    payroll_record_id: record.id,
-    employee_id: record.employee_id,
-    recipient_email: String(record.work_email || "").trim().toLowerCase(),
-    pay_cycle: String(record.pay_cycle || "").trim(),
-    status: "Pending",
-    error_message: null,
-    sent_at: null,
-  };
+// PAYROLL EMAIL DELIVERY - STEP 2C
+// Read useful messages from Supabase Edge Function errors.
+// This keeps HR-facing errors clear if the backend rejects the request.
+async function getPayslipEmailFunctionErrorMessage(error, fallbackMessage) {
+  const fallback = fallbackMessage || "Payslip email preparation could not be completed.";
+
+  if (!error) return fallback;
+
+  const baseMessage = String(error.message || fallback).trim();
+
+  try {
+    const response = error.context;
+
+    if (response && typeof response.clone === "function") {
+      const responseText = await response.clone().text();
+
+      if (responseText) {
+        try {
+          const parsed = JSON.parse(responseText);
+          return String(parsed.message || parsed.error || responseText).trim();
+        } catch {
+          return responseText;
+        }
+      }
+    }
+
+    if (response && typeof response.text === "function") {
+      const responseText = await response.text();
+
+      if (responseText) {
+        try {
+          const parsed = JSON.parse(responseText);
+          return String(parsed.message || parsed.error || responseText).trim();
+        } catch {
+          return responseText;
+        }
+      }
+    }
+  } catch (readError) {
+    console.warn("Could not read payslip email function error response:", readError);
+  }
+
+  return baseMessage;
 }
 
-// DESCRIPTION ITEM 4 - STEP 4
-// Prepare payslip email audit rows for the selected payroll action cycle.
-// This does not send emails yet. It validates the run and creates/updates
-// Pending logs so the next secure email step has a controlled queue to process.
+// PAYROLL EMAIL DELIVERY - STEP 2C
+// Prepare payslip email delivery through the secure Supabase Edge Function.
+// This replaces direct browser upsert preparation and keeps payroll email
+// workflow validation on the backend. No real emails are sent in this step.
 async function handleSendPayslipsEmailRequest() {
   clearPageAlert();
 
   const finalisedRecords = getFinalisedPayrollRecordsForSelectedActionCycle();
+  const selectedPayCycle = String(state.dom.exportPayrollPayCycle?.value || "").trim();
 
   if (!finalisedRecords.length) {
     showPageAlert(
       "warning",
-      "No finalised payroll records are available for the selected action cycle.",
+      "No finalised payroll records are available for the selected payroll action cycle.",
     );
     return;
   }
@@ -21280,12 +22036,36 @@ async function handleSendPayslipsEmailRequest() {
 
     showPageAlert(
       "warning",
-      `Payslip email preparation stopped because ${recordsMissingRequiredData.length} payroll record(s) are missing employee, email, or pay-cycle data. Affected: <strong>${escapeHtml(
+      `Payslip email preparation stopped because ${recordsMissingRequiredData.length} finalised payroll record(s) are missing employee, recipient email, or pay-cycle data. Affected: <strong>${escapeHtml(
         names.join(", "),
       )}${extraCount > 0 ? `, and ${extraCount} more` : ""}</strong>.`,
     );
 
+    showDashboardToast(
+      "warning",
+      "Payslip preparation blocked",
+      "Some finalised payroll records are missing required email preparation data.",
+    );
+
     return;
+  }
+
+  const payrollRecordIds = finalisedRecords
+    .map((record) => String(record.id || "").trim())
+    .filter(Boolean);
+
+  const requestBody = {
+    payrollRecordIds,
+    payroll_record_ids: payrollRecordIds,
+  };
+
+  // PAYROLL EMAIL DELIVERY - STEP 2C
+  // If HR selects a specific cycle, pass it to the backend.
+  // If HR selects All cycles, use the selected finalised payroll IDs only.
+  // This keeps All cycles supported without sending salary data from the browser.
+  if (selectedPayCycle) {
+    requestBody.payCycle = selectedPayCycle;
+    requestBody.pay_cycle = selectedPayCycle;
   }
 
   try {
@@ -21293,78 +22073,114 @@ async function handleSendPayslipsEmailRequest() {
     await waitForNextPaint();
 
     const supabase = getSupabaseClient();
-    const payrollRecordIds = finalisedRecords.map((record) => record.id);
 
-    const { data: existingLogs, error: existingLogsError } = await supabase
-      .from("payslip_email_logs")
-      .select("payroll_record_id, status")
-      .in("payroll_record_id", payrollRecordIds);
-
-    if (existingLogsError) throw existingLogsError;
-
-    const existingLogMap = new Map(
-      (existingLogs || []).map((log) => [
-        String(log.payroll_record_id),
-        normalizeText(log.status),
-      ]),
+    const { data, error } = await supabase.functions.invoke(
+      "send-payslips-email",
+      {
+        body: requestBody,
+      },
     );
 
-    const recordsToPrepare = finalisedRecords.filter((record) => {
-      const existingStatus = existingLogMap.get(String(record.id));
-
-      // Do not disturb rows already pending or sent.
-      // Failed rows can be prepared again by resetting them to Pending.
-      return !existingStatus || existingStatus === "failed";
-    });
-
-    const alreadyPendingCount = finalisedRecords.filter(
-      (record) => existingLogMap.get(String(record.id)) === "pending",
-    ).length;
-
-    const alreadySentCount = finalisedRecords.filter(
-      (record) => existingLogMap.get(String(record.id)) === "sent",
-    ).length;
-
-    if (!recordsToPrepare.length) {
-      showPageAlert(
-        "info",
-        `No new payslip email logs were created. ${alreadyPendingCount} record(s) are already pending and ${alreadySentCount} record(s) are already marked as sent.`,
+    if (error) {
+      const message = await getPayslipEmailFunctionErrorMessage(
+        error,
+        "The secure payslip email preparation function could not be reached.",
       );
+
+      throw new Error(message);
+    }
+
+    if (data?.success === false) {
+      throw new Error(
+        data?.message ||
+        data?.error ||
+        "Payslip email preparation was rejected by the secure backend function.",
+      );
+    }
+
+    const summary = data?.summary || {};
+    const preparedCount = Number(summary.prepared || 0);
+    const alreadyPendingCount = Number(summary.alreadyPending || 0);
+    const alreadySentCount = Number(summary.alreadySent || 0);
+    const finalisedCount = Number(summary.finalisedRecords || finalisedRecords.length || 0);
+
+    if (data?.status === "NoRecords") {
+      showPageAlert(
+        "warning",
+        data.message ||
+        "No finalised payroll records were found by the secure backend function.",
+      );
+
+      showDashboardToast(
+        "warning",
+        "No payslip records prepared",
+        "The secure backend did not find matching finalised payroll records.",
+      );
+
+      await refreshPayslipEmailLogs();
       return;
     }
 
-    const payload = recordsToPrepare.map((record) =>
-      buildPayslipEmailLogPayload(record),
-    );
-
-    const { error: upsertError } = await supabase
-      .from("payslip_email_logs")
-      .upsert(payload, {
-        onConflict: "payroll_record_id",
-      });
-
-    if (upsertError) throw upsertError;
-
     showPageAlert(
       "success",
-      `${recordsToPrepare.length} payslip email log(s) prepared for the selected payroll action cycle. ${alreadyPendingCount} record(s) were already pending and ${alreadySentCount} record(s) were already sent.`,
+      `Payslip email preparation completed securely. <strong>${preparedCount}</strong> record(s) prepared, <strong>${alreadyPendingCount}</strong> already pending, and <strong>${alreadySentCount}</strong> already sent out of <strong>${finalisedCount}</strong> finalised payroll record(s). No real payslip emails were sent in this step.`,
     );
 
-    // DESCRIPTION ITEM 4 - STEP 6
-    // Reload the status panel immediately after preparing logs so HR can see
-    // the Pending records without manually refreshing.
-    await refreshPayslipEmailLogs();
+    showDashboardToast(
+      "success",
+      "Payslip preparation complete",
+      `${preparedCount} new payslip email record(s) prepared. ${alreadyPendingCount} already pending. No real emails were sent yet.`,
+    );
+
+    // PAYROLL EMAIL DELIVERY - STEP 2C UI POLISH
+    // Open the Payslip Email Status panel before refreshing so HR sees the
+    // backend-prepared Pending rows immediately after clicking Send Payslips.
+    // This removes the need to click Refresh Status manually after preparation.
+    setDashboardCardExpanded(
+      state.dom.togglePayslipEmailLogsBtn,
+      state.dom.payslipEmailLogsCollapse,
+      true,
+    );
+
+    await waitForNextPaint();
+
+    // PAYROLL EMAIL DELIVERY - STEP 2C AUTO-REFRESH FIX
+    // Refresh until the expected prepared logs are visible, so HR does not
+    // need to click Refresh Status after pressing Send Payslips.
+    await refreshPayslipEmailLogsAfterPreparation(finalisedCount);
+
+    // PAYROLL EMAIL DELIVERY - STEP 2C UI POLISH
+    // Keep the panel open after the async refresh because shared card controls
+    // may have been touched by other workspace updates.
+    setDashboardCardExpanded(
+      state.dom.togglePayslipEmailLogsBtn,
+      state.dom.payslipEmailLogsCollapse,
+      true,
+    );
+
+    scrollToDashboardTarget(
+      state.dom.payslipEmailLogsCollapse ||
+      state.dom.refreshPayslipEmailLogsBtn,
+      80,
+    );
   } catch (error) {
-    console.error("Error preparing payslip email logs:", error);
+    console.error("Error preparing payslip email logs through Edge Function:", error);
 
     showPageAlert(
       "danger",
-      error.message || "Payslip email logs could not be prepared.",
+      error.message || "Payslip email preparation could not be completed.",
+    );
+
+    showDashboardToast(
+      "danger",
+      "Payslip preparation failed",
+      escapeHtml(error.message || "The secure payslip preparation function could not complete the request."),
     );
   } finally {
     setSendPayslipsEmailLoading(false);
   }
 }
+
 function renderPayrollSummary(records) {
   const finalisedCount = records.filter((record) => Boolean(record.is_finalised)).length;
   const grossTotal = records.reduce(

@@ -1093,15 +1093,15 @@
                 <input type="hidden" id="lineManager" autocomplete="off" />
 
                 <div class="col-md-6">
-                  <label for="approverEmail" class="form-label fw-semibold">
-                    Primary Approver Email
-                  </label>
-                  <input type="email" id="approverEmail" class="form-control bg-light"
-                    placeholder="Auto-filled from selected manager" readonly />
-                  <div class="form-text">
-                    Used for workflow routing and approvals.
-                  </div>
-                  <div class="invalid-feedback">A valid approver email is required.</div>
+<label for="approverEmail" class="form-label fw-semibold">
+  Primary Approver Email <span class="text-secondary">(optional)</span>
+</label>
+<input type="email" id="approverEmail" class="form-control bg-light"
+  placeholder="Optional - auto-filled when available" readonly />
+<div class="form-text">
+  Optional for now. Workflow routing can be completed later when approver mailboxes are available.
+</div>
+<div class="invalid-feedback">Enter a valid approver email if one is available.</div>
                 </div>
 
                 <div class="col-12">
@@ -1975,6 +1975,215 @@
               <div class="summary-tile">
                 <div class="summary-tile-label">Payments</div>
                 <div class="summary-tile-value h6 mb-0">Banks &amp; accounts</div>
+              </div>
+            </div>
+
+            <!-- HRP-85 - STEP 1E
+                 Email integration is a setup/configuration feature, so it is
+                 surfaced in Setup summary rather than Payroll operations. -->
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Email Integration</div>
+                <div class="summary-tile-value h6 mb-0">Provider &amp; test send</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HRP-85 - STEP 1E CLEANUP
+           Professional Email / Communication Setup card.
+           Jira reference remains in comments only. The user-facing UI avoids
+           technical implementation labels such as Edge Function and does not
+           expose a free-text message field that could invite payroll data entry. -->
+      <section id="hrp85EmailIntegrationCard" class="card dashboard-section-card mb-4">
+        <div class="card-body p-4 p-lg-5">
+          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
+            <div>
+              <h2 class="section-heading h4 mb-1">Email Integration</h2>
+              <p class="section-subtext mb-0">
+                Validate controlled email delivery for approved test recipients.
+              </p>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <span class="badge rounded-pill text-bg-success border px-3 py-2">
+                Configured
+              </span>
+
+              <button type="button" id="toggleHrp85EmailIntegrationCardBtn"
+                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                aria-controls="hrp85EmailIntegrationCardCollapse">
+                <i class="bi bi-chevron-up me-2"></i>
+                <span>Collapse</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="hrp85EmailIntegrationCardCollapse">
+            <div class="alert alert-light border mb-4">
+              <div class="fw-semibold mb-1">Controlled validation only</div>
+              <div class="small text-secondary">
+                Validation emails use a fixed safe test message and can only be sent to approved recipients.
+                Payroll, salary, deduction, and bank information must not be included.
+              </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+              <div class="col-md-6 col-xl-3">
+                <div class="summary-tile">
+                  <div class="summary-tile-label">Email Provider</div>
+                  <div class="summary-tile-value h6 mb-0">Configured</div>
+                </div>
+              </div>
+
+              <div class="col-md-6 col-xl-3">
+                <div class="summary-tile">
+                  <div class="summary-tile-label">Approved Recipients</div>
+                  <div class="summary-tile-value" id="hrp85RecipientCountValue">0</div>
+                </div>
+              </div>
+
+              <div class="col-md-6 col-xl-3">
+                <div class="summary-tile">
+                  <div class="summary-tile-label">Validation History</div>
+                  <div class="summary-tile-value" id="hrp85DeliveryLogCountValue">0</div>
+                </div>
+              </div>
+
+              <div class="col-md-6 col-xl-3">
+                <div class="summary-tile">
+                  <div class="summary-tile-label">Last Result</div>
+                  <div class="summary-tile-value h6 mb-0" id="hrp85LastResultValue">--</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+              <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
+                <div>
+                  <h3 class="h5 fw-bold mb-1">Send Validation Email</h3>
+                  <p class="text-secondary small mb-0">
+                    Send a controlled email to confirm that the configured email service is working.
+                  </p>
+                </div>
+
+                <button type="button" id="hrp85RefreshRecipientsBtn"
+                  class="btn btn-outline-primary dashboard-action-btn text-nowrap">
+                  <i class="bi bi-arrow-clockwise me-2"></i>
+                  Refresh Recipients
+                </button>
+              </div>
+
+              <form id="hrp85EmailIntegrationForm" novalidate>
+                <div class="row g-4">
+<div class="col-lg-12">
+  <label for="hrp85TestRecipientSelect" class="form-label fw-semibold">
+    Approved Recipient <span class="text-danger">*</span>
+  </label>
+  <select id="hrp85TestRecipientSelect" class="form-select" required>
+    <option value="">Select approved recipient</option>
+  </select>
+  <div class="invalid-feedback">
+    Select an approved recipient.
+  </div>
+</div>
+
+<!-- HRP-85 - STEP 1E FINAL CLEANUP
+     The validation email subject is system-controlled.
+     HR should only choose the approved recipient; this avoids making the
+     setup card look like a general email composer. -->
+<input type="hidden" id="hrp85TestSubject" value="Email Integration Validation" />
+
+                  <div class="col-12">
+                    <div class="border rounded-4 p-3 bg-white">
+                      <div class="fw-semibold small mb-1">Validation Message</div>
+                      <div class="small text-secondary">
+                        The system will send a fixed safe validation message. The message body is locked to prevent
+                        payroll, salary, deduction, or bank data being entered into a test email.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="d-flex flex-column flex-sm-row gap-2">
+                      <button type="submit" id="hrp85SendTestEmailBtn" class="btn btn-secondary dashboard-action-btn"
+                        disabled>
+                        <i class="bi bi-send me-2"></i>
+                        Send Validation Email
+                      </button>
+
+                      <button type="button" id="hrp85RefreshDeliveryLogsBtn"
+                        class="btn btn-outline-primary dashboard-action-btn">
+                        <i class="bi bi-list-check me-2"></i>
+                        Refresh History
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <div id="hrp85EmailIntegrationStatus" class="alert alert-light border d-none mb-0" role="status"
+                      aria-live="polite"></div>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            <div class="row g-4">
+              <div class="col-xl-5">
+                <div class="border rounded-4 p-3 p-lg-4 h-100 bg-white">
+                  <div class="mb-3">
+                    <h3 class="h6 fw-bold mb-1">Approved Recipients</h3>
+                    <p class="text-secondary small mb-0">
+                      People approved to receive validation emails.
+                    </p>
+                  </div>
+
+                  <div id="hrp85RecipientsEmptyState" class="alert alert-light border mb-0">
+                    Approved recipients will appear here after loading.
+                  </div>
+
+                  <div id="hrp85RecipientsTableWrapper" class="dashboard-table-wrap table-responsive d-none">
+                    <table class="table align-middle mb-0">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Email</th>
+                        </tr>
+                      </thead>
+                      <tbody id="hrp85RecipientsTableBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-xl-7">
+                <div class="border rounded-4 p-3 p-lg-4 h-100 bg-white">
+                  <div class="mb-3">
+                    <h3 class="h6 fw-bold mb-1">Validation History</h3>
+                    <p class="text-secondary small mb-0">
+                      Recent validation email attempts and outcomes.
+                    </p>
+                  </div>
+
+                  <div id="hrp85DeliveryLogsEmptyState" class="alert alert-light border mb-0">
+                    No delivery history has been loaded yet.
+                  </div>
+
+                  <div id="hrp85DeliveryLogsTableWrapper" class="dashboard-table-wrap table-responsive d-none">
+                    <table class="table align-middle mb-0">
+                      <thead>
+                        <tr>
+                          <th>Recipient</th>
+                          <th>Result</th>
+                          <th>Time</th>
+                          <th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody id="hrp85DeliveryLogsTableBody"></tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
