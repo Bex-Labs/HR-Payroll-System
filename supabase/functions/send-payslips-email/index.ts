@@ -99,6 +99,17 @@ function getProfileRole(profile: Record<string, unknown> | null) {
   );
 }
 
+// PAYROLL EMAIL DELIVERY - STEP 2D
+// Tenant/company ownership is required before payslip preparation.
+// User access is stored on the signed-in profile as tenant_id.
+function getProfileTenantId(profile: Record<string, unknown> | null) {
+  return cleanText(profile?.tenant_id);
+}
+
+function getRecordEmployeeId(record: Record<string, unknown>) {
+  return cleanText(record.employee_id);
+}
+
 function getEmployeeName(record: Record<string, unknown>) {
   return (
     `${cleanText(record.first_name)} ${cleanText(record.last_name)}`.trim() ||
@@ -186,6 +197,18 @@ serve(async (request) => {
       });
     }
 
+    // PAYROLL EMAIL DELIVERY - STEP 2D
+    // Payslip preparation is company-scoped. A signed-in HR/payroll user must
+    // be linked to a tenant before the backend can prepare payroll email logs.
+    const tenantId = getProfileTenantId(profile);
+
+    if (!tenantId) {
+      return jsonResponse(403, {
+        success: false,
+        message: "Your user profile is not linked to a company workspace. Payslip email preparation cannot continue.",
+      });
+    }
+
     const body = await request.json().catch(() => ({}));
 
     const payCycle = cleanText(body.payCycle || body.pay_cycle);
@@ -230,7 +253,7 @@ serve(async (request) => {
       throw payrollError;
     }
 
-    const finalisedRecords = Array.isArray(payrollRecords)
+    let finalisedRecords = Array.isArray(payrollRecords)
       ? payrollRecords
       : [];
 
@@ -239,6 +262,83 @@ serve(async (request) => {
         success: true,
         status: "NoRecords",
         message: "No finalised payroll records were found for the selected criteria.",
+        summary: {
+          finalisedRecords: 0,
+          prepared: 0,
+          alreadyPending: 0,
+          alreadySent: 0,
+          missingRequiredData: 0,
+        },
+      });
+    }
+
+    // PAYROLL EMAIL DELIVERY - STEP 2D
+    // Verify every payroll row against employees in the signed-in tenant.
+    // This backend check protects payslip preparation even if someone tries
+    // to call the Edge Function directly with another company's payroll IDs.
+    const finalisedEmployeeIds = uniqueCleanIds(
+      finalisedRecords.map((record) => getRecordEmployeeId(record)),
+    );
+
+    if (!finalisedEmployeeIds.length) {
+      return jsonResponse(400, {
+        success: false,
+        status: "MissingRequiredData",
+        message: "Payslip email preparation stopped because the selected payroll records are missing employee ownership data.",
+        summary: {
+          finalisedRecords: finalisedRecords.length,
+          prepared: 0,
+          alreadyPending: 0,
+          alreadySent: 0,
+          missingRequiredData: finalisedRecords.length,
+        },
+      });
+    }
+
+    const { data: tenantEmployees, error: tenantEmployeesError } = await supabase
+      .from("employees")
+      .select("id, tenant_id")
+      .eq("tenant_id", tenantId)
+      .in("id", finalisedEmployeeIds);
+
+    if (tenantEmployeesError) {
+      throw tenantEmployeesError;
+    }
+
+    const tenantEmployeeIdSet = new Set(
+      (tenantEmployees || [])
+        .map((employee) => cleanText(employee.id))
+        .filter(Boolean),
+    );
+
+    const tenantOwnedRecords = finalisedRecords.filter((record) =>
+      tenantEmployeeIdSet.has(getRecordEmployeeId(record)),
+    );
+
+    const outsideTenantCount = finalisedRecords.length - tenantOwnedRecords.length;
+
+    if (outsideTenantCount > 0 && payrollRecordIds.length) {
+      return jsonResponse(403, {
+        success: false,
+        status: "TenantMismatch",
+        message: "One or more selected payroll records do not belong to the current company workspace.",
+        summary: {
+          finalisedRecords: finalisedRecords.length,
+          prepared: 0,
+          alreadyPending: 0,
+          alreadySent: 0,
+          missingRequiredData: 0,
+        },
+      });
+    }
+
+    finalisedRecords = tenantOwnedRecords;
+
+    if (!finalisedRecords.length) {
+      return jsonResponse(200, {
+        success: true,
+        status: "NoRecords",
+        message: "No finalised payroll records were found for the current company workspace.",
         summary: {
           finalisedRecords: 0,
           prepared: 0,

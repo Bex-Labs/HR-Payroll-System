@@ -744,6 +744,79 @@ function applyCurrentTenantFilter(query) {
   return query.eq("tenant_id", tenantId);
 }
 
+// HRP-80 - SETUP TENANT SAFETY FIX
+// These helpers keep Setup workspace data scoped to the signed-in company workspace.
+// The Employee table is already tenant-filtered, so employee-linked setup records
+// must be filtered through the current tenant's employee ids.
+function getCurrentTenantEmployeeIdSetForSetupTables() {
+  return new Set(
+    (Array.isArray(state.employees) ? state.employees : [])
+      .map((employee) => String(employee.id || "").trim())
+      .filter(Boolean),
+  );
+}
+
+// HRP-80 - SETUP TENANT SAFETY FIX
+// Supabase .in() needs an array, while render/filter checks need a Set.
+function getCurrentTenantEmployeeIdsForSetupTables() {
+  return Array.from(getCurrentTenantEmployeeIdSetForSetupTables());
+}
+
+// HRP-80 - SETUP TENANT SAFETY FIX
+// Allowances, statutory deductions, other deductions, and overrides are linked
+// through Payroll Master Records, so they must inherit the tenant boundary from
+// the already-filtered Payroll Master list.
+function getCurrentTenantPayrollMasterIdSetForSetupTables() {
+  return new Set(
+    (Array.isArray(state.payrollMasterRecords) ? state.payrollMasterRecords : [])
+      .map((record) => String(record.id || "").trim())
+      .filter(Boolean),
+  );
+}
+
+// HRP-80 - SETUP TENANT SAFETY FIX
+// Supabase .in() needs an array version of the current workspace Payroll Master ids.
+function getCurrentTenantPayrollMasterIdsForSetupTables() {
+  return Array.from(getCurrentTenantPayrollMasterIdSetForSetupTables());
+}
+
+// HRP-80 - SETUP TENANT SAFETY FIX
+// Email validation records are not employee-linked, so only rows explicitly tagged
+// with the current tenant should be shown in this workspace.
+// Untagged/global rows are hidden to prevent cross-company leakage.
+function isHrp85RecordForCurrentTenant(record = {}) {
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+
+  return String(record.tenant_id || "").trim() === tenantId;
+}
+
+// HRP-80 - PAYROLL TENANT SAFETY FIX
+// Payroll views/logs are tied to employees, so use the already tenant-filtered
+// employee list as the safe boundary for Payroll Records and Payslip Email Status.
+// This prevents one company workspace from seeing another company's payroll rows.
+function getCurrentTenantEmployeeIdSet() {
+  return new Set(
+    (Array.isArray(state.employees) ? state.employees : [])
+      .map((employee) => String(employee.id || "").trim())
+      .filter(Boolean),
+  );
+}
+
+function getCurrentTenantEmployeeIds() {
+  return Array.from(getCurrentTenantEmployeeIdSet());
+}
+
+function isRecordForCurrentTenantEmployee(record = {}) {
+  const currentTenantEmployeeIds = getCurrentTenantEmployeeIdSet();
+  const employeeId = String(
+    record.employee_id ||
+    record.employees?.id ||
+    "",
+  ).trim();
+
+  return Boolean(employeeId && currentTenantEmployeeIds.has(employeeId));
+}
+
 function getCurrentTenantIdForCompanyIdentity() {
   // ADMIN COMPANY IDENTITY WIRING - STEP 1M-B
   // Prefer the validated login tenant context, then fall back to the latest
@@ -2083,29 +2156,35 @@ async function refreshHrp85TestRecipients(options = {}) {
 
     if (error) throw error;
 
-    state.hrp85TestRecipients = (Array.isArray(data) ? data : [])
-      .map(mapHrp85TestRecipient)
-      .filter((recipient) => recipient.recipientEmail)
-      .sort((a, b) => a.recipientName.localeCompare(b.recipientName));
+// HRP-80 - SETUP TENANT SAFETY FIX
+// Hide global/untagged validation recipients from this company workspace.
+// Proper long-term ownership should also be enforced by tenant_id + RLS.
+const tenantScopedRows = (Array.isArray(data) ? data : [])
+  .filter(isHrp85RecordForCurrentTenant);
 
-    renderHrp85TestRecipients();
+state.hrp85TestRecipients = tenantScopedRows
+  .map(mapHrp85TestRecipient)
+  .filter((recipient) => recipient.recipientEmail)
+  .sort((a, b) => a.recipientName.localeCompare(b.recipientName));
 
-    const message = `${state.hrp85TestRecipients.length} approved Bex test recipient(s) loaded.`;
-    setHrp85EmailIntegrationStatus(
-      state.hrp85TestRecipients.length ? "success" : "warning",
-      state.hrp85TestRecipients.length
-        ? message
-        : "No approved Bex test recipients were returned for this user.",
-    );
+renderHrp85TestRecipients();
 
-    if (showAlert) {
-      showPageAlert(
-        state.hrp85TestRecipients.length ? "success" : "warning",
-        state.hrp85TestRecipients.length
-          ? message
-          : "No approved Bex test recipients were returned for this user.",
-      );
-    }
+const message = `${state.hrp85TestRecipients.length} approved validation recipient(s) loaded for this company workspace.`;
+setHrp85EmailIntegrationStatus(
+  state.hrp85TestRecipients.length ? "success" : "warning",
+  state.hrp85TestRecipients.length
+    ? message
+    : "No approved validation recipients are configured for this company workspace.",
+);
+
+if (showAlert) {
+  showPageAlert(
+    state.hrp85TestRecipients.length ? "success" : "warning",
+    state.hrp85TestRecipients.length
+      ? message
+      : "No approved validation recipients are configured for this company workspace.",
+  );
+}
   } catch (error) {
     console.error("Error loading HRP-85 test recipients:", error);
 
@@ -2331,13 +2410,17 @@ async function refreshHrp85DeliveryLogs(options = {}) {
 
     if (error) throw error;
 
-    state.hrp85DeliveryLogs = Array.isArray(data) ? data : [];
-    renderHrp85DeliveryLogs(state.hrp85DeliveryLogs);
+// HRP-80 - SETUP TENANT SAFETY FIX
+// Hide delivery logs that are not explicitly tagged to the current company workspace.
+state.hrp85DeliveryLogs = (Array.isArray(data) ? data : [])
+  .filter(isHrp85RecordForCurrentTenant);
+
+renderHrp85DeliveryLogs(state.hrp85DeliveryLogs);
 
     if (showAlert) {
       showPageAlert(
         "success",
-        `${state.hrp85DeliveryLogs.length} HRP-85 delivery log(s) loaded.`,
+`${state.hrp85DeliveryLogs.length} validation delivery log(s) loaded for this company workspace.`
       );
     }
   } catch (error) {
@@ -2448,12 +2531,18 @@ async function handleHrp85EmailIntegrationSubmit() {
     recipientEmail,
   ).trim();
 
-  const recipientId = String(selectedOption?.dataset?.recipientId || "").trim();
-  const subject = String(state.dom.hrp85TestSubject?.value || "").trim();
-  // HRP-85 - STEP 1E CLEANUP
-  // Message body is fixed to prevent payroll/salary/bank content being typed
-  // into an email validation test.
-  const message = HRP85_STANDARD_VALIDATION_MESSAGE;
+const subject = String(state.dom.hrp85TestSubject?.value || "").trim();
+// HRP-85 - STEP 1E CLEANUP
+// Message body is fixed to prevent payroll/salary/bank content being typed
+// into an email validation test.
+const message = HRP85_STANDARD_VALIDATION_MESSAGE;
+
+// HRP-85 - TENANT OWNERSHIP FIX
+// Send the active company workspace context to the secure Edge Function.
+// The Edge Function must also validate and persist this server-side.
+const tenantContext = getCurrentTenantContext();
+const tenantId = getRequiredTenantIdForHrEmployeeData();
+const tenantCode = String(tenantContext?.tenantCode || "").trim();
 
   try {
     setHrp85SendTestEmailLoading(true);
@@ -2464,16 +2553,23 @@ async function handleHrp85EmailIntegrationSubmit() {
     const { data, error } = await supabase.functions.invoke(
       "hrp85-send-test-email",
       {
-        body: {
-          recipientId,
-          recipient_id: recipientId,
-          recipientEmail,
-          recipient_email: recipientEmail,
-          recipientName,
-          recipient_name: recipientName,
-          subject,
-          message,
-        },
+body: {
+  recipientId,
+  recipient_id: recipientId,
+  recipientEmail,
+  recipient_email: recipientEmail,
+  recipientName,
+  recipient_name: recipientName,
+  subject,
+  message,
+
+  // HRP-85 - TENANT OWNERSHIP FIX
+  // Keep validation recipients/logs tied to the active company workspace.
+  tenantId,
+  tenant_id: tenantId,
+  tenantCode,
+  tenant_code: tenantCode,
+},
       },
     );
 
@@ -3166,9 +3262,27 @@ async function loadPayrollOtherDeductions() {
   const supabase = getSupabaseClient();
 
   try {
+    const currentTenantPayrollMasterIds =
+      getCurrentTenantPayrollMasterIdsForSetupTables();
+
+    const currentTenantPayrollMasterIdSet =
+      getCurrentTenantPayrollMasterIdSetForSetupTables();
+
+    // HRP-80 - SETUP TENANT SAFETY FIX
+    // Other deductions are linked to Payroll Master Records. They must only
+    // appear when the parent Payroll Master belongs to the current company
+    // workspace. This prevents old deductions showing in BEX/ALP/PINE incorrectly.
+    if (!currentTenantPayrollMasterIds.length) {
+      state.payrollOtherDeductions = [];
+      state.filteredPayrollOtherDeductions = [];
+      renderPayrollOtherDeductionRecords([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("payroll_other_deductions")
       .select("*")
+      .in("payroll_master_record_id", currentTenantPayrollMasterIds)
       .order("start_date", { ascending: false })
       .order("updated_at", { ascending: false });
 
@@ -3176,7 +3290,16 @@ async function loadPayrollOtherDeductions() {
       throw error;
     }
 
-    state.payrollOtherDeductions = Array.isArray(data) ? data : [];
+    state.payrollOtherDeductions = Array.isArray(data)
+      ? data.filter((record) => {
+          const payrollMasterId = String(
+            record.payroll_master_record_id || "",
+          ).trim();
+
+          return currentTenantPayrollMasterIdSet.has(payrollMasterId);
+        })
+      : [];
+
     applyPayrollOtherDeductionSearch();
   } catch (error) {
     console.error("Error loading other deductions:", error);
@@ -4242,9 +4365,27 @@ async function loadPayrollEmployeeOverrides() {
   const supabase = getSupabaseClient();
 
   try {
+    const currentTenantPayrollMasterIds =
+      getCurrentTenantPayrollMasterIdsForSetupTables();
+
+    const currentTenantPayrollMasterIdSet =
+      getCurrentTenantPayrollMasterIdSetForSetupTables();
+
+    // HRP-80 - SETUP TENANT SAFETY FIX
+    // Employee payroll overrides are linked to Payroll Master Records.
+    // Only show overrides whose parent Payroll Master belongs to the current
+    // company workspace.
+    if (!currentTenantPayrollMasterIds.length) {
+      state.payrollEmployeeOverrides = [];
+      state.filteredPayrollEmployeeOverrides = [];
+      renderPayrollEmployeeOverrideRecords([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("payroll_employee_overrides")
       .select("*")
+      .in("payroll_master_record_id", currentTenantPayrollMasterIds)
       .order("effective_date", { ascending: false })
       .order("updated_at", { ascending: false });
 
@@ -4252,7 +4393,16 @@ async function loadPayrollEmployeeOverrides() {
       throw error;
     }
 
-    state.payrollEmployeeOverrides = Array.isArray(data) ? data : [];
+    state.payrollEmployeeOverrides = Array.isArray(data)
+      ? data.filter((record) => {
+          const payrollMasterId = String(
+            record.payroll_master_record_id || "",
+          ).trim();
+
+          return currentTenantPayrollMasterIdSet.has(payrollMasterId);
+        })
+      : [];
+
     applyPayrollEmployeeOverrideSearch();
   } catch (error) {
     console.error("Error loading employee payroll overrides:", error);
@@ -11408,9 +11558,23 @@ async function loadPayrollStatutoryDeductions() {
   const supabase = getSupabaseClient();
 
   try {
+    const currentTenantPayrollMasterIds = getCurrentTenantPayrollMasterIdsForSetupTables();
+    const currentTenantPayrollMasterIdSet = getCurrentTenantPayrollMasterIdSetForSetupTables();
+
+    // HRP-80 - SETUP TENANT SAFETY FIX
+    // Statutory deductions are Payroll Master linked. They must not appear
+    // outside the company workspace that owns the parent Payroll Master record.
+    if (!currentTenantPayrollMasterIds.length) {
+      state.payrollStatutoryDeductions = [];
+      state.filteredPayrollStatutoryDeductions = [];
+      renderPayrollStatutoryRecords([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("payroll_statutory_deductions")
       .select("*")
+      .in("payroll_master_record_id", currentTenantPayrollMasterIds)
       .order("effective_date", { ascending: false })
       .order("updated_at", { ascending: false });
 
@@ -11418,7 +11582,13 @@ async function loadPayrollStatutoryDeductions() {
       throw error;
     }
 
-    state.payrollStatutoryDeductions = Array.isArray(data) ? data : [];
+    state.payrollStatutoryDeductions = Array.isArray(data)
+      ? data.filter((record) => {
+        const payrollMasterId = String(record.payroll_master_record_id || "").trim();
+        return currentTenantPayrollMasterIdSet.has(payrollMasterId);
+      })
+      : [];
+
     applyPayrollStatutorySearch();
   } catch (error) {
     console.error("Error loading statutory deductions:", error);
@@ -12322,6 +12492,19 @@ async function loadPayrollAllowanceComponents() {
   const supabase = getSupabaseClient();
 
   try {
+    const currentTenantPayrollMasterIds = getCurrentTenantPayrollMasterIdsForSetupTables();
+    const currentTenantPayrollMasterIdSet = getCurrentTenantPayrollMasterIdSetForSetupTables();
+
+    // HRP-80 - SETUP TENANT SAFETY FIX
+    // Allowances are linked to Payroll Master Records. Do not show allowance
+    // rows unless their parent Payroll Master belongs to this workspace.
+    if (!currentTenantPayrollMasterIds.length) {
+      state.payrollAllowanceComponents = [];
+      state.filteredPayrollAllowanceComponents = [];
+      renderPayrollAllowanceRecords([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("payroll_allowance_components")
       .select(`
@@ -12338,25 +12521,36 @@ async function loadPayrollAllowanceComponents() {
           )
         )
       `)
+      .in("payroll_master_record_id", currentTenantPayrollMasterIds)
       .order("effective_date", { ascending: false })
       .order("updated_at", { ascending: false });
 
     if (error) throw error;
 
     const rows = Array.isArray(data)
-      ? data.map((record) => {
-        const masterRecord = record.payroll_master_records || {};
-        const employee = masterRecord.employees || {};
+      ? data
+        .filter((record) => {
+          const payrollMasterId = String(
+            record.payroll_master_record_id ||
+            record.payroll_master_records?.id ||
+            "",
+          ).trim();
 
-        return {
-          ...record,
-          payroll_master_grade: masterRecord.grade || "",
-          payroll_master_effective_date: masterRecord.salary_effective_date || "",
-          first_name: employee.first_name || "",
-          last_name: employee.last_name || "",
-          work_email: employee.work_email || "",
-        };
-      })
+          return currentTenantPayrollMasterIdSet.has(payrollMasterId);
+        })
+        .map((record) => {
+          const masterRecord = record.payroll_master_records || {};
+          const employee = masterRecord.employees || {};
+
+          return {
+            ...record,
+            payroll_master_grade: masterRecord.grade || "",
+            payroll_master_effective_date: masterRecord.salary_effective_date || "",
+            first_name: employee.first_name || "",
+            last_name: employee.last_name || "",
+            work_email: employee.work_email || "",
+          };
+        })
       : [];
 
     state.payrollAllowanceComponents = rows;
@@ -18555,9 +18749,15 @@ function buildBatchPayrollRecordPayload(preparedRow, payrollReference = "") {
 async function getExistingBatchPayrollRecordsForPeriod(payCycle, employeeIds = []) {
   const cleanPayCycle = String(payCycle || "").trim();
 
+  const currentTenantEmployeeIds = getCurrentTenantEmployeeIdSet();
+
+  // HRP-80 - PAYROLL TENANT SAFETY FIX
+  // Duplicate payroll checks must only consider employees in the current
+  // company workspace. Another company's payroll records must not block
+  // or influence this tenant's payroll run.
   const cleanEmployeeIds = employeeIds
     .map((employeeId) => String(employeeId || "").trim())
-    .filter(Boolean);
+    .filter((employeeId) => employeeId && currentTenantEmployeeIds.has(employeeId));
 
   if (!cleanPayCycle || !cleanEmployeeIds.length) {
     return [];
@@ -18575,7 +18775,8 @@ async function getExistingBatchPayrollRecordsForPeriod(payCycle, employeeIds = [
     throw new Error(error.message);
   }
 
-  return Array.isArray(data) ? data : [];
+  return (Array.isArray(data) ? data : [])
+    .filter(isRecordForCurrentTenantEmployee);
 }
 
 function renderEmployeeSummary(employees) {
@@ -20334,14 +20535,32 @@ async function loadPayrollRecords() {
   const supabase = getSupabaseClient();
 
   try {
+    // HRP-80 - PAYROLL TENANT SAFETY FIX
+    // Payroll rows are loaded only for employees visible in the current
+    // tenant workspace. This prevents cross-company payroll visibility
+    // before payslip sending/export is allowed.
+    const currentTenantEmployeeIds = getCurrentTenantEmployeeIds();
+
+    if (!currentTenantEmployeeIds.length) {
+      state.payrollRecords = [];
+      state.filteredPayrollRecords = [];
+
+      populateExportPayrollPayCycleOptions([]);
+      applyPayrollSearch();
+      updateSendPayslipsButtonState();
+      return;
+    }
+
     const { data, error } = await supabase
       .from("hr_payroll_overview")
       .select("*")
+      .in("employee_id", currentTenantEmployeeIds)
       .order("pay_date", { ascending: false });
 
     if (error) throw error;
 
-    const rows = Array.isArray(data) ? data : [];
+    const rows = (Array.isArray(data) ? data : [])
+      .filter(isRecordForCurrentTenantEmployee);
 
     rows.sort((a, b) => {
       const aUpdated = new Date(a.updated_at || a.created_at || a.pay_date || 0).getTime();
@@ -21002,6 +21221,20 @@ async function refreshEmployeeBankDetailsWorkspace() {
   const supabase = getSupabaseClient();
 
   try {
+    const currentTenantEmployeeIds = getCurrentTenantEmployeeIdsForSetupTables();
+    const currentTenantEmployeeIdSet = getCurrentTenantEmployeeIdSetForSetupTables();
+
+    // HRP-80 - SETUP TENANT SAFETY FIX
+    // Employee bank details are employee-linked payment records.
+    // A new company workspace must not inherit bank details from another tenant.
+    if (!currentTenantEmployeeIds.length) {
+      state.employeeBankDetailsRecords = [];
+      state.filteredEmployeeBankDetailsRecords = [];
+      renderEmployeeBankDetailsTable([]);
+      renderPayrollBankReadiness(state.dom.payrollEmployeeId?.value || "");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("employee_bank_details")
       .select(`
@@ -21020,29 +21253,40 @@ async function refreshEmployeeBankDetailsWorkspace() {
           status
         )
       `)
+      .in("employee_id", currentTenantEmployeeIds)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
 
     state.employeeBankDetailsRecords = Array.isArray(data)
-      ? data.map((record) => {
-        const employee = record.employees || {};
-        const bank = record.bank_directory || {};
+      ? data
+        .filter((record) => {
+          const employeeId = String(
+            record.employee_id ||
+            record.employees?.id ||
+            "",
+          ).trim();
 
-        const employeeName =
-          `${employee.first_name || ""} ${employee.last_name || ""}`.trim() ||
-          employee.work_email ||
-          "Unknown Employee";
+          return currentTenantEmployeeIdSet.has(employeeId);
+        })
+        .map((record) => {
+          const employee = record.employees || {};
+          const bank = record.bank_directory || {};
 
-        return {
-          ...record,
-          employee_name: employeeName,
-          employee_email: employee.work_email || "",
-          employee_number: employee.employee_number || "",
-          bank_name: bank.bank_name || "",
-          bank_directory_status: bank.status || "",
-        };
-      })
+          const employeeName =
+            `${employee.first_name || ""} ${employee.last_name || ""}`.trim() ||
+            employee.work_email ||
+            "Unknown Employee";
+
+          return {
+            ...record,
+            employee_name: employeeName,
+            employee_email: employee.work_email || "",
+            employee_number: employee.employee_number || "",
+            bank_name: bank.bank_name || "",
+            bank_directory_status: bank.status || "",
+          };
+        })
       : [];
 
     applyEmployeeBankDetailsSearch();
@@ -21439,6 +21683,24 @@ async function loadPayrollMasterRecords() {
   const supabase = getSupabaseClient();
 
   try {
+    const currentTenantEmployeeIds = getCurrentTenantEmployeeIdsForSetupTables();
+    const currentTenantEmployeeIdSet = getCurrentTenantEmployeeIdSetForSetupTables();
+
+    // HRP-80 - SETUP TENANT SAFETY FIX
+    // Payroll Master Records are employee-linked salary setup records.
+    // If this workspace has no employees, it must not show records from another tenant.
+    if (!currentTenantEmployeeIds.length) {
+      state.payrollMasterRecords = [];
+      state.filteredPayrollMasterRecords = [];
+      renderPayrollMasterRecords([]);
+
+      if (state.dom.employeeRecordsTableBody) {
+        applyEmployeeSearch();
+      }
+
+      return;
+    }
+
     const { data, error } = await supabase
       .from("payroll_master_records")
       .select(`
@@ -21456,18 +21718,29 @@ async function loadPayrollMasterRecords() {
           status
         )
       `)
+      .in("employee_id", currentTenantEmployeeIds)
       .order("salary_effective_date", { ascending: false })
       .order("updated_at", { ascending: false });
 
     if (error) throw error;
 
     const rows = Array.isArray(data)
-      ? data.map((record) => ({
-        ...record,
-        first_name: record.employees?.first_name || "",
-        last_name: record.employees?.last_name || "",
-        work_email: record.employees?.work_email || "",
-      }))
+      ? data
+        .filter((record) => {
+          const employeeId = String(
+            record.employee_id ||
+            record.employees?.id ||
+            "",
+          ).trim();
+
+          return currentTenantEmployeeIdSet.has(employeeId);
+        })
+        .map((record) => ({
+          ...record,
+          first_name: record.employees?.first_name || "",
+          last_name: record.employees?.last_name || "",
+          work_email: record.employees?.work_email || "",
+        }))
       : [];
 
     state.payrollMasterRecords = rows;
@@ -21491,6 +21764,8 @@ async function loadPayrollMasterRecords() {
     renderPayrollMasterRecords([]);
   }
 }
+
+
 // =========================================================
 // DESCRIPTION ITEM 1
 // Populate employee options for Payroll Master Data form
@@ -21872,6 +22147,26 @@ async function refreshPayslipEmailLogs(options = {}) {
 
     const supabase = getSupabaseClient();
 
+    // HRP-80 - PAYROLL TENANT SAFETY FIX
+    // Payslip Email Status must only show logs for employees in the current
+    // tenant workspace. This prevents cross-company payslip audit visibility.
+    const currentTenantEmployeeIds = getCurrentTenantEmployeeIds();
+
+    if (!currentTenantEmployeeIds.length) {
+      state.payslipEmailLogs = [];
+      state.filteredPayslipEmailLogs = [];
+      renderPayslipEmailLogs([]);
+
+      if (showAlert) {
+        showPageAlert(
+          "info",
+          "No employees are available in the current company workspace, so no payslip email status records were loaded.",
+        );
+      }
+
+      return;
+    }
+
     let query = supabase
       .from("payslip_email_logs")
       .select(`
@@ -21884,6 +22179,7 @@ async function refreshPayslipEmailLogs(options = {}) {
           employee_number
         )
       `)
+      .in("employee_id", currentTenantEmployeeIds)
       .order("created_at", { ascending: false });
 
     if (selectedPayCycle) {
@@ -21894,7 +22190,9 @@ async function refreshPayslipEmailLogs(options = {}) {
 
     if (error) throw error;
 
-    state.payslipEmailLogs = Array.isArray(data) ? data : [];
+    state.payslipEmailLogs = (Array.isArray(data) ? data : [])
+      .filter(isRecordForCurrentTenantEmployee);
+
     state.filteredPayslipEmailLogs = [...state.payslipEmailLogs];
 
     renderPayslipEmailLogs(state.filteredPayslipEmailLogs);
