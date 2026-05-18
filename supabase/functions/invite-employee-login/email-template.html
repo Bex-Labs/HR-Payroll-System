@@ -1,0 +1,17 @@
+<h2>Welcome to {{ .Data.company_name }}</h2>
+
+<p>Hi {{ .Data.full_name }},</p>
+
+<p>You've been invited to join the HR & Payroll System.
+    Your work email is <strong>{{ .Email }}</strong>.</p>
+
+<p>Click the button below to set your password and get started:</p>
+
+<p>
+    <a href="{{ .ConfirmationURL }}" style="background:#4F46E5;color:white;padding:12px 24px;
+     border-radius:6px;text-decoration:none;display:inline-block;">
+        Set My Password
+    </a>
+</p>
+
+<p>If you didn't expect this, you can ignore this email.</p>
