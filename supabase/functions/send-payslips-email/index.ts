@@ -172,9 +172,12 @@ async function sendPayslipEmailViaEmailJs({
           // PAYROLL SECURE DELIVERY - STEP 2F-3B-3
           // Non-sensitive EmailJS params for the protected employee payroll page.
           payslip_access_url: payslipAccessUrl,
+
+          // PAYROLL SECURE DELIVERY - STEP 2F-3B-4C
+          // Short client-ready button label for the EmailJS template.
           payslip_access_label: payslipAccessUrl
-            ? "Sign in to view your payslip securely"
-            : "Sign in to the HR & Payroll System to view your payslip",
+            ? "View payslip securely"
+            : "Open HR & Payroll System",
 
           sent_at: new Date().toISOString(),
         },
@@ -277,6 +280,10 @@ function buildPayslipEmailSubject(record: Record<string, unknown>) {
   return `Payslip Notification - ${payCycle}`.slice(0, 180);
 }
 
+// PAYROLL EMAIL DELIVERY - STEP 2F-3B-4D
+// Official client-ready payslip notification wording.
+// Paragraphs are deliberately separated with blank lines so the EmailJS template
+// renders the email like a formal notification instead of a compressed text block.
 function buildPayslipEmailMessage(
   record: Record<string, unknown>,
   payslipAccessUrl: string,
@@ -286,22 +293,16 @@ function buildPayslipEmailMessage(
   const payDate = cleanText(record.pay_date);
 
   const accessInstruction = payslipAccessUrl
-    ? `To view your payslip securely, sign in here: ${payslipAccessUrl}`
-    : "To view your payslip securely, sign in to the HR & Payroll System and open Payroll.";
+    ? "Please use the secure button below to access your payslip."
+    : "Please sign in to the HR & Payroll System and open Payroll to access your payslip.";
 
   return [
     `Hello ${employeeName},`,
-    "",
-    `Your payslip notification for ${payCycle}${payDate ? `, pay date ${payDate}` : ""}, has been processed by the HR & Payroll System.`,
-    "",
+    `Your payslip for ${payCycle} is now ready to view.${payDate ? `\nPay date: ${payDate}.` : ""}`,
     accessInstruction,
-    "",
-    "No salary, deduction, net pay, or bank details are included in this email body.",
-    "",
-    "For any payroll queries, please contact HR/Payroll.",
-    "",
-    "This is an automated HR & Payroll System email.",
-  ].join("\n");
+    "For payroll queries, please contact HR/Payroll.",
+    "This is an automated notification from the HR & Payroll System.",
+  ].join("\n\n");
 }
 
 async function updatePayslipEmailLogStatus(
