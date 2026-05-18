@@ -120,8 +120,11 @@ serve(async (req: Request) => {
 
     // The redirect URL lands the employee on the login page after they set
     // their password via the magic link.
-    const appOrigin = cleanText(req.headers.get("origin")) ||
-      cleanText(Deno.env.get("APP_URL"));
+    // APP_URL (set as a Supabase secret) always takes priority so the link
+    // in the email points to the live app, not wherever HR happens to be
+    // running the dashboard from (which could be localhost).
+    const appOrigin = cleanText(Deno.env.get("APP_URL")) ||
+      cleanText(req.headers.get("origin"));
     const redirectTo = appOrigin
       ? `${appOrigin}/index.html`
       : "/index.html";

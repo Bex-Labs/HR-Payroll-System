@@ -38,6 +38,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.adminEditProfileTenantLink = (profileId) => {
       startProfileTenantLinkEdit(profileId);
     };
+
+    // ADMIN PASSWORD RESET
+    // Expose reset password action for the user access records table.
+    window.adminResetUserPassword = (profileId) => {
+      openResetPasswordModal(profileId);
+    };
   } catch (error) {
     console.error("Error initialising admin dashboard:", error);
     showPageAlert(
@@ -84,6 +90,10 @@ const state = {
   // ADMIN UI CLEANUP - STEP 1H
   // Timer id for floating dashboard notification auto-hide.
   dashboardToastTimeoutId: null,
+
+  // ADMIN PASSWORD RESET
+  // Holds the profile currently targeted for a password reset.
+  currentResetTarget: null,
 
   dom: {},
 };
@@ -211,6 +221,17 @@ function cacheDomElements() {
     profileTenantLinksEmptyState: document.getElementById("profileTenantLinksEmptyState"),
     profileTenantLinksTableWrapper: document.getElementById("profileTenantLinksTableWrapper"),
     profileTenantLinksTableBody: document.getElementById("profileTenantLinksTableBody"),
+
+    // ADMIN PASSWORD RESET
+    // Modal controls for the admin-initiated temporary password flow.
+    resetPasswordModal: document.getElementById("resetPasswordModal"),
+    resetPasswordTargetName: document.getElementById("resetPasswordTargetName"),
+    resetPasswordTargetEmail: document.getElementById("resetPasswordTargetEmail"),
+    resetPasswordTempInput: document.getElementById("resetPasswordTempInput"),
+    resetPasswordToggleBtn: document.getElementById("resetPasswordToggleBtn"),
+    resetPasswordToggleIcon: document.getElementById("resetPasswordToggleIcon"),
+    resetPasswordSubmitBtn: document.getElementById("resetPasswordSubmitBtn"),
+    resetPasswordAlert: document.getElementById("resetPasswordAlert"),
   };
 }
 
@@ -685,6 +706,32 @@ function bindEvents() {
   // ADMIN UI CLEANUP - STEP 1D RECOVERY
   // Start the upload button greyed out until a valid file is selected.
   updateAdminProfileImageSaveButtonState();
+
+  // ADMIN PASSWORD RESET — modal event bindings.
+  state.dom.resetPasswordTempInput?.addEventListener("input", () => {
+    updateResetPasswordSubmitButtonState();
+    clearResetPasswordAlert();
+  });
+
+  state.dom.resetPasswordToggleBtn?.addEventListener("click", () => {
+    const input = state.dom.resetPasswordTempInput;
+    const icon = state.dom.resetPasswordToggleIcon;
+    if (!input) return;
+    const isPassword = input.type === "password";
+    input.type = isPassword ? "text" : "password";
+    if (icon) {
+      icon.className = isPassword ? "bi bi-eye-slash" : "bi bi-eye";
+    }
+  });
+
+  state.dom.resetPasswordSubmitBtn?.addEventListener("click", async () => {
+    await submitPasswordReset();
+  });
+
+  // Clear temp password when modal closes so it does not linger.
+  state.dom.resetPasswordModal?.addEventListener("hidden.bs.modal", () => {
+    clearResetPasswordModal();
+  });
 }
 
 function renderAdminOverviewSummary() {
@@ -1514,16 +1561,29 @@ function renderProfileTenantLinks(records = []) {
       </td>
 
       <td class="text-center">
-<!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
-     Load this profile into the user access setup form. -->
-<button
-  type="button"
-  class="btn btn-sm btn-outline-primary"
-  title="Edit user access setup"
-          onclick="window.adminEditProfileTenantLink('${escapeHtml(profile.id)}')"
-        >
-          <i class="bi bi-pencil-square"></i>
-        </button>
+        <div class="d-flex gap-1 justify-content-center">
+          <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
+               Load this profile into the user access setup form. -->
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            title="Edit user access setup"
+            onclick="window.adminEditProfileTenantLink('${escapeHtml(profile.id)}')"
+          >
+            <i class="bi bi-pencil-square"></i>
+          </button>
+
+          <!-- ADMIN PASSWORD RESET
+               Open the reset password modal for this user. -->
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-warning"
+            title="Reset password"
+            onclick="window.adminResetUserPassword('${escapeHtml(profile.id)}')"
+          >
+            <i class="bi bi-key"></i>
+          </button>
+        </div>
       </td>
     `;
 
@@ -2172,5 +2232,171 @@ function setProfileSaveLoading(isLoading) {
 
   delete button.dataset.isLoading;
   updateAdminProfileSaveButtonState();
+}
+
+/* =========================================================
+   ADMIN PASSWORD RESET
+   ========================================================= */
+
+function updateResetPasswordSubmitButtonState() {
+  const btn = state.dom.resetPasswordSubmitBtn;
+  if (!btn) return;
+
+  const pw = String(state.dom.resetPasswordTempInput?.value || "").trim();
+  const ready = pw.length >= 8;
+
+  btn.disabled = !ready;
+  btn.className = ready
+    ? "btn btn-warning dashboard-action-btn"
+    : "btn btn-secondary dashboard-action-btn";
+}
+
+function clearResetPasswordAlert() {
+  const el = state.dom.resetPasswordAlert;
+  if (!el) return;
+  el.className = "alert d-none mb-0";
+  el.textContent = "";
+}
+
+function showResetPasswordAlert(type, message) {
+  const el = state.dom.resetPasswordAlert;
+  if (!el) return;
+  el.className = `alert alert-${type} mb-0`;
+  el.textContent = message;
+}
+
+function clearResetPasswordModal() {
+  state.currentResetTarget = null;
+
+  if (state.dom.resetPasswordTempInput) {
+    state.dom.resetPasswordTempInput.value = "";
+    state.dom.resetPasswordTempInput.type = "password";
+  }
+
+  if (state.dom.resetPasswordToggleIcon) {
+    state.dom.resetPasswordToggleIcon.className = "bi bi-eye";
+  }
+
+  clearResetPasswordAlert();
+  updateResetPasswordSubmitButtonState();
+}
+
+function openResetPasswordModal(profileId) {
+  const profile = getProfileForTenantLinkById(profileId);
+
+  if (!profile) {
+    showPageAlert(
+      "warning",
+      "User profile not found. Please refresh the page and try again.",
+    );
+    return;
+  }
+
+  state.currentResetTarget = profile;
+
+  if (state.dom.resetPasswordTargetName) {
+    state.dom.resetPasswordTargetName.textContent =
+      getProfileDisplayName(profile);
+  }
+
+  if (state.dom.resetPasswordTargetEmail) {
+    state.dom.resetPasswordTargetEmail.textContent =
+      profile.email || "No email on record";
+  }
+
+  clearResetPasswordModal();
+  state.currentResetTarget = profile;
+
+  const modalEl = state.dom.resetPasswordModal;
+  if (!modalEl) return;
+
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+
+  // Focus the password field once the modal finishes opening.
+  modalEl.addEventListener(
+    "shown.bs.modal",
+    () => {
+      state.dom.resetPasswordTempInput?.focus();
+    },
+    { once: true },
+  );
+}
+
+async function submitPasswordReset() {
+  const profile = state.currentResetTarget;
+  if (!profile) return;
+
+  const tempPassword = String(
+    state.dom.resetPasswordTempInput?.value || "",
+  ).trim();
+
+  if (tempPassword.length < 8) {
+    showResetPasswordAlert(
+      "warning",
+      "Temporary password must be at least 8 characters.",
+    );
+    return;
+  }
+
+  const btn = state.dom.resetPasswordSubmitBtn;
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.dataset.originalHtml = btn.innerHTML;
+      btn.className = "btn btn-secondary dashboard-action-btn";
+      btn.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+        Resetting...
+      `;
+    }
+
+    clearResetPasswordAlert();
+
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.functions.invoke(
+      "reset-employee-password",
+      {
+        body: {
+          targetEmail: String(profile.email || "").toLowerCase().trim(),
+          tempPassword,
+        },
+      },
+    );
+
+    if (error) throw error;
+
+    // Close the modal on success.
+    const modalEl = state.dom.resetPasswordModal;
+    if (modalEl) {
+      bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    }
+
+    showPageAlert(
+      "success",
+      data?.message ||
+        `Password reset successfully for ${profile.email || "user"}.`,
+    );
+
+    showDashboardToast(
+      "success",
+      "Password reset",
+      `Temporary password set for ${getProfileDisplayName(profile)}.`,
+    );
+  } catch (error) {
+    console.error("Password reset error:", error);
+    showResetPasswordAlert(
+      "danger",
+      String(error?.message || "Password could not be reset. Please try again."),
+    );
+  } finally {
+    if (btn && btn.dataset.originalHtml) {
+      btn.innerHTML = btn.dataset.originalHtml;
+      delete btn.dataset.originalHtml;
+    }
+    updateResetPasswordSubmitButtonState();
+  }
 }
                                      
