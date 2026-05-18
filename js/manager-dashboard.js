@@ -3,10 +3,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     cacheDomElements();
     bindEvents();
 
-    const access = await window.SessionManager.protectPage([
-      "manager",
-      "supervisor",
-    ]);
+    const access = await window.SessionManager.protectPage("manager");
 
     if (!access) return;
 
@@ -1852,4 +1849,4 @@ async function persistLeaveDecision(leaveRequestId, status, comment) {
       "Leave request was not updated. This usually means the update was blocked by row-level security or the row did not match the update filter.",
     );
   }
-}
+}                                   

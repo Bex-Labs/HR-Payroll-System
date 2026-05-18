@@ -3,10 +3,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     cacheDomElements();
     bindEvents();
 
-    const access = await window.SessionManager.protectPage([
-      "admin",
-      "system_admin",
-    ]);
+    const access = await window.SessionManager.protectPage("admin");
 
     if (!access) return;
 
@@ -2176,3 +2173,4 @@ function setProfileSaveLoading(isLoading) {
   delete button.dataset.isLoading;
   updateAdminProfileSaveButtonState();
 }
+                                     

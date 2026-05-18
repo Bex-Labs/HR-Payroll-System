@@ -189,8 +189,6 @@
 
   /* =========================================================
      Central role redirect
-     ---------------------------------------------------------
-     US010 adds manager / supervisor support.
   ========================================================= */
   function redirectToRoleDashboard(role) {
     switch (role) {
@@ -201,10 +199,8 @@
         window.location.href = "employee-dashboard.html";
         break;
       case "manager":
-      case "supervisor":
         window.location.href = "manager-dashboard.html";
         break;
-      case "hr_manager":
       case "hr":
         window.location.href = "hr-dashboard.html";
         break;
@@ -233,9 +229,7 @@
   /* =========================================================
      Flexible role matching
      ---------------------------------------------------------
-     Supports:
-     - single role string, e.g. "employee"
-     - multiple roles array, e.g. ["manager", "supervisor"]
+     Supports a single role string or an array of roles.
   ========================================================= */
   function roleMatches(expectedRole, actualRole) {
     if (!expectedRole) return true;
@@ -316,4 +310,4 @@
     logoutUser,
     redirectToRoleDashboard,
   };
-})();
+})();                                                                                                                                                                                                                            

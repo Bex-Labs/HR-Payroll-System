@@ -56,23 +56,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
   /* =========================================================
      Role-to-dashboard routing
-     ---------------------------------------------------------
-     US010 adds the manager / supervisor dashboard route.
-     This is kept minimal so existing role routing stays intact.
   ========================================================= */
   function getDashboardByRole(role) {
     const roleRoutes = {
       employee: "/employee-dashboard.html",
       manager: "/manager-dashboard.html",
-      supervisor: "/manager-dashboard.html",
       hr: "/hr-dashboard.html",
-      payroll: "/payroll-dashboard.html",
-      executive: "/executive-dashboard.html",
       admin: "/admin-dashboard.html",
-      auditor: "/auditor-dashboard.html",
-      hr_manager: "/hr-dashboard.html",
-      accountant: "/accountant-dashboard.html",
-      business_owner: "/business-owner-dashboard.html",
     };
 
     return roleRoutes[role] || "/index.html";
@@ -404,13 +394,11 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        // HRP-80 - ADMIN TENANT LOGIN EXEMPTION - STEP 4B
-        // Admin/System Admin are platform-level owners. They can log in without a
+        // Admin is a platform-level owner. They can log in without a
         // Company/Tenant ID so they can create tenants and assign users.
-        // Tenant validation remains mandatory for HR, managers, employees, payroll,
-        // and other non-admin roles.
+        // Tenant validation remains mandatory for all other roles.
         const userRole = String(profile.role || "").trim().toLowerCase();
-        const isPlatformAdmin = ["admin", "system_admin"].includes(userRole);
+        const isPlatformAdmin = userRole === "admin";
 
         if (!isPlatformAdmin && !loginTenantCode) {
           localStorage.removeItem("hrPayrollSession");
@@ -534,36 +522,6 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        if (!profile) {
-          showAlert(
-            "You signed in successfully, but no profile is attached to your account.",
-            "warning",
-          );
-          return;
-        }
-
-        if (profile.is_active === false) {
-          showAlert(
-            "Your account is inactive. Please contact support.",
-            "danger",
-          );
-          await supabaseClient.auth.signOut();
-          return;
-        }
-
-        if (profile.must_change_password === true) {
-          showAlert(
-            "First-time setup required. Redirecting you to set a new password...",
-            "warning",
-          );
-
-          setTimeout(function () {
-            window.location.href = "/reset-password.html?mode=first-time";
-          }, 1200);
-
-          return;
-        }
-
         const redirectTarget =
           getSafePostLoginRedirectForRole(profile.role) ||
           getDashboardByRole(profile.role);
@@ -600,3 +558,4 @@ document.addEventListener("DOMContentLoaded", function () {
 
   showMessageFromQueryString();
 });
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       

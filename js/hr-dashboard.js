@@ -143,10 +143,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // save/edit flows that reopen cards when needed.
     collapseDashboardWorkingCardsByDefault();
 
-    const access = await window.SessionManager.protectPage([
-      "hr",
-      "hr_manager",
-    ]);
+    const access = await window.SessionManager.protectPage("hr");
 
     if (!access) return;
 
@@ -613,10 +610,7 @@ const state = {
 
 const PAYROLL_MASTER_MAINTENANCE_ROLES = new Set([
   "hr",
-  "hr_manager",
-  "payroll",
-  "payroll_manager",
-  "system_admin",
+  "admin",
 ]);
 
 function getCurrentUserRoleValue() {
@@ -7520,9 +7514,6 @@ function populateAssignedLineManagerOptions(preferredEmployeeId = "") {
   // should appear in the Assign Line Manager dropdown.
   const managerEligibleRoles = new Set([
     "manager",
-    "supervisor",
-    "hr_manager",
-    "leadership",
   ]);
 
   const managerCandidates = (state.employees || [])
@@ -7726,9 +7717,6 @@ function getEmployeeReportingLineManagerCandidates() {
 
   const managerEligibleRoles = new Set([
     "manager",
-    "supervisor",
-    "hr_manager",
-    "leadership",
   ]);
 
   return (state.employees || [])
@@ -9703,15 +9691,8 @@ async function loadEmployeeEducationRecordsForEdit(employeeId) {
 const EMPLOYEE_SYSTEM_ROLE_LABELS = {
   employee: "Employee",
   manager: "Manager",
-  supervisor: "Supervisor",
   hr: "HR",
-  hr_manager: "HR Manager",
-  payroll: "Payroll",
-  payroll_manager: "Payroll Manager",
-  leadership: "Leadership / Executive",
-  system_admin: "System Admin",
-  auditor: "Auditor",
-  qa_analyst: "QA Analyst",
+  admin: "Admin",
 };
 
 // ASSIGN LINE MANAGER - STEP 1E
@@ -20290,6 +20271,45 @@ async function uploadPendingFilesForEmployee(employeeId) {
   renderAttachedDocuments();
 }
 
+// EMPLOYEE LOGIN PROVISIONING
+// Send a Supabase invite to the employee's work email via the secure
+// invite-employee-login Edge Function. Returns { success, error }.
+// This is fire-and-report: a failed invite does not roll back the employee record.
+async function provisionEmployeeLogin({ workEmail = "", fullName = "", tenantId = "" } = {}) {
+  try {
+    const supabase = getSupabaseClient();
+    const tenantContext = getCurrentTenantContext();
+
+    const { data, error } = await supabase.functions.invoke(
+      "invite-employee-login",
+      {
+        body: {
+          workEmail: String(workEmail || "").trim().toLowerCase(),
+          fullName: String(fullName || "").trim(),
+          tenantId: String(tenantId || tenantContext?.tenantId || "").trim(),
+        },
+      },
+    );
+
+    if (error) {
+      console.error("provisionEmployeeLogin edge function error:", error);
+      return { success: false, error: error.message || "Login invite could not be sent." };
+    }
+
+    if (!data?.success) {
+      return { success: false, error: data?.error || "Login invite could not be sent." };
+    }
+
+    return { success: true };
+  } catch (unexpectedError) {
+    console.error("provisionEmployeeLogin unexpected error:", unexpectedError);
+    return {
+      success: false,
+      error: (unexpectedError as Error)?.message || "Login invite could not be sent.",
+    };
+  }
+}
+
 async function handleEmployeeSave() {
   clearPageAlert();
 
@@ -20439,6 +20459,24 @@ async function handleEmployeeSave() {
       ).trim();
     }
 
+    // EMPLOYEE LOGIN PROVISIONING
+    // Send a login invite to the new employee's work email immediately after
+    // the employee record is created. Edit mode does not re-send an invite.
+    // If the invite fails the employee record is already saved — HR sees a
+    // warning in the success message rather than a hard error.
+    let loginInviteSent = false;
+    let loginInviteError = "";
+
+    if (!isEditMode) {
+      const loginResult = await provisionEmployeeLogin({
+        workEmail: employeePayload.work_email,
+        fullName: savedEmployeeName,
+      });
+
+      loginInviteSent = loginResult.success;
+      loginInviteError = loginResult.error || "";
+    }
+
     // EMPLOYEE BIODATA COMPLETION - STEP 3G
     // Save multiple reporting lines after the employee record exists.
     // Create mode needs the newly returned employee id before child rows can be inserted.
@@ -20492,17 +20530,26 @@ async function handleEmployeeSave() {
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // Show the generated Employee ID only after a new employee is created.
     // Edit mode should not suggest that the Employee ID was regenerated.
-    const employeeSaveSuccessMessage = isEditMode
-      ? `Employee profile for <strong>${escapeHtml(
-        savedEmployeeName,
-      )}</strong> was updated successfully.`
-      : `Employee profile for <strong>${escapeHtml(
-        savedEmployeeName,
-      )}</strong> was created successfully with Employee ID <strong>${escapeHtml(
-        savedEmployeeNumber || employeePayload.employee_number || "--",
-      )}</strong>.`;
+    // EMPLOYEE LOGIN PROVISIONING
+    // Append the invite outcome so HR knows whether the login email was sent.
+    let employeeSaveSuccessMessage;
 
-    showPageAlert("success", employeeSaveSuccessMessage);
+    if (isEditMode) {
+      employeeSaveSuccessMessage = `Employee profile for <strong>${escapeHtml(
+        savedEmployeeName,
+      )}</strong> was updated successfully.`;
+    } else {
+      const inviteNote = loginInviteSent
+        ? ` A login invite has been sent to <strong>${escapeHtml(employeePayload.work_email)}</strong>.`
+        : ` <span class="text-warning">⚠ Login invite could not be sent${loginInviteError ? ` — ${escapeHtml(loginInviteError)}` : ""}. You can resend it from the employee's profile.</span>`;
+
+      employeeSaveSuccessMessage =
+        `Employee profile for <strong>${escapeHtml(savedEmployeeName)}</strong> was created successfully` +
+        ` with Employee ID <strong>${escapeHtml(savedEmployeeNumber || employeePayload.employee_number || "--")}</strong>.` +
+        inviteNote;
+    }
+
+    showPageAlert(loginInviteSent || isEditMode ? "success" : "warning", employeeSaveSuccessMessage);
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // After create/update, clear the form and return HR to the employee list.
@@ -26268,79 +26315,4 @@ async function handlePayrollSave() {
     // SUBMIT PAYROLL - DESCRIPTION ITEM 2 - SCROLL FIX FINAL
     // After successful single payroll submit/update, move HR to Payroll Records.
     scrollToPayrollRecordsAfterSubmit();
-  } catch (error) {
-    console.error("Error saving payroll record:", error);
-    showPageAlert(
-      "danger",
-      error.message ||
-      "Payroll record could not be saved. Check payroll_records RLS policy and required columns.",
-    );
-  } finally {
-    setPayrollSaveLoading(false, isEditMode);
-  }
-}
-// BATCH PAYROLL DEFAULT - STEP 7
-// Shows a spinner only on the Submit Batch Payroll button.
-// This avoids interfering with the hidden individual payroll form buttons.
-function setBatchPayrollSubmitLoading(isLoading) {
-  const button = state.dom.submitBatchPayrollBtn;
-  if (!button) return;
-
-  if (isLoading) {
-    if (!button.dataset.originalHtml) {
-      button.dataset.originalHtml = button.innerHTML;
-    }
-
-    button.disabled = true;
-    button.innerHTML = `
-      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      Submitting Batch...
-    `;
-    return;
-  }
-
-  if (button.dataset.originalHtml) {
-    button.innerHTML = button.dataset.originalHtml;
-    delete button.dataset.originalHtml;
-  }
-}
-function setPayrollSaveLoading(isLoading, isEditMode = false) {
-  // EMERGENCY PAYROLL SPINNER REPAIR
-  // The top Submit Payroll button and the bottom Submit Payroll button
-  // submit the same form, so both must show the same loading state.
-  const buttons = [
-    state.dom.savePayrollBtn,
-    state.dom.topSubmitPayrollBtn,
-  ].filter(Boolean);
-
-  if (!buttons.length) return;
-
-  const loadingText = isEditMode ? "Updating Payroll..." : "Saving Payroll...";
-
-  buttons.forEach((button) => {
-    if (isLoading) {
-      if (!button.dataset.originalHtml) {
-        button.dataset.originalHtml = button.innerHTML;
-      }
-
-      button.disabled = true;
-      button.innerHTML = `
-        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-        ${loadingText}
-      `;
-      return;
-    }
-
-    if (button.dataset.originalHtml) {
-      button.innerHTML = button.dataset.originalHtml;
-      delete button.dataset.originalHtml;
-    }
-  });
-
-  if (!isLoading) {
-    state.dom.savePayrollBtnText = document.getElementById("savePayrollBtnText");
-
-    // Restore the correct grey/blue state after the spinner is removed.
-    updatePayrollSubmitButtonState();
-  }
-}
+  } c
