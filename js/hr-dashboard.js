@@ -244,6 +244,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       startEmployeeEdit(employeeId);
     };
 
+    // MANAGER ROLE ASSIGNMENT
+    // Expose the manager role toggle for the employee list action button.
+    window.hrToggleManagerRole = (employeeId) => {
+      toggleEmployeeManagerRole(employeeId);
+    };
+
     // EMPLOYEE BIODATA COMPLETION - STEP 6C-4C
     // Expose staged education remove action for the Saved Education Records list.
     window.hrRemoveEmployeeEducationRecord = (recordIndex) => {
@@ -17328,6 +17334,20 @@ function getEmployeeAccountLinkage(employee) {
   };
 }
 
+// MANAGER ROLE ASSIGNMENT
+// Look up the current profile role for an employee from the cached auth profiles.
+// Matches first by auth_user_id (direct link), then by work email as fallback.
+function getEmployeeProfileRole(employee) {
+  const employeeUserId = String(employee?.auth_user_id || employee?.user_id || "").trim();
+  const workEmail = normalizeText(employee?.work_email || "");
+
+  const profile = employeeUserId
+    ? state.authProfiles.find((p) => String(p.id || "").trim() === employeeUserId)
+    : state.authProfiles.find((p) => normalizeText(p.email || "") === workEmail);
+
+  return profile?.role || null;
+}
+
 // DESCRIPTION ITEM 9 - STEP 1
 // Payroll selection helpers for the Full Employee List.
 // These keep each employee checkbox stable while the user searches,
@@ -18927,6 +18947,12 @@ function renderEmployeeRecords(employees) {
     const accountLinkage = getEmployeeAccountLinkage(employee);
     const safeEmployeeId = String(employee.id || "").replaceAll("'", "\\'");
 
+    // MANAGER ROLE ASSIGNMENT
+    // Determine current profile role so the toggle button shows the right state.
+    const profileRole = getEmployeeProfileRole(employee);
+    const canToggleRole = ["linked", "matched"].includes(accountLinkage.code);
+    const isManager = profileRole === "manager";
+
     const row = document.createElement("tr");
 
     row.innerHTML = `
@@ -19028,6 +19054,20 @@ function renderEmployeeRecords(employees) {
             onclick="window.hrViewEmployeeDocuments('${safeEmployeeId}')"
           >
             <i class="bi bi-paperclip"></i>
+          </button>
+
+          <!-- MANAGER ROLE ASSIGNMENT
+               Toggle between Employee and Manager role.
+               Disabled if the employee has no login account yet. -->
+          <button
+            type="button"
+            class="btn btn-sm ${isManager ? "btn-warning" : "btn-outline-primary"}"
+            title="${canToggleRole ? (isManager ? "Remove manager role" : "Assign as manager") : "No login account — invite employee first"}"
+            aria-label="${isManager ? "Remove manager role" : "Assign as manager"}"
+            ${canToggleRole ? "" : "disabled"}
+            onclick="window.hrToggleManagerRole('${safeEmployeeId}')"
+          >
+            <i class="bi ${isManager ? "bi-person-dash" : "bi-person-up"}"></i>
           </button>
         </div>
       </td>
@@ -20269,6 +20309,83 @@ async function uploadPendingFilesForEmployee(employeeId) {
   await loadEmployeeDocuments(employeeId);
   await loadAllEmployeeDocuments();
   renderAttachedDocuments();
+}
+
+// MANAGER ROLE ASSIGNMENT
+// Toggle an employee's system role between 'employee' and 'manager'.
+// Updates profiles.role (controls login routing) and employees.system_role
+// (keeps the employee list badge in sync). Refreshes both lists after save.
+async function toggleEmployeeManagerRole(employeeId) {
+  const employee = (state.employees || []).find(
+    (e) => String(e.id || "") === String(employeeId || ""),
+  );
+
+  if (!employee) {
+    showPageAlert("danger", "Employee record not found.");
+    return;
+  }
+
+  const currentRole = getEmployeeProfileRole(employee);
+  const newRole = currentRole === "manager" ? "employee" : "manager";
+
+  const fullName = [employee.first_name, employee.last_name]
+    .map((n) => String(n || "").trim())
+    .filter(Boolean)
+    .join(" ") || "this employee";
+
+  const confirmMessage = newRole === "manager"
+    ? `Assign ${fullName} as a Manager? They will be routed to the Manager Dashboard on their next login.`
+    : `Remove the Manager role from ${fullName}? They will be routed to the Employee Dashboard on their next login.`;
+
+  if (!window.confirm(confirmMessage)) return;
+
+  try {
+    const supabase = getSupabaseClient();
+
+    // Find the matching auth profile.
+    const employeeUserId = String(employee?.auth_user_id || employee?.user_id || "").trim();
+    const workEmail = normalizeText(employee?.work_email || "");
+
+    const profile = employeeUserId
+      ? (state.authProfiles || []).find((p) => String(p.id || "").trim() === employeeUserId)
+      : (state.authProfiles || []).find((p) => normalizeText(p.email || "") === workEmail);
+
+    if (!profile) {
+      showPageAlert(
+        "warning",
+        `No login account found for ${fullName}. Please send them a login invite first.`,
+      );
+      return;
+    }
+
+    // Update profiles.role — this controls which dashboard they land on at login.
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ role: newRole })
+      .eq("id", profile.id);
+
+    if (profileError) throw profileError;
+
+    // Update employees.system_role — keeps the badge in the employee list in sync.
+    await supabase
+      .from("employees")
+      .update({ system_role: newRole })
+      .eq("id", employeeId);
+
+    // Reload both lists so the button and badge reflect the new state immediately.
+    await loadAuthProfilesForLinkage();
+    await loadEmployees();
+
+    showPageAlert(
+      "success",
+      newRole === "manager"
+        ? `${fullName} has been assigned the Manager role successfully.`
+        : `Manager role has been removed from ${fullName}. They are now an Employee.`,
+    );
+  } catch (error) {
+    console.error("toggleEmployeeManagerRole error:", error);
+    showPageAlert("danger", error.message || "Role could not be updated. Please try again.");
+  }
 }
 
 // EMPLOYEE LOGIN PROVISIONING
