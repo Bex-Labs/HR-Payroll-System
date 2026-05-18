@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to the HR & Payroll System</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f5;font-family:Arial,Helvetica,sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#1a1a2e;padding:32px 40px;">
+              <p style="margin:0;font-size:20px;font-weight:bold;color:#ffffff;letter-spacing:0.5px;">
+                HR &amp; Payroll System
+              </p>
+              <p style="margin:6px 0 0;font-size:13px;color:#aaaacc;">
+                {{ .Data.company_name }}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+
+              <p style="margin:0 0 8px;font-size:22px;font-weight:bold;color:#1a1a2e;">
+                Welcome, {{ .Data.full_name }} 👋
+              </p>
+
+              <p style="margin:0 0 24px;font-size:15px;color:#555555;line-height:1.6;">
+                You have been added to the <strong>{{ .Data.company_name }}</strong> HR &amp; Payroll System.
+                Your account is ready — click the button below to set your password and get started.
+              </p>
+
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
+                <tr>
+                  <td style="background-color:#4f46e5;border-radius:6px;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;">
+                      Set My Password &amp; Sign In
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- What to expect -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f8fc;border-radius:6px;margin-bottom:32px;">
+                <tr>
+                  <td style="padding:24px;">
+                    <p style="margin:0 0 12px;font-size:13px;font-weight:bold;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.5px;">
+                      What happens next
+                    </p>
+                    <p style="margin:0 0 8px;font-size:14px;color:#555555;">
+                      1. Click the button above to set your password.
+                    </p>
+                    <p style="margin:0 0 8px;font-size:14px;color:#555555;">
+                      2. Sign in with your work email — <strong>{{ .Email }}</strong>.
+                    </p>
+                    <p style="margin:0;font-size:14px;color:#555555;">
+                      3. Access your personal dashboard to view payslips, apply for leave, and manage your profile.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Security note -->
+              <p style="margin:0 0 8px;font-size:13px;color:#888888;line-height:1.5;">
+                This invite link is secure and unique to you. It expires after 24 hours.
+                If you did not expect this email, you can safely ignore it.
+              </p>
+
+              <p style="margin:0;font-size:13px;color:#888888;">
+                If the button above does not work, copy and paste this link into your browser:
+                <br />
+                <a href="{{ .ConfirmationURL }}" style="color:#4f46e5;word-break:break-all;">
+                  {{ .ConfirmationURL }}
+                </a>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f0f0f5;padding:20px 40px;">
+              <p style="margin:0;font-size:12px;color:#999999;text-align:center;">
+                &copy; {{ .Data.company_name }} &mdash; HR &amp; Payroll System.
+                This is an automated message, please do not reply.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
