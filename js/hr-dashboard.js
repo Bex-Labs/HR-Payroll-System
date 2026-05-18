@@ -20281,7 +20281,7 @@ async function uploadPendingFilesForEmployee(employeeId) {
 // Send a Supabase invite to the employee's work email via the secure
 // invite-employee-login Edge Function. Returns { success, error }.
 // This is fire-and-report: a failed invite does not roll back the employee record.
-async function provisionEmployeeLogin({ workEmail = "", fullName = "", tenantId = "" } = {}) {
+async function provisionEmployeeLogin({ workEmail = "", fullName = "", tenantId = "", companyName = "" } = {}) {
   try {
     const supabase = getSupabaseClient();
     const tenantContext = getCurrentTenantContext();
@@ -20293,6 +20293,7 @@ async function provisionEmployeeLogin({ workEmail = "", fullName = "", tenantId 
           workEmail: String(workEmail || "").trim().toLowerCase(),
           fullName: String(fullName || "").trim(),
           tenantId: String(tenantId || tenantContext?.tenantId || "").trim(),
+          companyName: String(companyName || tenantContext?.companyName || "").trim(),
         },
       },
     );
@@ -20479,6 +20480,7 @@ async function handleEmployeeSave() {
       const loginResult = await provisionEmployeeLogin({
         workEmail: employeePayload.work_email,
         fullName: savedEmployeeName,
+        companyName: getCurrentTenantContext()?.companyName || "",
       });
 
       loginInviteSent = loginResult.success;

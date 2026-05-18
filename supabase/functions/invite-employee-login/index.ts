@@ -108,6 +108,7 @@ serve(async (req: Request) => {
     const workEmail = cleanText(payload.workEmail).toLowerCase();
     const fullName = cleanText(payload.fullName);
     const tenantId = cleanText(payload.tenantId) || null;
+    const companyName = cleanText(payload.companyName) || "Your Company";
 
     if (!workEmail) {
       return jsonResponse(400, { error: "workEmail is required." });
@@ -131,6 +132,7 @@ serve(async (req: Request) => {
       await supabaseAdmin.auth.admin.inviteUserByEmail(workEmail, {
         data: {
           full_name: fullName,
+          company_name: companyName,
           role: "employee",
         },
         redirectTo,
