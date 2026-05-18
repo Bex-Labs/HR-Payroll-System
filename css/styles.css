@@ -1187,3 +1187,41 @@ html {
     justify-content: center;
   }
 }
+
+/*
+  =====================================================================
+  PRINT — payslip only
+  When the user clicks "Print" on a payslip we want a clean A4 output
+  showing only the payslip content. Everything else (navbar, sidebar,
+  modals chrome, buttons) is hidden.
+  =====================================================================
+*/
+@media print {
+  /* Hide the entire page … */
+  body * {
+    visibility: hidden;
+  }
+
+  /* … then reveal only the payslip content and its descendants */
+  #payslipPreviewContent,
+  #payslipPreviewContent * {
+    visibility: visible;
+  }
+
+  /* Position the payslip block so it fills the printed page */
+  #payslipPreviewContent {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+
+  /* Remove Bootstrap modal backdrop and any overflow clipping */
+  .modal,
+  .modal-dialog,
+  .modal-content {
+    overflow: visible !important;
+  }
+}

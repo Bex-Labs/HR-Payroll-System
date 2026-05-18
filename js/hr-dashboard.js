@@ -1372,6 +1372,7 @@ function cacheDomElements() {
     payslipPreviewContent: document.getElementById("payslipPreviewContent"),
     closePayslipPreviewBtn: document.getElementById("closePayslipPreviewBtn"),
     closePayslipPreviewFooterBtn: document.getElementById("closePayslipPreviewFooterBtn"),
+    printPayslipBtn: document.getElementById("printPayslipBtn"),
     // SUBMIT PAYROLL - DESCRIPTION ITEM 2
     // Stable Payroll Records card target used after successful submit.
     payrollRecordsCard: document.getElementById("payrollRecordsCard"),
@@ -6186,6 +6187,12 @@ function bindEvents() {
 
   state.dom.closePayslipPreviewFooterBtn?.addEventListener("click", () => {
     closePayslipPreview();
+  });
+
+  // Print the payslip content using the browser's native print dialog.
+  // @media print CSS in styles.css hides everything except the payslip content.
+  state.dom.printPayslipBtn?.addEventListener("click", () => {
+    window.print();
   });
 
   // DESCRIPTION ITEM 4 - STEP 7
