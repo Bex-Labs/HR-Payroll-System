@@ -1349,6 +1349,12 @@ function cacheDomElements() {
     payslipEmailSentCount: document.getElementById("payslipEmailSentCount"),
     payslipEmailFailedCount: document.getElementById("payslipEmailFailedCount"),
     refreshPayslipEmailLogsBtn: document.getElementById("refreshPayslipEmailLogsBtn"),
+
+    // PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
+    // Permanent in-panel summary for the latest Send Payslips result.
+    // This makes the HR status outcome visible even after the toast disappears.
+    payslipEmailRunSummaryNotice: document.getElementById("payslipEmailRunSummaryNotice"),
+
     payslipEmailLogsEmptyState: document.getElementById("payslipEmailLogsEmptyState"),
     payslipEmailLogsTableWrapper: document.getElementById("payslipEmailLogsTableWrapper"),
     payslipEmailLogsTableBody: document.getElementById("payslipEmailLogsTableBody"),
@@ -20423,7 +20429,9 @@ async function provisionEmployeeLogin({ workEmail = "", fullName = "", tenantId 
     console.error("provisionEmployeeLogin unexpected error:", unexpectedError);
     return {
       success: false,
-      error: (unexpectedError as Error)?.message || "Login invite could not be sent.",
+      // PAYROLL EMAIL STATUS - STEP 2F-3B-6A RECOVERY
+      // Browser JavaScript must not contain TypeScript-only casts such as "as Error".
+      error: unexpectedError?.message || "Login invite could not be sent.",
     };
   }
 }
@@ -22431,6 +22439,55 @@ function updatePayslipEmailStatusCounts(records = []) {
   }
 }
 
+// PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
+// Render a clear HR-facing summary of the latest Send Payslips backend result.
+// This is separate from the audit table so HR can quickly understand the result
+// without reading every status row.
+function renderPayslipEmailRunSummaryNotice() {
+  const notice = state.dom.payslipEmailRunSummaryNotice;
+  if (!notice) return;
+
+  const summary = state.lastPayslipEmailRunSummary;
+
+  if (!summary) {
+    notice.classList.add("d-none");
+    notice.innerHTML = "";
+    return;
+  }
+
+  const sentCount = Number(summary.sent || 0);
+  const failedCount = Number(summary.failed || 0);
+  const preparedCount = Number(summary.prepared || 0);
+  const alreadyPendingCount = Number(summary.alreadyPending || 0);
+  const alreadySentCount = Number(summary.alreadySent || 0);
+  const finalisedCount = Number(summary.finalisedRecords || 0);
+  const actionedAt = summary.actionedAt
+    ? formatDateTime(summary.actionedAt)
+    : "just now";
+
+  const alertClass = failedCount > 0 ? "alert-warning" : "alert-success";
+
+  notice.className = `alert ${alertClass} border mb-3`;
+  notice.innerHTML = `
+    <div class="fw-semibold mb-2">
+      Latest Send Payslips result
+    </div>
+
+    <div class="small">
+      Processed <strong>${finalisedCount}</strong> selected finalised payroll record(s):
+      <strong>${sentCount}</strong> sent,
+      <strong>${failedCount}</strong> failed,
+      <strong>${preparedCount}</strong> log record(s) prepared,
+      <strong>${alreadySentCount}</strong> protected from resend,
+      and <strong>${alreadyPendingCount}</strong> already pending.
+    </div>
+
+    <div class="small text-secondary mt-2">
+      Last action: ${escapeHtml(actionedAt)}.
+    </div>
+  `;
+}
+
 // PAYROLL EMAIL DELIVERY - STEP 2F-2B
 // Keep delivery notes short and HR-readable.
 // Detailed duplicate evidence is shown once above the table, not repeated
@@ -22497,6 +22554,9 @@ function renderPayslipEmailLogs(records = []) {
   tbody.innerHTML = "";
 
   updatePayslipEmailStatusCounts(records);
+    // PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
+  // Keep the latest Send Payslips summary visible whenever the status panel redraws.
+  renderPayslipEmailRunSummaryNotice();
 
   if (!records.length) {
     state.dom.payslipEmailLogsEmptyState?.classList.remove("d-none");
@@ -22851,6 +22911,11 @@ async function handleSendPayslipsEmailRequest() {
       finalisedRecords: finalisedCount,
       actionedAt: new Date().toISOString(),
     };
+
+        // PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
+    // Show the latest backend result immediately in the status panel.
+    // This remains visible even after the page alert or toast disappears.
+    renderPayslipEmailRunSummaryNotice();
 
     if (data?.status === "NoRecords") {
       showPageAlert(
@@ -26434,4 +26499,150 @@ async function handlePayrollSave() {
     // SUBMIT PAYROLL - DESCRIPTION ITEM 2 - SCROLL FIX FINAL
     // After successful single payroll submit/update, move HR to Payroll Records.
     scrollToPayrollRecordsAfterSubmit();
-  } c
+  } catch (error) {
+    console.error("Error saving payroll record:", error);
+    showPageAlert(
+      "danger",
+      error.message ||
+      "Payroll record could not be saved. Check payroll_records RLS policy and required columns.",
+    );
+  } finally {
+    setPayrollSaveLoading(false, isEditMode);
+  }
+}
+
+// PAYROLL EMAIL STATUS - STEP 2F-3B-6A RECOVERY
+// Shows a spinner only on the Submit Batch Payroll button.
+// This restores the file tail that was cut off before the browser could finish parsing.
+function setBatchPayrollSubmitLoading(isLoading) {
+  const button = state.dom.submitBatchPayrollBtn;
+  if (!button) return;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Submitting Batch...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+}
+
+// PAYROLL EMAIL STATUS - STEP 2F-3B-6A RECOVERY
+// Restores the payroll save loading helper so Submit Payroll buttons can
+// return safely to their normal grey/blue readiness state after save.
+function setPayrollSaveLoading(isLoading, isEditMode = false) {
+  const buttons = [
+    state.dom.savePayrollBtn,
+    state.dom.topSubmitPayrollBtn,
+  ].filter(Boolean);
+
+  if (!buttons.length) return;
+
+  const loadingText = isEditMode ? "Updating Payroll..." : "Saving Payroll...";
+
+  buttons.forEach((button) => {
+    if (isLoading) {
+      if (!button.dataset.originalHtml) {
+        button.dataset.originalHtml = button.innerHTML;
+      }
+
+      button.disabled = true;
+      button.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+        ${loadingText}
+      `;
+      return;
+    }
+
+    if (button.dataset.originalHtml) {
+      button.innerHTML = button.dataset.originalHtml;
+      delete button.dataset.originalHtml;
+    }
+  });
+
+  if (!isLoading) {
+    state.dom.savePayrollBtnText = document.getElementById("savePayrollBtnText");
+
+    // PAYROLL EMAIL STATUS - STEP 2F-3B-6A RECOVERY
+    // Restore the correct Submit Payroll button readiness after spinner cleanup.
+    updatePayrollSubmitButtonState();
+  }
+}
+
+// PAYROLL EMAIL STATUS - STEP 2F-3B-6A RECOVERY
+// Restore the batch payroll submit loading helper that was cut off when
+// hr-dashboard.js ended before the original file tail.
+function setBatchPayrollSubmitLoading(isLoading) {
+  const button = state.dom.submitBatchPayrollBtn;
+  if (!button) return;
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Submitting Batch...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+}
+
+// PAYROLL EMAIL STATUS - STEP 2F-3B-6A RECOVERY
+// Restore the payroll save loading helper so Submit Payroll buttons can
+// return safely to their normal grey/blue readiness state after save.
+function setPayrollSaveLoading(isLoading, isEditMode = false) {
+  const buttons = [
+    state.dom.savePayrollBtn,
+    state.dom.topSubmitPayrollBtn,
+  ].filter(Boolean);
+
+  if (!buttons.length) return;
+
+  const loadingText = isEditMode ? "Updating Payroll..." : "Saving Payroll...";
+
+  buttons.forEach((button) => {
+    if (isLoading) {
+      if (!button.dataset.originalHtml) {
+        button.dataset.originalHtml = button.innerHTML;
+      }
+
+      button.disabled = true;
+      button.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+        ${loadingText}
+      `;
+      return;
+    }
+
+    if (button.dataset.originalHtml) {
+      button.innerHTML = button.dataset.originalHtml;
+      delete button.dataset.originalHtml;
+    }
+  });
+
+  if (!isLoading) {
+    state.dom.savePayrollBtnText = document.getElementById("savePayrollBtnText");
+
+    // PAYROLL EMAIL STATUS - STEP 2F-3B-6A RECOVERY
+    // Restore the correct Submit Payroll button readiness after spinner cleanup.
+    updatePayrollSubmitButtonState();
+  }
+}
