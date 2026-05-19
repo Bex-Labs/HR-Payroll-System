@@ -2060,19 +2060,14 @@
             </div>
 
             <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
-              <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
-                <div>
-                  <h3 class="h5 fw-bold mb-1">Send Validation Email</h3>
-                  <p class="text-secondary small mb-0">
-                    Send a controlled email to confirm that the configured email service is working.
-                  </p>
-                </div>
-
-                <button type="button" id="hrp85RefreshRecipientsBtn"
-                  class="btn btn-outline-primary dashboard-action-btn text-nowrap">
-                  <i class="bi bi-arrow-clockwise me-2"></i>
-                  Refresh Recipients
-                </button>
+              <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1B
+                   Keep the send panel focused on sending one controlled validation email.
+                   Recipient refresh now belongs with the Approved Recipients reference panel. -->
+              <div class="mb-4">
+                <h3 class="h5 fw-bold mb-1">Send Validation Email</h3>
+                <p class="text-secondary small mb-0">
+                  Send a controlled email to confirm that the configured email service is working.
+                </p>
               </div>
 
               <form id="hrp85EmailIntegrationForm" novalidate>
@@ -2105,18 +2100,15 @@
                     </div>
                   </div>
 
+                  <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1B
+                       Send action stays in the validation form.
+                       History refresh moves to the Validation History audit panel. -->
                   <div class="col-12">
                     <div class="d-flex flex-column flex-sm-row gap-2">
                       <button type="submit" id="hrp85SendTestEmailBtn" class="btn btn-secondary dashboard-action-btn"
                         disabled>
                         <i class="bi bi-send me-2"></i>
                         Send Validation Email
-                      </button>
-
-                      <button type="button" id="hrp85RefreshDeliveryLogsBtn"
-                        class="btn btn-outline-primary dashboard-action-btn">
-                        <i class="bi bi-list-check me-2"></i>
-                        Refresh History
                       </button>
                     </div>
                   </div>
@@ -2132,25 +2124,39 @@
             <div class="row g-4">
               <div class="col-xl-5">
                 <div class="border rounded-4 p-3 p-lg-4 h-100 bg-white">
-                  <div class="mb-3">
-                    <h3 class="h6 fw-bold mb-1">Approved Recipients</h3>
-                    <p class="text-secondary small mb-0">
-                      People approved to receive validation emails.
-                    </p>
+                  <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1B
+                       Approved Recipients is a reference panel.
+                       Keep its refresh action inside this panel so HR knows
+                       it only reloads approved validation mailboxes. -->
+                  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                    <div>
+                      <h3 class="h6 fw-bold mb-1">Approved Recipients</h3>
+                      <p class="text-secondary small mb-0">
+                        Mailboxes approved for controlled validation emails.
+                      </p>
+                    </div>
+
+                    <button type="button" id="hrp85RefreshRecipientsBtn"
+                      class="btn btn-outline-primary dashboard-action-btn text-nowrap">
+                      <i class="bi bi-arrow-clockwise me-2"></i>
+                      Refresh Recipients
+                    </button>
                   </div>
 
                   <div id="hrp85RecipientsEmptyState" class="alert alert-light border mb-0">
                     Approved recipients will appear here after loading.
                   </div>
 
-                  <div id="hrp85RecipientsTableWrapper" class="dashboard-table-wrap table-responsive d-none">
-                    <table class="table align-middle mb-0">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Email</th>
-                        </tr>
-                      </thead>
+                  <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1B
+                       Keep the existing wrapper/body IDs so JavaScript loading,
+                       empty-state handling, and recipient refresh continue unchanged.
+                       The rows are rendered as compact approved-mailbox cards. -->
+                  <div id="hrp85RecipientsTableWrapper" class="dashboard-table-wrap d-none">
+                    <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1F
+     Use normal table spacing for validation audit evidence.
+     This keeps the history readable without changing delivery data,
+     refresh behaviour, send behaviour, or tenant filtering. -->
+                    <table class="table align-middle mb-0" style="table-layout: fixed;">
                       <tbody id="hrp85RecipientsTableBody"></tbody>
                     </table>
                   </div>
@@ -2159,25 +2165,49 @@
 
               <div class="col-xl-7">
                 <div class="border rounded-4 p-3 p-lg-4 h-100 bg-white">
-                  <div class="mb-3">
-                    <h3 class="h6 fw-bold mb-1">Validation History</h3>
-                    <p class="text-secondary small mb-0">
-                      Recent validation email attempts and outcomes.
-                    </p>
+                  <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1B
+                       Validation History is the audit panel.
+                       Keep its refresh action here so HR understands this
+                       reloads delivery evidence only and does not send emails. -->
+                  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                    <div>
+                      <h3 class="h6 fw-bold mb-1">Validation History</h3>
+                      <p class="text-secondary small mb-0">
+                        Recent validation attempts, outcomes, and action notes.
+                      </p>
+                    </div>
+
+                    <button type="button" id="hrp85RefreshDeliveryLogsBtn"
+                      class="btn btn-outline-primary dashboard-action-btn text-nowrap">
+                      <i class="bi bi-list-check me-2"></i>
+                      Refresh History
+                    </button>
                   </div>
 
                   <div id="hrp85DeliveryLogsEmptyState" class="alert alert-light border mb-0">
                     No delivery history has been loaded yet.
                   </div>
 
-                  <div id="hrp85DeliveryLogsTableWrapper" class="dashboard-table-wrap table-responsive d-none">
-                    <table class="table align-middle mb-0">
-                      <thead>
+                  <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1B
+                       Validation History can grow, so contain it inside this
+                       audit panel instead of letting it stretch the whole Setup page. -->
+                  <div id="hrp85DeliveryLogsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+                    style="max-height: 420px; overflow: auto;">
+                    <table class="table table-sm align-middle mb-0">
+                      <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                         <tr>
-                          <th>Recipient</th>
-                          <th>Result</th>
-                          <th>Time</th>
-                          <th>Note</th>
+                          <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1F
+       Add audit-friendly spacing and stable column widths so HR can scan
+       recipient, outcome, sent date/time, and outcome note without the
+       history table feeling cramped. -->
+                          <th class="small text-secondary text-uppercase text-nowrap px-3 py-2" style="width: 30%;">
+                            Recipient</th>
+                          <th class="small text-secondary text-uppercase text-nowrap px-3 py-2" style="width: 18%;">
+                            Outcome</th>
+                          <th class="small text-secondary text-uppercase text-nowrap px-3 py-2" style="width: 18%;">Sent
+                            On</th>
+                          <th class="small text-secondary text-uppercase text-nowrap px-3 py-2" style="width: 34%;">
+                            Outcome Note</th>
                         </tr>
                       </thead>
                       <tbody id="hrp85DeliveryLogsTableBody"></tbody>
@@ -4740,8 +4770,7 @@
         </div>
 
         <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
-          <button type="button" id="printPayslipBtn"
-            class="btn btn-outline-primary dashboard-action-btn">
+          <button type="button" id="printPayslipBtn" class="btn btn-outline-primary dashboard-action-btn">
             <i class="bi bi-printer me-2"></i>Print
           </button>
           <button type="button" id="closePayslipPreviewFooterBtn"

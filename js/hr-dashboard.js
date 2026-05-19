@@ -2069,12 +2069,29 @@ function getHrp85RecipientDisplayNameByEmail(email = "", fallbackName = "") {
   const normalisedEmail = String(email || "").trim().toLowerCase();
   const fallback = String(fallbackName || "").trim();
 
-  const personalValidationLabels = {
-    "okworidams@yahoo.com": "Personal Test Mailbox - Yahoo",
-    "okworidams@gmail.com": "Personal Test Mailbox - Gmail",
+  // HR EMAIL INTEGRATION UI CLEANUP - STEP 1D
+  // Keep approved validation mailbox labels professional.
+  // The database may still contain old placeholder names such as
+  // "Bex Test Recipient 1/2", so the UI resolves known validation
+  // mailboxes by email and hides placeholder-style names.
+  const validationMailboxLabels = {
+    "okworidams@yahoo.com": "Validation Mailbox - Yahoo",
+    "okworiadams@yahoo.com": "Validation Mailbox - Yahoo",
+    "okworidams@gmail.com": "Validation Mailbox - Gmail",
+    "okworiadams@gmail.com": "Validation Mailbox - Gmail",
   };
 
-  return personalValidationLabels[normalisedEmail] || fallback || normalisedEmail || "--";
+  const resolvedLabel = validationMailboxLabels[normalisedEmail];
+
+  if (resolvedLabel) {
+    return resolvedLabel;
+  }
+
+  const isPlaceholderName = /^bex test recipient\b/i.test(fallback);
+
+  return isPlaceholderName
+    ? normalisedEmail || "--"
+    : fallback || normalisedEmail || "--";
 }
 
 // HRP-85 - STEP 1E
@@ -2159,8 +2176,28 @@ function renderHrp85TestRecipients() {
         const row = document.createElement("tr");
 
         row.innerHTML = `
-          <td>${escapeHtml(recipient.recipientName || "--")}</td>
-          <td class="text-break">${escapeHtml(recipient.recipientEmail || "--")}</td>
+          <td class="border-0 p-0 pb-2">
+            <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1B
+                 Approved Recipients is a controlled reference list, not a
+                 working admin table. Keep the data source and IDs unchanged,
+                 but present each approved mailbox as a compact HR-friendly row. -->
+            <div class="border rounded-3 p-3 bg-light-subtle">
+              <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-2">
+                <div>
+                  <div class="fw-semibold">
+                    ${escapeHtml(recipient.recipientName || "--")}
+                  </div>
+                  <div class="text-secondary small text-break">
+                    ${escapeHtml(recipient.recipientEmail || "--")}
+                  </div>
+                </div>
+
+                <span class="badge rounded-pill text-bg-success align-self-start">
+                  Approved
+                </span>
+              </div>
+            </div>
+          </td>
         `;
 
         tbody.appendChild(row);
@@ -2248,6 +2285,19 @@ function getHrp85DeliveryStatusBadgeClass(status = "") {
   return "text-bg-light border text-dark";
 }
 
+// HR EMAIL INTEGRATION UI CLEANUP - STEP 1B
+// Keep audit status labels HR-readable.
+// The saved database status remains unchanged; this only changes display text.
+function getHrp85DeliveryStatusDisplayLabel(status = "") {
+  const normalisedStatus = normalizeText(status);
+
+  if (normalisedStatus === "sent") return "Delivered";
+  if (normalisedStatus === "failed") return "Needs Review";
+  if (normalisedStatus === "pending") return "Pending";
+
+  return formatStatusLabel(status || "Pending");
+}
+
 // HRP-85 - STEP 1E
 // Format delivery timestamps with date and time for validation evidence.
 function formatHrp85DateTime(value) {
@@ -2263,6 +2313,39 @@ function formatHrp85DateTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// HR EMAIL INTEGRATION UI CLEANUP - STEP 1E
+// Split validation evidence timestamp into date and time.
+// This keeps the audit table readable without changing the saved timestamp.
+function formatHrp85DateTimeParts(value) {
+  if (!value) {
+    return {
+      dateLabel: "--",
+      timeLabel: "--",
+    };
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return {
+      dateLabel: "--",
+      timeLabel: "--",
+    };
+  }
+
+  return {
+    dateLabel: date.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }),
+    timeLabel: date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  };
 }
 
 // HRP-85 - STEP 1E
@@ -2396,28 +2479,39 @@ function renderHrp85DeliveryLogs(records = []) {
       savedRecipientName,
     );
 
+    const sentOn = formatHrp85DateTimeParts(record.sent_at || record.created_at);
+
     const row = document.createElement("tr");
 
     row.innerHTML = `
-      <td>
-        <div class="fw-semibold">${escapeHtml(recipientName || recipientEmail || "--")}</div>
-        <div class="text-secondary small text-break">
+      <td class="px-3 py-3 align-top">
+        <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1F
+             Give each audit row enough vertical and horizontal space so
+             recipient identity remains readable in the validation history. -->
+        <div class="fw-semibold lh-sm">${escapeHtml(recipientName || recipientEmail || "--")}</div>
+        <div class="text-secondary small text-break mt-1">
           ${escapeHtml(recipientEmail || "--")}
         </div>
       </td>
 
-      <td>
+      <td class="px-3 py-3 align-top">
         <span class="badge ${getHrp85DeliveryStatusBadgeClass(record.status)}">
-          ${escapeHtml(formatStatusLabel(record.status || "Pending"))}
+          ${escapeHtml(getHrp85DeliveryStatusDisplayLabel(record.status || "Pending"))}
         </span>
       </td>
 
-      <td class="text-nowrap">
-        ${formatHrp85DateTime(record.sent_at || record.created_at)}
+      <td class="px-3 py-3 align-top text-nowrap">
+        <!-- HR EMAIL INTEGRATION UI CLEANUP - STEP 1F
+             Keep date and time stacked, but add spacing so the audit
+             timestamp does not collide visually with outcome or notes. -->
+        <div class="fw-semibold lh-sm">${escapeHtml(sentOn.dateLabel)}</div>
+        <div class="text-secondary small mt-1">${escapeHtml(sentOn.timeLabel)}</div>
       </td>
 
-      <td class="text-break small">
-        ${escapeHtml(getHrp85DeliveryLogDisplayNote(record))}
+      <td class="px-3 py-3 align-top small">
+        <div class="lh-sm">
+          ${escapeHtml(getHrp85DeliveryLogDisplayNote(record))}
+        </div>
       </td>
     `;
 
@@ -2566,6 +2660,18 @@ async function handleHrp85EmailIntegrationSubmit() {
     recipientEmail,
   ).trim();
 
+  // HR EMAIL INTEGRATION UI CLEANUP - STEP 1C
+  // The Edge Function payload already expects recipientId.
+  // Read it from the selected approved-recipient option instead of
+  // referencing an undeclared variable. Email fallback keeps older
+  // option data safe without changing recipient validation rules.
+  const recipientId = String(
+    selectedOption?.dataset?.recipientId ||
+    selectedOption?.value ||
+    recipientEmail ||
+    "",
+  ).trim();
+
   const subject = String(state.dom.hrp85TestSubject?.value || "").trim();
   // HRP-85 - STEP 1E CLEANUP
   // Message body is fixed to prevent payroll/salary/bank content being typed
@@ -2618,7 +2724,10 @@ async function handleHrp85EmailIntegrationSubmit() {
 
     setHrp85EmailIntegrationStatus(
       "success",
-      `Validation email sent successfully to ${recipientEmail}. Check that mailbox, including Spam/Junk. Status: ${sentStatus}.`,
+      // HR EMAIL INTEGRATION UI CLEANUP - STEP 1D
+      // Keep the confirmation operational and HR-readable.
+      // This is display wording only; send result handling is unchanged.
+      `Validation email sent to ${recipientEmail}. Ask the recipient to check Inbox and Spam/Junk. Delivery status: ${sentStatus}.`,
     );
 
     showDashboardToast(
@@ -22561,7 +22670,7 @@ function renderPayslipEmailLogs(records = []) {
   tbody.innerHTML = "";
 
   updatePayslipEmailStatusCounts(records);
-    // PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
+  // PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
   // Keep the latest Send Payslips summary visible whenever the status panel redraws.
   renderPayslipEmailRunSummaryNotice();
 
@@ -22919,7 +23028,7 @@ async function handleSendPayslipsEmailRequest() {
       actionedAt: new Date().toISOString(),
     };
 
-        // PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
+    // PAYROLL EMAIL DELIVERY - STEP 2F-3B-6A
     // Show the latest backend result immediately in the status panel.
     // This remains visible even after the page alert or toast disappears.
     renderPayslipEmailRunSummaryNotice();

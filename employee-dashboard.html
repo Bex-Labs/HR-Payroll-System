@@ -11,6 +11,72 @@
 
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="icon" type="image/x-icon" href="assets/favicon.png" />
+
+  <style>
+    /* EMPLOYEE DASHBOARD FINAL QA - STEP 1R-C
+       Mobile/tablet stays natural. Desktop uses a measured card height
+       so Request Leave and My Leave History align without allowing the
+       history records to stretch the whole page. */
+    .employee-leave-history-scroll-area {
+      max-height: none;
+      overflow: visible;
+      padding-right: 0;
+    }
+
+    @media (min-width: 1200px) {
+      .employee-leave-main-row {
+        align-items: flex-start;
+      }
+
+      .employee-leave-main-row>[class*="col-"] {
+        display: flex;
+      }
+
+      .employee-leave-equal-card {
+        width: 100%;
+      }
+
+      .employee-leave-main-row[data-leave-card-height] .employee-leave-equal-card {
+        height: var(--employee-leave-card-height);
+      }
+
+      #employeeLeaveHistoryCard.employee-leave-equal-card {
+        overflow: hidden;
+      }
+
+      #employeeLeaveHistoryCard>.card-body {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+      }
+
+      #leaveHistoryCardCollapse:not(.d-none) {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .employee-leave-history-scroll-area {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overscroll-behavior: contain;
+        padding-right: 0.25rem;
+      }
+    }
+
+    /* EMPLOYEE DASHBOARD FINAL QA - STEP 1R-C
+       Keep keyboard focus visible without creating a permanent card border. */
+    .employee-leave-history-scroll-area:focus {
+      outline: 2px solid rgba(13, 110, 253, 0.25);
+      outline-offset: 2px;
+      border-radius: 0.5rem;
+    }
+  </style>
 </head>
 
 <body class="dashboard-page">
@@ -330,13 +396,16 @@
         </div>
       </section>
 
-      <div class="row g-4">
+      <!-- EMPLOYEE DASHBOARD FINAL QA - STEP 1R-B
+           Desktop equal-height wrapper for Request Leave and My Leave History only.
+           This keeps the two cards aligned while allowing Leave History to scroll internally. -->
+      <div class="row g-4 employee-leave-main-row">
         <div class="col-12 col-xl-5">
           <!-- EMPLOYEE UI CLEANUP - STEP 1P-A
                Submit Leave Request should size to its form content instead
                of stretching to match the taller Leave History card. This
                removes the empty bottom space without changing submit logic. -->
-          <section class="card dashboard-section-card dashboard-form-card">
+          <section class="card dashboard-section-card dashboard-form-card employee-leave-equal-card">
             <div class="card-body p-4 p-lg-5">
               <!-- EMPLOYEE UI CLEANUP - STEP 1P-E
                    Keeps the leave request heading clear and professional.
@@ -357,6 +426,13 @@
                   </select>
                   <div class="invalid-feedback">
                     Please select a leave type.
+                  </div>
+
+                  <!-- EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+                       Shows the employee why a request is blocked before submit.
+                       This is scoped only to active duplicate/overlapping leave
+                       requests and single-application leave types. -->
+                  <div id="leaveRequestBlockNotice" class="alert alert-warning border d-none mt-3 mb-0" role="status">
                   </div>
                 </div>
 
@@ -439,7 +515,7 @@
                My Leave History gets optional collapse after the history card cleanup.
                It stays expanded by default because recent leave decisions are
                high-value employee information. -->
-          <section class="card dashboard-section-card h-100" id="employeeLeaveHistoryCard">
+          <section class="card dashboard-section-card employee-leave-equal-card" id="employeeLeaveHistoryCard">
             <div class="card-body p-4 p-lg-5">
               <div id="employeeLeaveHistoryHeader"
                 class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
@@ -473,14 +549,21 @@
                   </button>
                 </div>
 
-                <!-- EMPLOYEE UI CLEANUP - STEP 1O-A
-                     My Leave History now renders as employee-friendly request
-                     cards instead of a horizontally scrolling admin-style table. -->
-                <div id="leaveRequestsEmptyState" class="text-secondary">
-                  No leave requests submitted yet.
-                </div>
+                <!-- EMPLOYEE DASHBOARD FINAL QA - STEP 1R-A
+                     Contain only the growing leave history records.
+                     Existing IDs are preserved so refresh, empty state,
+                     and renderLeaveRequests continue working unchanged. -->
+                <div class="employee-leave-history-scroll-area" role="region" aria-label="Leave history records"
+                  tabindex="0">
+                  <!-- EMPLOYEE UI CLEANUP - STEP 1O-A
+                       My Leave History now renders as employee-friendly request
+                       cards instead of a horizontally scrolling admin-style table. -->
+                  <div id="leaveRequestsEmptyState" class="text-secondary">
+                    No leave requests submitted yet.
+                  </div>
 
-                <div id="leaveRequestsList" class="d-none"></div>
+                  <div id="leaveRequestsList" class="d-none"></div>
+                </div>
               </div>
             </div>
           </section>
@@ -514,14 +597,14 @@
                 <i class="bi bi-eye-slash"></i>
               </button>
 
-<!-- EMPLOYEE UI CLEANUP - STEP 1Q-A
+              <!-- EMPLOYEE UI CLEANUP - STEP 1Q-A
      Makes Refresh Payroll icon-only to match the payroll figure visibility
      action. The title and aria-label keep the action clear and accessible. -->
-<button type="button"
-  class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center"
-  id="refreshPayrollBtn" aria-label="Refresh payroll" title="Refresh payroll">
-  <i class="bi bi-arrow-clockwise"></i>
-</button>
+              <button type="button"
+                class="btn btn-outline-primary dashboard-action-btn d-inline-flex align-items-center justify-content-center"
+                id="refreshPayrollBtn" aria-label="Refresh payroll" title="Refresh payroll">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
             </div>
           </div>
 
@@ -599,17 +682,17 @@
         <div class="card-body p-4 p-lg-5">
           <div id="employeePayrollHistoryHeader"
             class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-4">
-<!-- EMPLOYEE UI CLEANUP - STEP 1Q-C
+            <!-- EMPLOYEE UI CLEANUP - STEP 1Q-C
      Tightens the collapsed Payroll History card copy so employees know
      what is inside without overloading the card header. This is wording
      only; payroll records, breakdowns, filters, and PDF download are unchanged. -->
-<div>
-  <h2 class="section-heading h4 mb-1">Payroll History</h2>
-  <p class="section-subtext mb-0">
-    Review authorised pay cycles, payslip details, and downloadable
-payslip PDFs.
-  </p>
-</div>
+            <div>
+              <h2 class="section-heading h4 mb-1">Payroll History</h2>
+              <p class="section-subtext mb-0">
+                Review authorised pay cycles, payslip details, and downloadable
+                payslip PDFs.
+              </p>
+            </div>
 
             <button type="button" id="togglePayrollHistoryCardBtn"
               class="btn btn-outline-secondary dashboard-action-btn align-self-start text-nowrap" aria-expanded="false"
@@ -623,7 +706,7 @@ payslip PDFs.
                Default collapsed body. Employee expands only when they need
                to review historical payroll records. -->
           <div id="payrollHistoryCardCollapse" class="d-none">
-                        <!-- EMPLOYEE UI CLEANUP - STEP 1Q-D
+            <!-- EMPLOYEE UI CLEANUP - STEP 1Q-D
                  Keeps Payroll History filters employee-friendly and compact.
                  Existing input/button IDs are preserved so search, date filtering,
                  and clear-filter logic continue to work unchanged. -->
@@ -721,6 +804,84 @@ payslip PDFs.
   <script src="js/app.js"></script>
   <script src="js/session.js"></script>
   <script src="js/employee-dashboard.js"></script>
+
+  <script>
+    /* EMPLOYEE DASHBOARD FINAL QA - STEP 1R-C
+       Match My Leave History height to Request Leave on desktop only.
+       This is layout-only. It does not touch leave records, refresh logic,
+       submit behaviour, manager decisions, payroll, or profile behaviour. */
+    (() => {
+      const desktopQuery = window.matchMedia("(min-width: 1200px)");
+
+      function syncEmployeeLeaveCardHeights() {
+        window.requestAnimationFrame(() => {
+          const leaveSection = document.getElementById("leaveSection");
+          const row = document.querySelector("#leaveSection .employee-leave-main-row");
+          const requestCard = document.querySelector(
+            "#leaveSection .dashboard-form-card.employee-leave-equal-card",
+          );
+          const historyPanel = document.getElementById("leaveHistoryCardCollapse");
+
+          if (!leaveSection || !row || !requestCard || !historyPanel) return;
+
+          const clearLeaveCardHeight = () => {
+            row.style.removeProperty("--employee-leave-card-height");
+            row.removeAttribute("data-leave-card-height");
+          };
+
+          // EMPLOYEE DASHBOARD FINAL QA - STEP 1R-D
+          // Equal-height layout should apply only while My Leave History is expanded.
+          // When collapsed, remove the forced height so the card returns to a
+          // compact header-only state instead of leaving a large empty panel.
+          const isHistoryExpanded = !historyPanel.classList.contains("d-none");
+
+          if (
+            !desktopQuery.matches ||
+            leaveSection.classList.contains("d-none") ||
+            !isHistoryExpanded
+          ) {
+            clearLeaveCardHeight();
+            return;
+          }
+
+          clearLeaveCardHeight();
+
+          const measuredHeight = Math.ceil(requestCard.getBoundingClientRect().height);
+
+          if (measuredHeight > 0) {
+            row.style.setProperty("--employee-leave-card-height", `${measuredHeight}px`);
+            row.setAttribute("data-leave-card-height", "true");
+          }
+        });
+      }
+
+      document.addEventListener("DOMContentLoaded", syncEmployeeLeaveCardHeights);
+      window.addEventListener("load", syncEmployeeLeaveCardHeights);
+      window.addEventListener("resize", syncEmployeeLeaveCardHeights);
+
+      document
+        .getElementById("navLeaveBtn")
+        ?.addEventListener("click", () => {
+          window.setTimeout(syncEmployeeLeaveCardHeights, 50);
+        });
+
+      document
+        .getElementById("toggleLeaveHistoryCardBtn")
+        ?.addEventListener("click", () => {
+          window.setTimeout(syncEmployeeLeaveCardHeights, 50);
+        });
+
+      document
+        .getElementById("refreshLeaveRequestsBtn")
+        ?.addEventListener("click", () => {
+          window.setTimeout(syncEmployeeLeaveCardHeights, 250);
+        });
+
+      document
+        .getElementById("leaveRequestForm")
+        ?.addEventListener("input", syncEmployeeLeaveCardHeights);
+    })();
+  </script>
 </body>
 
 </html>

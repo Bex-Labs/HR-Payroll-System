@@ -977,7 +977,12 @@ function getManagerRelationshipLabel(row, managerEmail, managerFullName) {
   });
 
   const uniqueLabels = [...new Set(relationshipLabels)];
-  return uniqueLabels.length ? uniqueLabels.join(" / ") : "Assigned";
+
+  // MANAGER APPROVAL WIRING HARDENING - STEP 1B
+  // When RLS has already scoped the employee through employee_reporting_lines,
+  // old free-text manager fields may be blank or different. Show a stable
+  // HR-facing relationship label instead of implying the row is unassigned.
+  return uniqueLabels.length ? uniqueLabels.join(" / ") : "Primary Manager";
 }
 
 function getEmploymentDate(row) {
@@ -1187,9 +1192,11 @@ async function loadAssignedTeamMembers() {
 
     if (employeeError) throw employeeError;
 
-    const matchedEmployees = (employeeRows || []).filter((row) =>
-      rowMatchesManager(row, managerEmail, managerFullName),
-    );
+    // MANAGER APPROVAL WIRING HARDENING - STEP 1B
+    // Employee visibility is now controlled by employee_reporting_lines + RLS.
+    // Do not re-filter with old free-text manager fields here, otherwise
+    // valid reporting-line employees can disappear from the Manager dashboard.
+    const matchedEmployees = Array.isArray(employeeRows) ? employeeRows : [];
 
     const workEmails = matchedEmployees
       .map((employee) => normalizeText(getWorkEmail(employee)))
@@ -1229,11 +1236,12 @@ async function loadAssignedTeamMembers() {
         job_title: getJobTitle(employee),
         employment_date: getEmploymentDate(employee),
         matchedProfile,
-        relationshipLabel: getManagerRelationshipLabel(
-          employee,
-          managerEmail,
-          managerFullName,
-        ),
+        // MANAGER APPROVAL WIRING HARDENING - STEP 1B
+        // RLS has already confirmed this employee is assigned to the manager.
+        // Keep any legacy label if present, otherwise show the new source-of-truth label.
+        relationshipLabel:
+          getManagerRelationshipLabel(employee, managerEmail, managerFullName) ||
+          "Primary Manager",
         teamStatusLabel: getTeamStatusLabel(matchedProfile),
         teamStatusBadgeClass: getTeamStatusBadgeClass(matchedProfile),
       };
@@ -1834,43 +1842,61 @@ async function persistLeaveDecision(leaveRequestId, status, comment) {
     decision_comment: comment || null,
   };
 
-  const primaryResult = await supabase
+  // MANAGER APPROVAL WORKFLOW SMOKE TEST - STEP 1F
+  // A manager decision is not complete unless the audit fields are saved.
+  // Do not fall back to a status-only update, because that creates false
+  // success messages and leaves Employee Leave History unable to show the
+  // decision date, decision maker, or manager comment.
+  const { data, error } = await supabase
     .from("leave_requests")
     .update(decisionPayload)
     .eq("id", leaveRequestId)
-    .select("id, status")
+    .select(`
+      id,
+      status,
+      decision_at,
+      decision_by,
+      decision_by_name,
+      decision_comment
+    `)
     .maybeSingle();
 
-  if (primaryResult.error) {
-    const missingColumnError = String(primaryResult.error.message || "").match(
-      /(column|schema cache|does not exist|decision_at|decision_by|decision_comment|decision_by_name)/i,
-    );
-
-    if (!missingColumnError) {
-      throw primaryResult.error;
-    }
-
-    const fallbackResult = await supabase
-      .from("leave_requests")
-      .update({ status })
-      .eq("id", leaveRequestId)
-      .select("id, status")
-      .maybeSingle();
-
-    if (fallbackResult.error) throw fallbackResult.error;
-
-    if (!fallbackResult.data) {
-      throw new Error(
-        "Leave request was not updated. This usually means the update was blocked by row-level security or the row did not match the update filter.",
-      );
-    }
-
-    return;
+  if (error) {
+    throw error;
   }
 
-  if (!primaryResult.data) {
+  if (!data) {
     throw new Error(
       "Leave request was not updated. This usually means the update was blocked by row-level security or the row did not match the update filter.",
     );
   }
+
+  const expectedStatus = normalizeText(status);
+  const savedStatus = normalizeText(data.status);
+
+  if (savedStatus !== expectedStatus) {
+    throw new Error(
+      `Leave decision save verification failed. Expected status "${status}" but Supabase returned "${data.status || "--"}".`,
+    );
+  }
+
+  const requiresAuditComment = [
+    "rejected",
+    "returned for clarification",
+    "returned",
+  ].includes(expectedStatus);
+
+  if (!data.decision_at || !data.decision_by_name) {
+    throw new Error(
+      "Leave decision save verification failed. Decision audit fields were not saved.",
+    );
+  }
+
+  if (requiresAuditComment && !String(data.decision_comment || "").trim()) {
+    throw new Error(
+      "Leave decision save verification failed. A rejection or clarification comment was required but was not saved.",
+    );
+  }
+
+  return data;
 }

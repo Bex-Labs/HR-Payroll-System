@@ -9,6 +9,15 @@ const PAYROLL_MODEL_REGULAR = "REGULAR";
 // EMPLOYEE PAYROLL PRIVACY - STEP 1H
 // Browser-local preference for hiding payroll figures like a banking app.
 const EMPLOYEE_PAYROLL_FIGURES_HIDDEN_KEY = "employeePayrollFiguresHidden";
+// EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+// These leave types are treated as single-application leave types
+// in Employee Self Service. Do not apply this to Annual, Sick,
+// Compassionate, or other repeatable entitlement/event leave types.
+const SINGLE_APPLICATION_LEAVE_TYPE_KEYWORDS = [
+  "maternity",
+  "paternity",
+  "adoption",
+];
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
@@ -99,6 +108,11 @@ const state = {
   currentProfile: null,
   employeeRecord: null,
   payrollRecords: [],
+
+  // EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+  // Loaded leave requests are kept in memory so the Request Leave form
+  // can block duplicate/overlapping active requests before insert.
+  leaveRequests: [],
   isPayrollFiguresHidden: false,
   leaveRefreshTimer: null,
   pendingProfileImageFile: null,
@@ -285,6 +299,11 @@ function cacheDomElements() {
     totalDays: document.getElementById("totalDays"),
     leaveReason: document.getElementById("leaveReason"),
     submitLeaveBtn: document.getElementById("submitLeaveBtn"),
+
+    // EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+    // Inline warning shown under Leave Type when the selected request
+    // conflicts with an existing active leave request.
+    leaveRequestBlockNotice: document.getElementById("leaveRequestBlockNotice"),
 
     refreshLeaveRequestsBtn: document.getElementById("refreshLeaveRequestsBtn"),
 
@@ -473,8 +492,12 @@ function bindEmployeeLeaveBalancesCardEvents() {
   });
 
   card.addEventListener("dblclick", (event) => {
+    // EMPLOYEE DASHBOARD FINAL QA - STEP 1R-A
+    // Ignore double-clicks inside the scrollable history records area.
+    // This prevents the card from collapsing while the employee is reviewing
+    // or selecting text from manager decision comments.
     const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, [contenteditable='true']",
+      "button, a, input, select, textarea, label, .employee-leave-history-scroll-area, [contenteditable='true']",
     );
 
     if (ignoredTarget) return;
@@ -1550,15 +1573,20 @@ function bindLeaveFormEvents() {
   // EMPLOYEE UI CLEANUP - STEP 1P-F FIX
   // Keep the submit button grey/disabled until the leave request form is
   // ready. This mirrors the existing profile upload empty-button behaviour.
-  state.dom.leaveType?.addEventListener("change", updateLeaveSubmitButtonState);
+  state.dom.leaveType?.addEventListener("change", () => {
+    updateLeaveRequestBlockNotice();
+    updateLeaveSubmitButtonState();
+  });
 
   state.dom.startDate?.addEventListener("change", () => {
     calculateLeaveDays();
+    updateLeaveRequestBlockNotice();
     updateLeaveSubmitButtonState();
   });
 
   state.dom.endDate?.addEventListener("change", () => {
     calculateLeaveDays();
+    updateLeaveRequestBlockNotice();
     updateLeaveSubmitButtonState();
   });
 
@@ -1587,7 +1615,14 @@ function isLeaveRequestFormReadyForSubmission() {
     return false;
   }
 
-  return new Date(endDate) >= new Date(startDate);
+  if (new Date(endDate) < new Date(startDate)) {
+    return false;
+  }
+
+  // EMPLOYEE LEAVE POLICY BLOCK - STEP 1A
+  // Keep the Submit button disabled when the selected leave type is
+  // blocked for the selected leave year.
+  return !getLeaveRequestPolicyBlock();
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1P-F FIX
@@ -1604,6 +1639,191 @@ function updateLeaveSubmitButtonState() {
 
   button.classList.toggle("btn-secondary", !isReady);
   button.classList.toggle("btn-primary", isReady);
+}
+
+// EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+// Resolve the currently selected Leave Type without changing the dropdown.
+function getSelectedLeaveTypeDetails() {
+  const select = state.dom.leaveType;
+  const selectedOption = select?.selectedOptions?.[0];
+
+  return {
+    id: String(select?.value || "").trim(),
+    name: String(selectedOption?.textContent || "").trim(),
+    code: String(selectedOption?.dataset?.code || "").trim(),
+  };
+}
+
+// EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+// Single-application leave types are blocked for the same leave year
+// when an active request already exists.
+function isSingleApplicationLeaveType(leaveType = {}) {
+  const searchableValue = normalizeText(
+    `${leaveType.name || ""} ${leaveType.code || ""}`,
+  );
+
+  return SINGLE_APPLICATION_LEAVE_TYPE_KEYWORDS.some((keyword) =>
+    searchableValue.includes(keyword),
+  );
+}
+
+// EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+// Use the selected first day of leave to determine the leave year.
+function getSelectedLeaveRequestYear() {
+  const startDateValue = String(state.dom.startDate?.value || "").trim();
+
+  if (!startDateValue) return null;
+
+  const startDate = new Date(startDateValue);
+
+  if (Number.isNaN(startDate.getTime())) return null;
+
+  return startDate.getFullYear();
+}
+
+// EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+// Detect whether an existing request touches the selected leave year.
+function doesLeaveRequestTouchYear(request = {}, leaveYear) {
+  if (!leaveYear) return false;
+
+  const yearStart = new Date(leaveYear, 0, 1);
+  const yearEnd = new Date(leaveYear, 11, 31, 23, 59, 59, 999);
+
+  const requestStart = new Date(request.start_date || "");
+  const requestEnd = new Date(request.end_date || request.start_date || "");
+
+  if (
+    Number.isNaN(requestStart.getTime()) ||
+    Number.isNaN(requestEnd.getTime())
+  ) {
+    return false;
+  }
+
+  return requestStart <= yearEnd && requestEnd >= yearStart;
+}
+
+// EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+// Main HR policy guard:
+// 1. Block any overlapping Pending/Approved leave period.
+// 2. Also block duplicate single-application leave types in the same year.
+// Rejected and Returned requests do not block a fresh request.
+function getLeaveRequestPolicyBlock() {
+  const selectedLeaveType = getSelectedLeaveTypeDetails();
+  const leaveYear = getSelectedLeaveRequestYear();
+
+  const startDateValue = String(state.dom.startDate?.value || "").trim();
+  const endDateValue = String(state.dom.endDate?.value || "").trim();
+
+  const selectedStartDate = new Date(startDateValue || "");
+  const selectedEndDate = new Date(endDateValue || startDateValue || "");
+
+  const hasValidSelectedDateRange =
+    startDateValue &&
+    endDateValue &&
+    !Number.isNaN(selectedStartDate.getTime()) &&
+    !Number.isNaN(selectedEndDate.getTime()) &&
+    selectedEndDate >= selectedStartDate;
+
+  const blockingStatuses = new Set([
+    "approved",
+    "pending approval",
+  ]);
+
+  const activeRequests = (state.leaveRequests || []).filter((request) =>
+    blockingStatuses.has(normalizeText(request.status || "")),
+  );
+
+  if (hasValidSelectedDateRange) {
+    const overlappingRequest = activeRequests.find((request) => {
+      const requestStartDate = new Date(request.start_date || "");
+      const requestEndDate = new Date(request.end_date || request.start_date || "");
+
+      if (
+        Number.isNaN(requestStartDate.getTime()) ||
+        Number.isNaN(requestEndDate.getTime())
+      ) {
+        return false;
+      }
+
+      return selectedStartDate <= requestEndDate && selectedEndDate >= requestStartDate;
+    });
+
+    if (overlappingRequest) {
+      const existingLeaveTypeName =
+        overlappingRequest.leave_types?.name || "leave request";
+
+      const existingStatusLabel =
+        overlappingRequest.status || "active";
+
+      const existingRequestPeriod =
+        `${formatDate(overlappingRequest.start_date)} to ${formatDate(overlappingRequest.end_date)}`;
+
+      const selectedRequestPeriod =
+        `${formatDate(startDateValue)} to ${formatDate(endDateValue)}`;
+
+      const sameLeaveType =
+        String(overlappingRequest.leave_type_id || "").trim() === selectedLeaveType.id ||
+        normalizeText(existingLeaveTypeName) === normalizeText(selectedLeaveType.name);
+
+      return {
+        message: sameLeaveType
+          ? `${selectedLeaveType.name || "This leave type"} already has a ${existingStatusLabel} request covering ${existingRequestPeriod}. Wait for the manager decision or contact HR if this request needs to be amended.`
+          : `The selected dates (${selectedRequestPeriod}) overlap with an existing ${existingStatusLabel} ${existingLeaveTypeName} request covering ${existingRequestPeriod}. Please choose different dates or contact HR if the existing request needs to be changed.`,
+      };
+    }
+  }
+
+  if (!selectedLeaveType.id || !leaveYear) return null;
+
+  if (!isSingleApplicationLeaveType(selectedLeaveType)) {
+    return null;
+  }
+
+  const existingRequest = activeRequests.find((request) => {
+    const sameLeaveType =
+      String(request.leave_type_id || "").trim() === selectedLeaveType.id ||
+      normalizeText(request.leave_types?.name || "") ===
+      normalizeText(selectedLeaveType.name);
+
+    if (!sameLeaveType) return false;
+
+    return doesLeaveRequestTouchYear(request, leaveYear);
+  });
+
+  if (!existingRequest) return null;
+
+  const statusLabel = existingRequest.status || "recorded";
+  const requestPeriod =
+    `${formatDate(existingRequest.start_date)} to ${formatDate(existingRequest.end_date)}`;
+
+  return {
+    message:
+      `${selectedLeaveType.name || "This leave type"} already has a ${statusLabel} request for ${leaveYear}. ` +
+      `Existing request period: ${requestPeriod}. Contact HR if this relates to a different qualifying event.`,
+  };
+}
+
+// EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+// Show or hide the in-form block notice without touching page layout.
+function updateLeaveRequestBlockNotice() {
+  const notice = state.dom.leaveRequestBlockNotice;
+  if (!notice) return;
+
+  const block = getLeaveRequestPolicyBlock();
+
+  if (!block) {
+    notice.classList.add("d-none");
+    notice.textContent = "";
+    return;
+  }
+
+  notice.className = "alert alert-warning border mt-3 mb-0";
+  notice.innerHTML = `
+    <div class="fw-semibold mb-1">Leave request blocked</div>
+    <div class="small">
+      ${escapeHtml(block.message)}
+    </div>
+  `;
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1P-F FIX
@@ -1712,6 +1932,18 @@ function validateLeaveRequestForm() {
     isValid = false;
   }
 
+  // EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+  // Final submit guard. This protects against direct submit even if
+  // button state has not refreshed yet.
+  const policyBlock = getLeaveRequestPolicyBlock();
+
+  if (policyBlock) {
+    state.dom.leaveType?.classList.add("is-invalid");
+    updateLeaveRequestBlockNotice();
+    showPageAlert("warning", policyBlock.message);
+    isValid = false;
+  }
+
   return isValid;
 }
 
@@ -1757,10 +1989,26 @@ async function handleLeaveRequestSubmit() {
 
     state.dom.leaveRequestForm.reset();
     state.dom.totalDays.value = "";
+    updateLeaveRequestBlockNotice();
+    updateLeaveSubmitButtonState();
 
     await loadEmployeeLeaveRequests();
     await loadEmployeeLeaveBalances();
+
+    // EMPLOYEE LEAVE POST-SUBMIT UX - STEP 1H-A
+    // After a successful leave submission, open My Leave History so the
+    // employee can immediately see the new Pending Approval record.
+    // This changes only post-submit visibility; it does not change leave
+    // saving, manager approval, balance calculation, or payroll behaviour.
     showSection("leave");
+    setEmployeeLeaveHistoryCardExpanded(true);
+
+    // EMPLOYEE LEAVE POST-SUBMIT UX - STEP 1H-A
+    // Reuse the existing desktop height-sync listener after the card opens,
+    // so Request Leave and My Leave History stay aligned.
+    window.setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 50);
   } catch (error) {
     console.error("Error submitting leave request:", error);
     showPageAlert(
@@ -1803,14 +2051,18 @@ async function loadEmployeeLeaveRequests() {
   const employeeIdentityCandidates = getEmployeeIdentityCandidates();
 
   if (!employeeIdentityCandidates.length) {
+    state.leaveRequests = [];
     renderLeaveRequests([]);
     renderLatestDecisionCard([]);
+    updateLeaveRequestBlockNotice();
+    updateLeaveSubmitButtonState();
     return;
   }
 
   let query = supabase.from("leave_requests").select(`
       id,
       employee_id,
+      leave_type_id,
       start_date,
       end_date,
       total_days,
@@ -1848,8 +2100,14 @@ async function loadEmployeeLeaveRequests() {
     )
     : [];
 
+  // EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
+  // Keep loaded leave requests available to the Request Leave form.
+  state.leaveRequests = requests;
+
   renderLeaveRequests(requests);
   renderLatestDecisionCard(requests);
+  updateLeaveRequestBlockNotice();
+  updateLeaveSubmitButtonState();
 }
 
 function renderLeaveRequests(requests) {
