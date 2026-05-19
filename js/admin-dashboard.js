@@ -2382,7 +2382,7 @@ async function submitPasswordReset() {
     showPageAlert(
       "success",
       data?.message ||
-        `Password reset successfully for ${profile.email || "user"}.`,
+      `Password reset successfully for ${profile.email || "user"}.`,
     );
 
     showDashboardToast(
@@ -2404,5 +2404,4 @@ async function submitPasswordReset() {
     updateResetPasswordSubmitButtonState();
   }
 }
-                                     
-}
+
