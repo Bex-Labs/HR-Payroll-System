@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     showPageAlert(
       "danger",
       error.message ||
-        "An unexpected error occurred while loading the manager dashboard.",
+      "An unexpected error occurred while loading the manager dashboard.",
     );
   }
 });
@@ -666,14 +666,34 @@ function setProfileImageSaveLoading(isLoading) {
 
   if (isLoading) {
     button.dataset.originalHtml = button.innerHTML;
+    button.dataset.originalClass = button.className;
+    button.className = "btn btn-secondary dashboard-action-btn";
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       Uploading...
     `;
   } else if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
+    button.className = button.dataset.originalClass || "btn btn-outline-primary dashboard-action-btn";
     delete button.dataset.originalHtml;
+    delete button.dataset.originalClass;
+    // Re-evaluate: keep disabled if no file is pending
+    button.disabled = !state.pendingProfileImageFile;
+    button.className = state.pendingProfileImageFile
+      ? "btn btn-outline-primary dashboard-action-btn"
+      : "btn btn-secondary dashboard-action-btn";
   }
+}
+
+function updateManagerProfileImageButtonState() {
+  const button = state.dom.saveManagerProfileImageBtn;
+  if (!button) return;
+
+  const hasFile = Boolean(state.pendingProfileImageFile);
+  button.disabled = !hasFile;
+  button.className = hasFile
+    ? "btn btn-outline-primary dashboard-action-btn"
+    : "btn btn-secondary dashboard-action-btn";
 }
 
 function handlePendingProfileImage(file) {
@@ -683,6 +703,7 @@ function handlePendingProfileImage(file) {
     if (state.currentProfile) {
       renderManagerProfile(state.currentProfile, state.currentUser);
     }
+    updateManagerProfileImageButtonState();
     return;
   }
 
@@ -694,6 +715,7 @@ function handlePendingProfileImage(file) {
     if (state.dom.managerProfileImageInput) {
       state.dom.managerProfileImageInput.value = "";
     }
+    updateManagerProfileImageButtonState();
     return;
   }
 
@@ -702,10 +724,12 @@ function handlePendingProfileImage(file) {
     if (state.dom.managerProfileImageInput) {
       state.dom.managerProfileImageInput.value = "";
     }
+    updateManagerProfileImageButtonState();
     return;
   }
 
   state.pendingProfileImageFile = file;
+  updateManagerProfileImageButtonState();
 
   const reader = new FileReader();
   reader.onload = () => {
@@ -1481,7 +1505,7 @@ async function loadTeamLeaveVisibility() {
     showPageAlert(
       "danger",
       error.message ||
-        "Team leave requests and leave schedule could not be loaded.",
+      "Team leave requests and leave schedule could not be loaded.",
     );
     state.pendingLeaveRequests = [];
     state.processedLeaveRequests = [];
@@ -1849,4 +1873,4 @@ async function persistLeaveDecision(leaveRequestId, status, comment) {
       "Leave request was not updated. This usually means the update was blocked by row-level security or the row did not match the update filter.",
     );
   }
-}                                   
+}

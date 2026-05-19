@@ -1172,7 +1172,7 @@ html {
 }
 
 @media (min-width: 992px) {
-  .workspace-switcher-card .card-body > .d-flex {
+  .workspace-switcher-card .card-body>.d-flex {
     min-height: 42px;
   }
 }
@@ -1197,6 +1197,7 @@ html {
   =====================================================================
 */
 @media print {
+
   /* Hide the entire page … */
   body * {
     visibility: hidden;
@@ -1224,4 +1225,125 @@ html {
   .modal-content {
     overflow: visible !important;
   }
+}
+
+/* =========================================================
+   EMPLOYEE UI CLEANUP - STEP 1I
+   Floating Back-to-Top arrow button.
+
+   Purpose:
+   - Helps employees return to the top on long dashboard pages
+   - Uses the same blue filled action style already used across the app
+   - Does not interfere with payroll cards, tables, filters, or PDFs
+   ========================================================= */
+
+.dashboard-scroll-top-btn {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 1080;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #0d6efd;
+  border-radius: 999px;
+  background-color: #0d6efd;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 14px 30px rgba(13, 110, 253, 0.28);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.dashboard-scroll-top-btn:hover,
+.dashboard-scroll-top-btn:focus {
+  border-color: #0a58ca;
+  background-color: #0b5ed7;
+  color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(13, 110, 253, 0.34);
+}
+
+.dashboard-scroll-top-btn i {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+@media (max-width: 575.98px) {
+  .dashboard-scroll-top-btn {
+    right: 0.9rem;
+    bottom: 0.9rem;
+    width: 42px;
+    height: 42px;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE UI CLEANUP - STEP 1J
+   Read-only Employee Profile field styling.
+
+   Purpose:
+   - Makes uneditable employee profile fields visually greyed out
+   - Matches the read-only/disabled feel used in other dashboards
+   - Does not affect profile image upload, leave forms, payroll filters,
+     payroll history, or payslip functionality
+   ========================================================= */
+
+#profileSection input.form-control[readonly] {
+  background-color: #f1f3f5;
+  border-color: #d9dee7;
+  color: #6c757d;
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 1;
+}
+
+#profileSection input.form-control[readonly]:focus {
+  background-color: #f1f3f5;
+  border-color: #d9dee7;
+  color: #6c757d;
+  box-shadow: none;
+}
+
+#profileSection input.form-control[readonly]::placeholder {
+  color: #9aa3af;
+}
+
+/* =========================================================
+   EMPLOYEE UI CLEANUP - STEP 1J
+   Profile image upload empty-state button.
+
+   Purpose:
+   - Grey out Upload Profile Picture when no image is selected
+   - Re-enable normal blue styling only after a valid image is selected
+   - Does not affect the file picker, profile details, payroll, leave, or PDF
+   ========================================================= */
+
+#profileSection #saveProfileImageBtn:disabled,
+#profileSection #saveProfileImageBtn.profile-upload-empty {
+  background-color: #adb5bd;
+  border-color: #adb5bd;
+  color: #ffffff;
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+#profileSection #saveProfileImageBtn:disabled:hover,
+#profileSection #saveProfileImageBtn:disabled:focus,
+#profileSection #saveProfileImageBtn.profile-upload-empty:hover,
+#profileSection #saveProfileImageBtn.profile-upload-empty:focus {
+  background-color: #adb5bd;
+  border-color: #adb5bd;
+  color: #ffffff;
+  transform: none;
+  box-shadow: none;
+}
+
+#profileSection #saveProfileImageBtn:not(:disabled):not(.profile-upload-empty) {
+  cursor: pointer;
 }

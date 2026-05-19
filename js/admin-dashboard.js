@@ -243,6 +243,10 @@ function setAdminActionButtonLoading(button, isLoading, loadingText = "Working..
       button.dataset.originalHtml = button.innerHTML;
     }
 
+    if (!button.dataset.originalClass) {
+      button.dataset.originalClass = button.className;
+    }
+
     button.disabled = true;
     button.className = "btn btn-secondary dashboard-action-btn";
     button.innerHTML = `
@@ -258,7 +262,8 @@ function setAdminActionButtonLoading(button, isLoading, loadingText = "Working..
   }
 
   button.disabled = false;
-  button.className = "btn btn-outline-primary dashboard-action-btn";
+  button.className = button.dataset.originalClass || "btn btn-outline-primary dashboard-action-btn";
+  delete button.dataset.originalClass;
 }
 
 function updateBackToTopButtonVisibility() {
@@ -2400,3 +2405,4 @@ async function submitPasswordReset() {
   }
 }
                                      
+}

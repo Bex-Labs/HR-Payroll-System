@@ -6,6 +6,10 @@ const PROFILE_IMAGES_BUCKET = "profile-images";
 const PAYROLL_MODEL_GENERIC = "GENERIC";
 const PAYROLL_MODEL_REGULAR = "REGULAR";
 
+// EMPLOYEE PAYROLL PRIVACY - STEP 1H
+// Browser-local preference for hiding payroll figures like a banking app.
+const EMPLOYEE_PAYROLL_FIGURES_HIDDEN_KEY = "employeePayrollFiguresHidden";
+
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
@@ -13,6 +17,30 @@ document.addEventListener("DOMContentLoaded", async () => {
     bindLeaveFormEvents();
     bindUtilityEvents();
     bindPayrollFilterEvents();
+
+    // EMPLOYEE PAYROLL PRIVACY - STEP 1H
+    // Restore the employee's browser-local hide/show preference before
+    // Current Payslip Summary values are rendered.
+    restoreEmployeePayrollFigureVisibility();
+
+    // EMPLOYEE UI CLEANUP - STEP 1B
+    // Bind Payroll History collapse only. Profile, Leave, and Current Payslip
+    // Summary are deliberately not part of this step.
+    bindEmployeePayrollHistoryCardEvents();
+
+    // EMPLOYEE UI CLEANUP - STEP 1L-C
+    // Bind Leave Balances collapse separately from Payroll History.
+    bindEmployeeLeaveBalancesCardEvents();
+
+    // EMPLOYEE UI CLEANUP - STEP 1N
+    // Bind Latest Leave Decision collapse separately from Leave Balances.
+    bindEmployeeLatestDecisionCardEvents();
+
+    // EMPLOYEE UI CLEANUP - STEP 1O-C
+    // Bind optional My Leave History collapse after the history cards
+    // have been cleaned up.
+    bindEmployeeLeaveHistoryCardEvents();
+
     bindProfileImageEvents();
     bindSyncEvents();
 
@@ -71,6 +99,7 @@ const state = {
   currentProfile: null,
   employeeRecord: null,
   payrollRecords: [],
+  isPayrollFiguresHidden: false,
   leaveRefreshTimer: null,
   pendingProfileImageFile: null,
   identity: {
@@ -185,6 +214,10 @@ function cacheDomElements() {
   state.dom = {
     pageAlert: document.getElementById("pageAlert"),
 
+    // EMPLOYEE UI CLEANUP - STEP 1I
+    // Floating Back-to-Top button used only for page navigation.
+    scrollToTopBtn: document.getElementById("scrollToTopBtn"),
+
     navProfileBtn: document.getElementById("navProfileBtn"),
     navLeaveBtn: document.getElementById("navLeaveBtn"),
     navPayrollBtn: document.getElementById("navPayrollBtn"),
@@ -219,6 +252,13 @@ function cacheDomElements() {
     leaveBalancesGrid: document.getElementById("leaveBalancesGrid"),
     refreshLeaveBalancesBtn: document.getElementById("refreshLeaveBalancesBtn"),
 
+    // EMPLOYEE UI CLEANUP - STEP 1L-C
+    // Leave Balances gets its own collapse controls.
+    employeeLeaveBalancesCard: document.getElementById("employeeLeaveBalancesCard"),
+    employeeLeaveBalancesHeader: document.getElementById("employeeLeaveBalancesHeader"),
+    toggleLeaveBalancesCardBtn: document.getElementById("toggleLeaveBalancesCardBtn"),
+    leaveBalancesCardCollapse: document.getElementById("leaveBalancesCardCollapse"),
+
     latestDecisionEmptyState: document.getElementById(
       "latestDecisionEmptyState",
     ),
@@ -230,6 +270,14 @@ function cacheDomElements() {
     latestDecisionBy: document.getElementById("latestDecisionBy"),
     latestDecisionComment: document.getElementById("latestDecisionComment"),
 
+    // EMPLOYEE UI CLEANUP - STEP 1N
+    // Latest Leave Decision gets its own card-level refresh and collapse controls.
+    employeeLatestDecisionCard: document.getElementById("employeeLatestDecisionCard"),
+    employeeLatestDecisionHeader: document.getElementById("employeeLatestDecisionHeader"),
+    refreshLatestDecisionBtn: document.getElementById("refreshLatestDecisionBtn"),
+    toggleLatestDecisionCardBtn: document.getElementById("toggleLatestDecisionCardBtn"),
+    latestDecisionCardCollapse: document.getElementById("latestDecisionCardCollapse"),
+
     leaveRequestForm: document.getElementById("leaveRequestForm"),
     leaveType: document.getElementById("leaveType"),
     startDate: document.getElementById("startDate"),
@@ -239,11 +287,21 @@ function cacheDomElements() {
     submitLeaveBtn: document.getElementById("submitLeaveBtn"),
 
     refreshLeaveRequestsBtn: document.getElementById("refreshLeaveRequestsBtn"),
+
+    // EMPLOYEE UI CLEANUP - STEP 1O-C
+    // My Leave History gets optional collapse controls.
+    // It stays expanded by default to avoid an awkward empty right column
+    // beside the Submit Leave Request form.
+    employeeLeaveHistoryCard: document.getElementById("employeeLeaveHistoryCard"),
+    employeeLeaveHistoryHeader: document.getElementById("employeeLeaveHistoryHeader"),
+    toggleLeaveHistoryCardBtn: document.getElementById("toggleLeaveHistoryCardBtn"),
+    leaveHistoryCardCollapse: document.getElementById("leaveHistoryCardCollapse"),
+
     leaveRequestsEmptyState: document.getElementById("leaveRequestsEmptyState"),
-    leaveRequestsTableWrapper: document.getElementById(
-      "leaveRequestsTableWrapper",
-    ),
-    leaveRequestsTableBody: document.getElementById("leaveRequestsTableBody"),
+
+    // EMPLOYEE UI CLEANUP - STEP 1O-A
+    // My Leave History now renders as stacked request cards instead of a table.
+    leaveRequestsList: document.getElementById("leaveRequestsList"),
 
     refreshPayrollBtn: document.getElementById("refreshPayrollBtn"),
     currentPayrollEmptyState: document.getElementById(
@@ -256,6 +314,16 @@ function cacheDomElements() {
     currentGrossPay: document.getElementById("currentGrossPay"),
     currentTotalDeductions: document.getElementById("currentTotalDeductions"),
     currentNetPay: document.getElementById("currentNetPay"),
+    togglePayrollFiguresBtn: document.getElementById("togglePayrollFiguresBtn"),
+
+    // EMPLOYEE UI CLEANUP - STEP 1B
+    // Payroll History gets its own collapse controls.
+    // No other Employee dashboard card is included in this step.
+    employeePayrollHistoryCard: document.getElementById("employeePayrollHistoryCard"),
+    employeePayrollHistoryHeader: document.getElementById("employeePayrollHistoryHeader"),
+    togglePayrollHistoryCardBtn: document.getElementById("togglePayrollHistoryCardBtn"),
+    payrollHistoryCardCollapse: document.getElementById("payrollHistoryCardCollapse"),
+
     payrollHistoryEmptyState: document.getElementById(
       "payrollHistoryEmptyState",
     ),
@@ -293,10 +361,53 @@ function bindUtilityEvents() {
     await refreshEmployeeLeaveHistoryManually();
   });
 
+  // EMPLOYEE UI CLEANUP - STEP 1N
+  // Refresh only the leave decision/history data from the card header.
+  state.dom.refreshLatestDecisionBtn?.addEventListener("click", async () => {
+    await refreshLatestDecisionManually();
+  });
+
   state.dom.refreshPayrollBtn?.addEventListener("click", async () => {
     await refreshEmployeePayrollManually();
   });
+
+  // EMPLOYEE UI CLEANUP - STEP 1I
+  // Smoothly return the employee to the top of the dashboard.
+  state.dom.scrollToTopBtn?.addEventListener("click", () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  });
+
+  window.addEventListener("scroll", updateScrollToTopButtonVisibility, {
+    passive: true,
+  });
+
+  window.addEventListener("resize", updateScrollToTopButtonVisibility);
+
+  updateScrollToTopButtonVisibility();
+
+  // EMPLOYEE PAYROLL PRIVACY - STEP 1H
+  // Toggle only the on-screen Current Payslip Summary figures.
+  // Payroll records, calculations, PDF generation, and Supabase data are not changed.
+  state.dom.togglePayrollFiguresBtn?.addEventListener("click", () => {
+    setEmployeePayrollFiguresHidden(!state.isPayrollFiguresHidden, true);
+  });
 }
+
+// EMPLOYEE UI CLEANUP - STEP 1I
+// Show the Back-to-Top button only after the employee has scrolled down.
+// This keeps the top of the dashboard clean on first load.
+function updateScrollToTopButtonVisibility() {
+  const button = state.dom.scrollToTopBtn;
+  if (!button) return;
+
+  const shouldShow = window.scrollY > 260;
+  button.classList.toggle("d-none", !shouldShow);
+}
+
+
 function bindPayrollFilterEvents() {
   state.dom.payrollSearchInput?.addEventListener("input", () => {
     applyPayrollFilters();
@@ -314,7 +425,261 @@ function bindPayrollFilterEvents() {
     clearPayrollFilters();
   });
 }
+
+// EMPLOYEE UI CLEANUP - STEP 1L-C
+// Programmatic Leave Balances collapse state.
+// This mirrors the Payroll History collapse pattern but is scoped only
+// to the Leave Balances card.
+function setEmployeeLeaveBalancesCardExpanded(shouldExpand) {
+  const button = state.dom.toggleLeaveBalancesCardBtn;
+  const panel = state.dom.leaveBalancesCardCollapse;
+
+  if (!button || !panel) return;
+
+  panel.classList.toggle("d-none", !shouldExpand);
+  button.setAttribute("aria-expanded", String(shouldExpand));
+  button.title = shouldExpand ? "Collapse leave balances" : "Expand leave balances";
+
+  const icon = button.querySelector("i");
+  const label = button.querySelector("span");
+
+  if (icon) {
+    icon.className = shouldExpand
+      ? "bi bi-chevron-up me-2"
+      : "bi bi-chevron-down me-2";
+  }
+
+  if (label) {
+    label.textContent = shouldExpand ? "Collapse" : "Expand";
+  }
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1L-C
+// Bind the visible collapse button and double-click-to-collapse behaviour.
+// Interactive controls are ignored so Refresh Balances remains safe.
+function bindEmployeeLeaveBalancesCardEvents() {
+  const card = state.dom.employeeLeaveBalancesCard;
+  const button = state.dom.toggleLeaveBalancesCardBtn;
+  const panel = state.dom.leaveBalancesCardCollapse;
+
+  if (!card || !button || !panel) return;
+
+  // Keep Leave Balances collapsed by default.
+  setEmployeeLeaveBalancesCardExpanded(false);
+
+  button.addEventListener("click", () => {
+    const isExpanded = !panel.classList.contains("d-none");
+    setEmployeeLeaveBalancesCardExpanded(!isExpanded);
+  });
+
+  card.addEventListener("dblclick", (event) => {
+    const ignoredTarget = event.target.closest(
+      "button, a, input, select, textarea, label, [contenteditable='true']",
+    );
+
+    if (ignoredTarget) return;
+
+    const isExpanded = !panel.classList.contains("d-none");
+    if (!isExpanded) return;
+
+    setEmployeeLeaveBalancesCardExpanded(false);
+  });
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1N
+// Programmatic Latest Leave Decision collapse state.
+// This mirrors the Leave Balances and Payroll History card behaviour.
+function setEmployeeLatestDecisionCardExpanded(shouldExpand) {
+  const button = state.dom.toggleLatestDecisionCardBtn;
+  const panel = state.dom.latestDecisionCardCollapse;
+
+  if (!button || !panel) return;
+
+  panel.classList.toggle("d-none", !shouldExpand);
+  button.setAttribute("aria-expanded", String(shouldExpand));
+  button.title = shouldExpand
+    ? "Collapse latest leave decision"
+    : "Expand latest leave decision";
+
+  const icon = button.querySelector("i");
+  const label = button.querySelector("span");
+
+  if (icon) {
+    icon.className = shouldExpand
+      ? "bi bi-chevron-up me-2"
+      : "bi bi-chevron-down me-2";
+  }
+
+  if (label) {
+    label.textContent = shouldExpand ? "Collapse" : "Expand";
+  }
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1N
+// Bind the visible collapse button and double-click-to-collapse behaviour.
+// Interactive controls are ignored so Refresh Decision remains safe.
+function bindEmployeeLatestDecisionCardEvents() {
+  const card = state.dom.employeeLatestDecisionCard;
+  const button = state.dom.toggleLatestDecisionCardBtn;
+  const panel = state.dom.latestDecisionCardCollapse;
+
+  if (!card || !button || !panel) return;
+
+  // Keep Latest Leave Decision collapsed by default.
+  setEmployeeLatestDecisionCardExpanded(false);
+
+  button.addEventListener("click", () => {
+    const isExpanded = !panel.classList.contains("d-none");
+    setEmployeeLatestDecisionCardExpanded(!isExpanded);
+  });
+
+  card.addEventListener("dblclick", (event) => {
+    const ignoredTarget = event.target.closest(
+      "button, a, input, select, textarea, label, [contenteditable='true']",
+    );
+
+    if (ignoredTarget) return;
+
+    const isExpanded = !panel.classList.contains("d-none");
+    if (!isExpanded) return;
+
+    setEmployeeLatestDecisionCardExpanded(false);
+  });
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1O-C
+// Programmatic My Leave History collapse state.
+// Unlike Leave Balances and Latest Decision, this remains expanded by default
+// because employees should immediately see their recent leave outcomes.
+function setEmployeeLeaveHistoryCardExpanded(shouldExpand) {
+  const button = state.dom.toggleLeaveHistoryCardBtn;
+  const panel = state.dom.leaveHistoryCardCollapse;
+
+  if (!button || !panel) return;
+
+  panel.classList.toggle("d-none", !shouldExpand);
+  button.setAttribute("aria-expanded", String(shouldExpand));
+  button.title = shouldExpand ? "Collapse leave history" : "Expand leave history";
+
+  const icon = button.querySelector("i");
+  const label = button.querySelector("span");
+
+  if (icon) {
+    icon.className = shouldExpand
+      ? "bi bi-chevron-up me-2"
+      : "bi bi-chevron-down me-2";
+  }
+
+  if (label) {
+    label.textContent = shouldExpand ? "Collapse" : "Expand";
+  }
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1O-C
+// Bind the visible collapse button and header double-click behaviour.
+// Double-click is limited to the header so employees do not accidentally
+// collapse the card while reading decision comments.
+function bindEmployeeLeaveHistoryCardEvents() {
+  const card = state.dom.employeeLeaveHistoryCard;
+  const button = state.dom.toggleLeaveHistoryCardBtn;
+  const panel = state.dom.leaveHistoryCardCollapse;
+
+  if (!card || !button || !panel) return;
+
+  // EMPLOYEE UI CLEANUP - STEP 1O-C
+  // Keep My Leave History expanded by default because recent leave
+  // outcomes are high-value employee information.
+  setEmployeeLeaveHistoryCardExpanded(true);
+
+  button.addEventListener("click", () => {
+    const isExpanded = !panel.classList.contains("d-none");
+    setEmployeeLeaveHistoryCardExpanded(!isExpanded);
+  });
+
+  // EMPLOYEE UI CLEANUP - STEP 1O-C FIX
+  // Make double-click responsive across the whole history card shell,
+  // matching the existing employee card collapse pattern.
+  // Interactive controls are ignored so Refresh History remains safe.
+  card.addEventListener("dblclick", (event) => {
+    const ignoredTarget = event.target.closest(
+      "button, a, input, select, textarea, label, [contenteditable='true']",
+    );
+
+    if (ignoredTarget) return;
+
+    const isExpanded = !panel.classList.contains("d-none");
+    if (!isExpanded) return;
+
+    setEmployeeLeaveHistoryCardExpanded(false);
+  });
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1B
+// Programmatic Payroll History collapse state.
+// This mirrors the HR/Admin pattern but is scoped only to Payroll History.
+function setEmployeePayrollHistoryCardExpanded(shouldExpand) {
+  const button = state.dom.togglePayrollHistoryCardBtn;
+  const panel = state.dom.payrollHistoryCardCollapse;
+
+  if (!button || !panel) return;
+
+  panel.classList.toggle("d-none", !shouldExpand);
+  button.setAttribute("aria-expanded", String(shouldExpand));
+  button.title = shouldExpand ? "Collapse payroll history" : "Expand payroll history";
+
+  const icon = button.querySelector("i");
+  const label = button.querySelector("span");
+
+  if (icon) {
+    icon.className = shouldExpand
+      ? "bi bi-chevron-up me-2"
+      : "bi bi-chevron-down me-2";
+  }
+
+  if (label) {
+    label.textContent = shouldExpand ? "Collapse" : "Expand";
+  }
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1B
+// Bind the visible collapse button and double-click-to-collapse behaviour.
+// Interactive elements are ignored so filters, table scrolling, breakdown,
+// and payslip download actions continue to work normally.
+function bindEmployeePayrollHistoryCardEvents() {
+  const card = state.dom.employeePayrollHistoryCard;
+  const button = state.dom.togglePayrollHistoryCardBtn;
+  const panel = state.dom.payrollHistoryCardCollapse;
+
+  if (!card || !button || !panel) return;
+
+  // Keep Payroll History collapsed by default on page load.
+  setEmployeePayrollHistoryCardExpanded(false);
+
+  button.addEventListener("click", () => {
+    const isExpanded = !panel.classList.contains("d-none");
+    setEmployeePayrollHistoryCardExpanded(!isExpanded);
+  });
+
+  card.addEventListener("dblclick", (event) => {
+    const ignoredTarget = event.target.closest(
+      "button, a, input, select, textarea, label, table, .dashboard-table-wrap, [contenteditable='true']",
+    );
+
+    if (ignoredTarget) return;
+
+    const isExpanded = !panel.classList.contains("d-none");
+    if (!isExpanded) return;
+
+    setEmployeePayrollHistoryCardExpanded(false);
+  });
+}
+
+
 function bindProfileImageEvents() {
+  // EMPLOYEE UI CLEANUP - STEP 1J
+  // Keep profile image upload disabled until a valid file is selected.
+  updateProfileImageUploadButtonState();
+
   state.dom.profileImageInput?.addEventListener("change", (event) => {
     const file = event.target.files?.[0] || null;
     handlePendingProfileImage(file);
@@ -392,6 +757,32 @@ async function refreshEmployeeLeaveBalancesManually() {
   }
 }
 
+// EMPLOYEE UI CLEANUP - STEP 1N
+// Card-level refresh for Latest Leave Decision.
+// It reloads leave requests because Latest Decision is derived from leave request decisions.
+// It also reloads balances because approved/rejected decisions can affect entitlement usage.
+async function refreshLatestDecisionManually() {
+  if (!state.currentUser) return;
+
+  try {
+    setRefreshButtonLoading(state.dom.refreshLatestDecisionBtn, true);
+    await waitForNextPaint();
+    await loadEmployeeLeaveRequests();
+    await loadEmployeeLeaveBalances();
+    clearPageAlert();
+    showPageAlert("success", "Latest leave decision refreshed successfully.");
+  } catch (error) {
+    console.error("Manual latest leave decision refresh failed:", error);
+    showPageAlert(
+      "danger",
+      error.message || "Unable to refresh the latest leave decision right now.",
+    );
+  } finally {
+    setRefreshButtonLoading(state.dom.refreshLatestDecisionBtn, false);
+  }
+}
+
+
 async function refreshEmployeeLeaveHistoryManually() {
   if (!state.currentUser) return;
 
@@ -436,12 +827,27 @@ async function refreshEmployeePayrollManually() {
 function setRefreshButtonLoading(button, isLoading) {
   if (!button) return;
 
+  const isPayrollRefreshButton = button.id === "refreshPayrollBtn";
+
   button.disabled = isLoading;
 
   if (isLoading) {
     if (!button.dataset.originalHtml) {
       button.dataset.originalHtml = button.innerHTML;
     }
+
+    // EMPLOYEE UI CLEANUP - STEP 1Q-A
+    // Keep the compact Payroll refresh action icon-only even while loading.
+    // Other refresh buttons keep their existing "Refreshing..." text.
+    if (isPayrollRefreshButton) {
+      button.innerHTML = `
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      `;
+      button.title = "Refreshing payroll";
+      button.setAttribute("aria-label", "Refreshing payroll");
+      return;
+    }
+
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       Refreshing...
@@ -449,6 +855,11 @@ function setRefreshButtonLoading(button, isLoading) {
   } else if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
     delete button.dataset.originalHtml;
+
+    if (isPayrollRefreshButton) {
+      button.title = "Refresh payroll";
+      button.setAttribute("aria-label", "Refresh payroll");
+    }
   }
 }
 
@@ -799,8 +1210,22 @@ async function renderEmployeeProfileImage() {
   }
 }
 
+// EMPLOYEE UI CLEANUP - STEP 1J
+// The upload button should behave like the admin profile upload:
+// grey/disabled when no valid image is ready, active only after file selection.
+function updateProfileImageUploadButtonState() {
+  const button = state.dom.saveProfileImageBtn;
+  if (!button) return;
+
+  const hasPendingImage = Boolean(state.pendingProfileImageFile);
+
+  button.disabled = !hasPendingImage;
+  button.classList.toggle("profile-upload-empty", !hasPendingImage);
+}
+
 function handlePendingProfileImage(file) {
   state.pendingProfileImageFile = null;
+  updateProfileImageUploadButtonState();
 
   if (!file) {
     void renderEmployeeProfileImage();
@@ -812,35 +1237,45 @@ function handlePendingProfileImage(file) {
 
   if (!allowedTypes.includes(file.type)) {
     showPageAlert("warning", "Only PNG, JPG, JPEG, and WEBP images are allowed.");
+
     if (state.dom.profileImageInput) {
       state.dom.profileImageInput.value = "";
     }
+
+    updateProfileImageUploadButtonState();
     return;
   }
 
   if (file.size > maxBytes) {
     showPageAlert("warning", "Profile image must be 5MB or smaller.");
+
     if (state.dom.profileImageInput) {
       state.dom.profileImageInput.value = "";
     }
+
+    updateProfileImageUploadButtonState();
     return;
   }
 
   state.pendingProfileImageFile = file;
+  updateProfileImageUploadButtonState();
 
   const reader = new FileReader();
   reader.onload = () => {
     if (state.dom.profileImage) {
       state.dom.profileImage.src = reader.result;
     }
+
     if (state.dom.employeeHeroImage) {
       state.dom.employeeHeroImage.src = reader.result;
       state.dom.employeeHeroImage.classList.remove("d-none");
     }
+
     if (state.dom.employeeInitials) {
       state.dom.employeeInitials.classList.add("d-none");
     }
   };
+
   reader.readAsDataURL(file);
 }
 
@@ -848,7 +1283,7 @@ function setProfileImageUploadLoading(isLoading) {
   const button = state.dom.saveProfileImageBtn;
   if (!button) return;
 
-  button.disabled = isLoading;
+  button.disabled = isLoading || !state.pendingProfileImageFile;
 
   if (isLoading) {
     button.dataset.originalHtml = button.innerHTML;
@@ -856,10 +1291,15 @@ function setProfileImageUploadLoading(isLoading) {
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       Uploading...
     `;
-  } else if (button.dataset.originalHtml) {
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
     delete button.dataset.originalHtml;
   }
+
+  updateProfileImageUploadButtonState();
 }
 
 async function uploadEmployeeProfileImage() {
@@ -915,6 +1355,11 @@ async function uploadEmployeeProfileImage() {
       state.dom.profileImageInput.value = "";
     }
 
+    // EMPLOYEE UI CLEANUP - STEP 1J
+    // After successful upload, no file is pending anymore, so the button
+    // returns to the grey disabled state.
+    updateProfileImageUploadButtonState();
+
     await renderEmployeeProfileImage();
     showPageAlert("success", "Profile picture uploaded successfully.");
   } catch (error) {
@@ -936,8 +1381,10 @@ async function loadEmployeeLeaveBalances() {
   const employeeIdentityCandidates = getEmployeeIdentityCandidates();
 
   if (!employeeIdentityCandidates.length) {
-    state.payrollRecords = [];
-    renderPayroll([]);
+    // EMPLOYEE UI CLEANUP - STEP 1L-A
+    // Leave Balances should clear its own view when no employee identity
+    // is available. Do not touch payroll records from the leave module.
+    renderLeaveBalances([]);
     return;
   }
 
@@ -996,26 +1443,96 @@ function renderLeaveBalances(balances) {
   balances.forEach((balance) => {
     const leaveTypeName = balance.leave_types?.name || "Unknown Leave Type";
 
+    const entitledDays = Number(balance.entitled_days || 0);
+    const usedDays = Number(balance.used_days || 0);
+    const remainingDays = Number(balance.remaining_days || 0);
+
+    const usedPercent =
+      entitledDays > 0
+        ? Math.min(100, Math.max(0, (usedDays / entitledDays) * 100))
+        : 0;
+
+    const remainingPercent =
+      entitledDays > 0
+        ? Math.min(100, Math.max(0, (remainingDays / entitledDays) * 100))
+        : 0;
+
+    const statusClass =
+      remainingDays <= 0
+        ? "text-bg-danger"
+        : remainingPercent <= 25
+          ? "text-bg-warning"
+          : "text-bg-success";
+
+    const statusLabel =
+      remainingDays <= 0
+        ? "Fully Used"
+        : remainingPercent <= 25
+          ? "Low Balance"
+          : "Available";
+
+    const progressClass =
+      remainingDays <= 0
+        ? "bg-danger"
+        : remainingPercent <= 25
+          ? "bg-warning"
+          : "bg-success";
+
     const card = document.createElement("div");
     card.className = "col-12 col-md-6 col-xl-4";
 
+    // EMPLOYEE UI CLEANUP - STEP 1L-B
+    // HR-style leave balance card:
+    // - Clear leave type header
+    // - Availability status badge
+    // - Entitled / Used / Remaining hierarchy
+    // - Progress bar showing used entitlement
+    // This changes presentation only; leave balance data is not mutated.
     card.innerHTML = `
       <div class="info-tile h-100">
-        <div class="info-tile-label">Leave Type</div>
-        <div class="info-tile-value mb-3">${escapeHtml(leaveTypeName)}</div>
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <div class="info-tile-label mb-1">Leave Type</div>
+            <div class="info-tile-value">
+              ${escapeHtml(leaveTypeName)}
+            </div>
+          </div>
 
-        <div class="row g-3">
+          <span class="badge ${statusClass}">
+            ${escapeHtml(statusLabel)}
+          </span>
+        </div>
+
+        <div class="row g-3 mb-3">
           <div class="col-4">
-            <div class="info-tile-label">Entitled</div>
-            <div class="fw-bold">${balance.entitled_days}</div>
+            <div class="info-tile-label mb-1">Entitled</div>
+            <div class="fw-bold">${entitledDays}</div>
           </div>
+
           <div class="col-4">
-            <div class="info-tile-label">Used</div>
-            <div class="fw-bold">${balance.used_days}</div>
+            <div class="info-tile-label mb-1">Used</div>
+            <div class="fw-bold">${usedDays}</div>
           </div>
+
           <div class="col-4">
-            <div class="info-tile-label">Remaining</div>
-            <div class="fw-bold">${balance.remaining_days}</div>
+            <div class="info-tile-label mb-1">Remaining</div>
+            <div class="fw-bold">${remainingDays}</div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="small text-secondary">Used entitlement</div>
+          <div class="small fw-semibold">${usedPercent.toFixed(0)}%</div>
+        </div>
+
+        <div class="progress" style="height: 8px;">
+          <div
+            class="progress-bar ${progressClass}"
+            role="progressbar"
+            style="width: ${usedPercent.toFixed(0)}%;"
+            aria-valuenow="${usedPercent.toFixed(0)}"
+            aria-valuemin="0"
+            aria-valuemax="100">
           </div>
         </div>
       </div>
@@ -1028,16 +1545,71 @@ function renderLeaveBalances(balances) {
 /* =========================================================
    Leave request form
 ========================================================= */
+
 function bindLeaveFormEvents() {
-  state.dom.startDate?.addEventListener("change", calculateLeaveDays);
-  state.dom.endDate?.addEventListener("change", calculateLeaveDays);
+  // EMPLOYEE UI CLEANUP - STEP 1P-F FIX
+  // Keep the submit button grey/disabled until the leave request form is
+  // ready. This mirrors the existing profile upload empty-button behaviour.
+  state.dom.leaveType?.addEventListener("change", updateLeaveSubmitButtonState);
+
+  state.dom.startDate?.addEventListener("change", () => {
+    calculateLeaveDays();
+    updateLeaveSubmitButtonState();
+  });
+
+  state.dom.endDate?.addEventListener("change", () => {
+    calculateLeaveDays();
+    updateLeaveSubmitButtonState();
+  });
+
+  state.dom.leaveReason?.addEventListener("input", updateLeaveSubmitButtonState);
 
   state.dom.leaveRequestForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await handleLeaveRequestSubmit();
   });
+
+  updateLeaveSubmitButtonState();
 }
 
+// EMPLOYEE UI CLEANUP - STEP 1P-F FIX
+// The leave submit button should behave like the existing grey/active
+// profile upload button: inactive when the form is incomplete, active when
+// the employee has completed all required fields.
+function isLeaveRequestFormReadyForSubmission() {
+  const leaveType = state.dom.leaveType?.value?.trim();
+  const startDate = state.dom.startDate?.value;
+  const endDate = state.dom.endDate?.value;
+  const reason = state.dom.leaveReason?.value?.trim();
+  const totalDays = Number(state.dom.totalDays?.value || 0);
+
+  if (!leaveType || !startDate || !endDate || !reason || totalDays < 1) {
+    return false;
+  }
+
+  return new Date(endDate) >= new Date(startDate);
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1P-F FIX
+// Empty form = grey disabled button.
+// Completed required fields = blue active button.
+// This is UI state only; validation and save logic still run on submit.
+function updateLeaveSubmitButtonState() {
+  const button = state.dom.submitLeaveBtn;
+  if (!button) return;
+
+  const isReady = isLeaveRequestFormReadyForSubmission();
+
+  button.disabled = !isReady;
+
+  button.classList.toggle("btn-secondary", !isReady);
+  button.classList.toggle("btn-primary", isReady);
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1P-F FIX
+// Restores the leave type loader that is still called during employee
+// dashboard initialisation. This only repopulates the Leave Type dropdown;
+// it does not change submit validation, button state, or leave saving logic.
 async function loadLeaveTypes() {
   const supabase = getSupabaseClient();
 
@@ -1053,6 +1625,8 @@ async function loadLeaveTypes() {
     return;
   }
 
+  if (!state.dom.leaveType) return;
+
   state.dom.leaveType.innerHTML = `<option value="">Select leave type</option>`;
 
   (data || []).forEach((leaveType) => {
@@ -1062,6 +1636,8 @@ async function loadLeaveTypes() {
     option.dataset.code = leaveType.code;
     state.dom.leaveType.appendChild(option);
   });
+
+  updateLeaveSubmitButtonState();
 }
 
 function calculateLeaveDays() {
@@ -1197,18 +1773,25 @@ async function handleLeaveRequestSubmit() {
 }
 
 function setLeaveSubmitLoading(isLoading) {
-  state.dom.submitLeaveBtn.disabled = isLoading;
+  const button = state.dom.submitLeaveBtn;
+  if (!button) return;
+
+  button.disabled = isLoading;
 
   if (isLoading) {
-    state.dom.submitLeaveBtn.innerHTML = `
+    button.classList.remove("btn-secondary");
+    button.classList.add("btn-primary");
+
+    button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      Submitting...
+      Submitting for approval...
     `;
   } else {
-    state.dom.submitLeaveBtn.innerHTML = `
-      <i class="bi bi-send-check me-1"></i>
-      Submit Leave Request
+    button.innerHTML = `
+      <i class="bi bi-send-check me-2"></i>Submit for Approval
     `;
+
+    updateLeaveSubmitButtonState();
   }
 }
 
@@ -1270,38 +1853,117 @@ async function loadEmployeeLeaveRequests() {
 }
 
 function renderLeaveRequests(requests) {
-  const tbody = state.dom.leaveRequestsTableBody;
-  if (!tbody) return;
+  const list = state.dom.leaveRequestsList;
+  if (!list) return;
 
-  tbody.innerHTML = "";
+  list.innerHTML = "";
 
   if (!requests.length) {
     state.dom.leaveRequestsEmptyState?.classList.remove("d-none");
-    state.dom.leaveRequestsTableWrapper?.classList.add("d-none");
+    state.dom.leaveRequestsList?.classList.add("d-none");
     return;
   }
 
   state.dom.leaveRequestsEmptyState?.classList.add("d-none");
-  state.dom.leaveRequestsTableWrapper?.classList.remove("d-none");
+  state.dom.leaveRequestsList?.classList.remove("d-none");
 
   requests.forEach((request) => {
-    const row = document.createElement("tr");
+    const leaveTypeName = request.leave_types?.name || "Unknown Leave Type";
+    const statusText = request.status || "Pending Approval";
+    const normalizedStatus = normalizeText(statusText);
+    const statusBadgeClass = getDecisionStatusBadgeClass(statusText);
 
-    const leaveTypeName = request.leave_types?.name || "Unknown";
-    const statusBadgeClass = getDecisionStatusBadgeClass(request.status);
+    const startDate = formatDate(request.start_date);
+    const endDate = formatDate(request.end_date);
+    const totalDays = Number(request.total_days || 0);
+    const submittedAt = formatDateTime(request.submitted_at);
+    const decisionAt = formatDateTime(request.decision_at);
+    const comment = request.decision_comment || "No comment provided.";
 
-    row.innerHTML = `
-      <td>${escapeHtml(leaveTypeName)}</td>
-      <td>${formatDate(request.start_date)}</td>
-      <td>${formatDate(request.end_date)}</td>
-      <td>${request.total_days}</td>
-      <td><span class="badge ${statusBadgeClass}">${escapeHtml(request.status)}</span></td>
-      <td>${escapeHtml(request.decision_comment || "--")}</td>
-      <td>${formatDateTime(request.decision_at)}</td>
-      <td>${formatDateTime(request.submitted_at)}</td>
+    const toneClass =
+      normalizedStatus === "approved"
+        ? "border-success"
+        : normalizedStatus === "rejected"
+          ? "border-danger"
+          : normalizedStatus === "returned for clarification" ||
+            normalizedStatus === "returned"
+            ? "border-warning"
+            : "border-secondary";
+
+    const iconClass =
+      normalizedStatus === "approved"
+        ? "bi-check-circle-fill text-success"
+        : normalizedStatus === "rejected"
+          ? "bi-x-circle-fill text-danger"
+          : normalizedStatus === "returned for clarification" ||
+            normalizedStatus === "returned"
+            ? "bi-exclamation-circle-fill text-warning"
+            : "bi-hourglass-split text-secondary";
+
+    const decisionLabel =
+      request.decision_at ||
+        normalizedStatus === "approved" ||
+        normalizedStatus === "rejected" ||
+        normalizedStatus === "returned for clarification" ||
+        normalizedStatus === "returned"
+        ? decisionAt
+        : "Awaiting decision";
+
+    const item = document.createElement("div");
+    item.className = "mb-2";
+
+    // EMPLOYEE UI CLEANUP - STEP 1O-A
+    // Employee-friendly request history card.
+    // This replaces the table row layout only; no leave request data is changed.
+    item.innerHTML = `
+            <div class="border ${toneClass} border-start border-4 rounded-3 bg-white px-3 py-2">
+               <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-2">
+          <div class="d-flex align-items-start gap-3">
+                        <div class="fs-6 lh-1">
+              <i class="bi ${iconClass}"></i>
+            </div>
+
+            <div>
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <span class="badge ${statusBadgeClass}">
+                  ${escapeHtml(statusText)}
+                </span>
+                <span class="fw-semibold">
+                  ${escapeHtml(leaveTypeName)}
+                </span>
+              </div>
+
+              <div class="small text-secondary lh-sm">
+                ${escapeHtml(startDate)} to ${escapeHtml(endDate)} • ${totalDays} day(s)
+              </div>
+            </div>
+          </div>
+
+          <div class="text-lg-end">
+            <div class="small text-secondary">Submitted</div>
+            <div class="fw-semibold small">${escapeHtml(submittedAt)}</div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <div class="bg-light border rounded-3 p-2 h-100">
+              <div class="small text-secondary mb-1">Decision Date</div>
+              <div class="fw-semibold">${escapeHtml(decisionLabel)}</div>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="bg-light border rounded-3 p-2 h-100">
+              <div class="small text-secondary mb-1">Manager Comment</div>
+              <div class="fw-semibold">${escapeHtml(comment)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
     `;
 
-    tbody.appendChild(row);
+    list.appendChild(item);
   });
 }
 
@@ -1327,30 +1989,175 @@ function renderLatestDecisionCard(requests) {
   }
 
   const latest = decisionItems[0];
-  const leaveTypeName = latest.leave_types?.name || "Unknown";
+  const leaveTypeName = latest.leave_types?.name || "Unknown Leave Type";
+  const statusText = latest.status || "Decision Recorded";
+  const normalizedStatus = normalizeText(statusText);
+
+  const decisionDate = formatDateTime(latest.decision_at || latest.submitted_at);
+  const requestedPeriod = `${formatDate(latest.start_date)} to ${formatDate(
+    latest.end_date,
+  )}`;
+  const totalDays = Number(latest.total_days || 0);
+  const decisionBy = latest.decision_by_name || "Manager / Supervisor";
+  const decisionComment = latest.decision_comment || "No comment provided.";
+
+  const statusBadgeClass = getDecisionStatusBadgeClass(statusText);
+
+  const outcomeTone =
+    normalizedStatus === "approved"
+      ? "border-success bg-success-subtle"
+      : normalizedStatus === "rejected"
+        ? "border-danger bg-danger-subtle"
+        : normalizedStatus === "returned for clarification" ||
+          normalizedStatus === "returned"
+          ? "border-warning bg-warning-subtle"
+          : "border-secondary bg-light";
+
+  const outcomeIcon =
+    normalizedStatus === "approved"
+      ? "bi-check-circle-fill text-success"
+      : normalizedStatus === "rejected"
+        ? "bi-x-circle-fill text-danger"
+        : normalizedStatus === "returned for clarification" ||
+          normalizedStatus === "returned"
+          ? "bi-exclamation-circle-fill text-warning"
+          : "bi-info-circle-fill text-secondary";
 
   state.dom.latestDecisionEmptyState?.classList.add("d-none");
   state.dom.latestDecisionCard?.classList.remove("d-none");
 
-  state.dom.latestDecisionStatus.innerHTML = `
-    <span class="badge ${getDecisionStatusBadgeClass(latest.status)} fs-6">
-      ${escapeHtml(latest.status)}
-    </span>
+  // EMPLOYEE UI CLEANUP - STEP 1M
+  // Professional HR-style decision summary:
+  // - Decision outcome is visually dominant
+  // - Leave type, period, approver, and comment are grouped clearly
+  // - Presentation only; leave request data is not changed.
+  state.dom.latestDecisionCard.innerHTML = `
+    <div class="info-tile border-start border-4 ${outcomeTone}">
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-4">
+        <div class="d-flex align-items-start gap-3">
+          <div class="fs-4 lh-1">
+            <i class="bi ${outcomeIcon}"></i>
+          </div>
+
+          <div>
+            <div class="info-tile-label mb-1">Latest Decision</div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <span class="badge ${statusBadgeClass} fs-6">
+                ${escapeHtml(statusText)}
+              </span>
+              <span class="fw-semibold">
+                ${escapeHtml(leaveTypeName)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-lg-end">
+          <div class="info-tile-label mb-1">Decision Date & Time</div>
+          <div class="fw-semibold">${escapeHtml(decisionDate)}</div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+          <div class="bg-white border rounded-3 p-3 h-100">
+            <div class="info-tile-label mb-1">Requested Period</div>
+            <div class="fw-semibold">${escapeHtml(requestedPeriod)}</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <div class="bg-white border rounded-3 p-3 h-100">
+            <div class="info-tile-label mb-1">Total Days</div>
+            <div class="fw-semibold">${totalDays} day(s)</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <div class="bg-white border rounded-3 p-3 h-100">
+            <div class="info-tile-label mb-1">Decision By</div>
+            <div class="fw-semibold">${escapeHtml(decisionBy)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white border rounded-3 p-3">
+        <div class="info-tile-label mb-1">Manager Comment</div>
+        <div class="fw-semibold">${escapeHtml(decisionComment)}</div>
+      </div>
+    </div>
   `;
+}
 
-  state.dom.latestDecisionLeaveType.textContent = leaveTypeName;
-  state.dom.latestDecisionDateTime.textContent = formatDateTime(
-    latest.decision_at || latest.submitted_at,
-  );
-  state.dom.latestDecisionPeriod.textContent = `${formatDate(
-    latest.start_date,
-  )} to ${formatDate(latest.end_date)} • ${latest.total_days} day(s)`;
+/* =========================================================
+   Employee payroll figure privacy
+========================================================= */
+function readStoredEmployeePayrollFigureVisibility() {
+  try {
+    return (
+      window.localStorage.getItem(EMPLOYEE_PAYROLL_FIGURES_HIDDEN_KEY) ===
+      "true"
+    );
+  } catch (error) {
+    console.warn("Unable to read payroll figure visibility preference:", error);
+    return false;
+  }
+}
 
-  state.dom.latestDecisionBy.textContent =
-    latest.decision_by_name || "Manager / Supervisor";
+function saveEmployeePayrollFigureVisibility(shouldHide) {
+  try {
+    window.localStorage.setItem(
+      EMPLOYEE_PAYROLL_FIGURES_HIDDEN_KEY,
+      shouldHide ? "true" : "false",
+    );
+  } catch (error) {
+    console.warn("Unable to save payroll figure visibility preference:", error);
+  }
+}
 
-  state.dom.latestDecisionComment.textContent =
-    latest.decision_comment || "No comment provided.";
+function restoreEmployeePayrollFigureVisibility() {
+  state.isPayrollFiguresHidden = readStoredEmployeePayrollFigureVisibility();
+  updateEmployeePayrollFigureVisibilityButton();
+}
+
+function setEmployeePayrollFiguresHidden(shouldHide, shouldPersist = false) {
+  state.isPayrollFiguresHidden = Boolean(shouldHide);
+
+  if (shouldPersist) {
+    saveEmployeePayrollFigureVisibility(state.isPayrollFiguresHidden);
+  }
+
+  updateEmployeePayrollFigureVisibilityButton();
+
+  // EMPLOYEE PAYROLL PRIVACY - STEP 1H
+  // Re-render summary values only. This does not reload, recalculate,
+  // mutate, or save any payroll data.
+  renderCurrentPayrollSummary(state.payrollRecords || []);
+}
+
+function updateEmployeePayrollFigureVisibilityButton() {
+  const button = state.dom.togglePayrollFiguresBtn;
+  if (!button) return;
+
+  const icon = button.querySelector("i");
+
+  const buttonLabel = state.isPayrollFiguresHidden
+    ? "Show payroll figures"
+    : "Hide payroll figures";
+
+  button.setAttribute("aria-pressed", String(state.isPayrollFiguresHidden));
+  button.setAttribute("aria-label", buttonLabel);
+  button.title = buttonLabel;
+
+  if (icon) {
+    icon.className = state.isPayrollFiguresHidden
+      ? "bi bi-eye"
+      : "bi bi-eye-slash";
+  }
+}
+
+function getEmployeePayrollFigureDisplay(displayValue) {
+  return state.isPayrollFiguresHidden ? "••••••" : displayValue;
 }
 
 /* =========================================================
@@ -1803,31 +2610,72 @@ function buildPayrollBreakdownSections(record) {
     },
   ];
 }
-function buildPayrollBreakdownRowHtml(record) {
+
+// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
+// Build the employee payslip preview content used inside the modal.
+// This follows the HR View Payslip card concept, but remains scoped to
+// Employee self-service. It does not change payroll data, PDF generation,
+// filtering, calculations, or authorised-record rules.
+function buildEmployeePayslipPreviewContent(record) {
+  const currency = record.currency || "NGN";
   const sections = buildPayrollBreakdownSections(record);
 
-  const sectionHtml = sections
+  const employeeName =
+    `${state.employeeRecord?.first_name || ""} ${state.employeeRecord?.last_name || ""}`.trim() ||
+    "Employee";
+
+  const employeeEmail =
+    state.employeeRecord?.work_email ||
+    state.currentProfile?.email ||
+    state.currentUser?.email ||
+    "--";
+
+  const employeeId = getEmployeeIdDisplayValue(state.employeeRecord || {});
+  const department = state.employeeRecord?.department || "--";
+  const jobTitle =
+    state.employeeRecord?.job_title ||
+    state.employeeRecord?.position ||
+    "Employee";
+
+  const renderPayslipModalItems = (items = []) => {
+    const visibleItems = Array.isArray(items) ? items : [];
+
+    if (!visibleItems.length) {
+      return `
+        <div class="text-secondary small border rounded-3 p-3">
+          No payroll line items recorded.
+        </div>
+      `;
+    }
+
+    return visibleItems
+      .map((item) => {
+        const valueClass = item.emphasis ? "fw-bold" : "fw-semibold";
+
+        return `
+          <div class="d-flex justify-content-between gap-3 border-bottom py-2">
+            <span>${escapeHtml(item.label)}</span>
+            <span class="${valueClass} text-end">
+              ${escapeHtml(item.displayValue)}
+            </span>
+          </div>
+        `;
+      })
+      .join("");
+  };
+
+  const sectionCardsHtml = sections
     .map((section) => {
-      const itemHtml = section.items
-        .map((item) => {
-          return `
-            <div class="col-12 col-md-6 col-xl-4">
-              <div class="info-tile h-100">
-                <div class="info-tile-label">${escapeHtml(item.label)}</div>
-                <div class="fw-semibold ${item.emphasis ? "fs-5" : ""}">
-                  ${escapeHtml(item.displayValue)}
-                </div>
-              </div>
-            </div>
-          `;
-        })
-        .join("");
+      const isHalfWidth =
+        section.title === "Earnings" ||
+        section.title === "Deductions" ||
+        section.title === "Payroll Breakdown";
 
       return `
-        <div class="col-12">
-          <div class="fw-bold mb-2">${escapeHtml(section.title)}</div>
-          <div class="row g-3">
-            ${itemHtml}
+        <div class="${isHalfWidth ? "col-lg-6" : "col-12"}">
+          <div class="border rounded-4 p-4 h-100">
+            <h3 class="h6 fw-bold mb-3">${escapeHtml(section.title)}</h3>
+            ${renderPayslipModalItems(section.items)}
           </div>
         </div>
       `;
@@ -1835,29 +2683,217 @@ function buildPayrollBreakdownRowHtml(record) {
     .join("");
 
   return `
-    <div class="p-3 p-lg-4 bg-light border rounded-4">
-      <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+    <div class="border rounded-4 p-3 p-lg-4 mb-4">
+      <div class="d-flex flex-column flex-md-row justify-content-between gap-4">
         <div>
-          <div class="fw-bold">${escapeHtml(
-    isRegularPayrollRecord(record) ? "Regular Payroll Breakdown" : "Payroll Breakdown",
-  )}</div>
-          <div class="small text-secondary">
-            ${escapeHtml(record.pay_cycle || "--")} • ${formatDate(record.pay_date)}
+          <div class="text-secondary small">Employee</div>
+          <div class="h5 mb-1">${escapeHtml(employeeName)}</div>
+          <div class="text-secondary small text-break">
+            ${escapeHtml(employeeEmail)}
+          </div>
+          <div class="text-secondary small">
+            ${escapeHtml(department)} • ${escapeHtml(jobTitle)}
+          </div>
+        </div>
+
+        <div class="text-md-end">
+          <div class="text-secondary small">Employee No.</div>
+          <div class="fw-semibold">${escapeHtml(employeeId)}</div>
+
+          <div class="text-secondary small mt-3">Pay Cycle</div>
+          <div class="fw-semibold">${escapeHtml(record.pay_cycle || "--")}</div>
+
+          <div class="text-secondary small mt-3">Pay Date</div>
+          <div class="fw-semibold">${formatDate(record.pay_date)}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="border rounded-4 p-3 h-100">
+          <div class="text-secondary small">Gross Pay</div>
+          <div class="h5 mb-0">
+            ${escapeHtml(formatCurrency(record.gross_pay, currency))}
           </div>
         </div>
       </div>
 
-      <div class="row g-4">
-        ${sectionHtml}
+      <div class="col-md-4">
+        <div class="border rounded-4 p-3 h-100">
+          <div class="text-secondary small">Total Deductions</div>
+          <div class="h5 mb-0">
+            ${escapeHtml(formatCurrency(record.total_deductions, currency))}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="border rounded-4 p-3 h-100">
+          <div class="text-secondary small">Net Pay</div>
+          <div class="h5 mb-0">
+            ${escapeHtml(formatCurrency(record.net_pay, currency))}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      ${sectionCardsHtml}
+    </div>
+
+    <div class="alert alert-light border mt-4 mb-0">
+      <div class="fw-semibold mb-1">Authorised payslip details</div>
+      <div class="small text-secondary">
+        This is a read-only view of your authorised payslip details. Use the PDF action in Payroll History to download a payslip copy.
       </div>
     </div>
   `;
 }
 
+
+// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
+// Create the payslip preview modal from JavaScript so employee-dashboard.html
+// does not need another structural patch. This mirrors the HR payslip preview
+// modal pattern while keeping Employee self-service scoped and read-only.
+function ensureEmployeePayslipPreviewModal() {
+  let modal = document.getElementById("employeePayslipPreviewModal");
+
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.id = "employeePayslipPreviewModal";
+  modal.className = "d-none position-fixed top-0 start-0 w-100 h-100";
+  modal.style.zIndex = "1060";
+  modal.style.background = "rgba(15, 23, 42, 0.45)";
+  modal.setAttribute("aria-hidden", "true");
+
+  modal.innerHTML = `
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
+      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 880px; max-height: 92vh; overflow: auto;">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+          <div>
+            <h2 id="employeePayslipPreviewTitle" class="h4 mb-1">
+              Payslip Details
+            </h2>
+            <p class="text-secondary mb-0">
+              Review your authorised payslip details for this pay cycle.
+            </p>
+          </div>
+
+          <button type="button" id="closeEmployeePayslipPreviewBtn"
+            class="btn btn-sm btn-outline-secondary"
+            aria-label="Close payslip details">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div id="employeePayslipPreviewContent" class="card-body p-4">
+          <div class="text-center text-secondary py-4">
+            Select a payroll record to view payslip details.
+          </div>
+        </div>
+
+        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+          <button type="button" id="closeEmployeePayslipPreviewFooterBtn"
+            class="btn btn-outline-secondary dashboard-action-btn">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal
+    .querySelector("#closeEmployeePayslipPreviewBtn")
+    ?.addEventListener("click", closeEmployeePayslipPreviewModal);
+
+  modal
+    .querySelector("#closeEmployeePayslipPreviewFooterBtn")
+    ?.addEventListener("click", closeEmployeePayslipPreviewModal);
+
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) {
+      closeEmployeePayslipPreviewModal();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeEmployeePayslipPreviewModal();
+    }
+  });
+
+  return modal;
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
+// Open the Employee payslip preview modal and prevent page scroll behind it.
+function showEmployeePayslipPreviewModal() {
+  const modal = ensureEmployeePayslipPreviewModal();
+
+  modal.classList.remove("d-none");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("overflow-hidden");
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
+// Close the Employee payslip preview modal and restore page scroll.
+function closeEmployeePayslipPreviewModal() {
+  const modal = document.getElementById("employeePayslipPreviewModal");
+  if (!modal) return;
+
+  modal.classList.add("d-none");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("overflow-hidden");
+}
+
+// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
+// Render one authorised payroll record into the modal card.
+function openEmployeePayslipPreview(payrollId) {
+  const payrollRecord = (state.payrollRecords || []).find(
+    (record) => String(record.id) === String(payrollId),
+  );
+
+  if (!payrollRecord) {
+    showPageAlert(
+      "warning",
+      "The selected payroll record could not be found. Please refresh payroll history and try again.",
+    );
+    return;
+  }
+
+  if (normalizeText(payrollRecord.status) !== "authorised" || !payrollRecord.is_finalised) {
+    showPageAlert(
+      "warning",
+      "Payslip details are only available for authorised payroll records.",
+    );
+    return;
+  }
+
+  clearPageAlert();
+
+  const modal = ensureEmployeePayslipPreviewModal();
+  const title = modal.querySelector("#employeePayslipPreviewTitle");
+  const content = modal.querySelector("#employeePayslipPreviewContent");
+
+  if (title) {
+    title.textContent = `Payslip Details - ${payrollRecord.pay_cycle || "Pay Cycle"}`;
+  }
+
+  if (content) {
+    content.innerHTML = buildEmployeePayslipPreviewContent(payrollRecord);
+  }
+
+  showEmployeePayslipPreviewModal();
+}
+
+
 /* =========================================================
    Payroll
 ========================================================= */
-
 async function loadEmployeePayroll() {
   const supabase = getSupabaseClient();
   const employeeIdentityCandidates = getEmployeeIdentityCandidates();
@@ -2011,13 +3047,15 @@ function clearPayrollFilters() {
 }
 
 function renderCurrentPayrollSummary(records) {
-  if (!records.length) {
+  const payrollRecords = Array.isArray(records) ? records : [];
+
+  if (!payrollRecords.length) {
     state.dom.currentPayrollEmptyState?.classList.remove("d-none");
     state.dom.currentPayrollSummaryGrid?.classList.add("d-none");
     return;
   }
 
-  const latest = records[0];
+  const latest = payrollRecords[0];
 
   state.dom.currentPayrollEmptyState?.classList.add("d-none");
   state.dom.currentPayrollSummaryGrid?.classList.remove("d-none");
@@ -2027,23 +3065,20 @@ function renderCurrentPayrollSummary(records) {
   }
 
   if (state.dom.currentGrossPay) {
-    state.dom.currentGrossPay.textContent = formatCurrency(
-      latest.gross_pay,
-      latest.currency || "NGN",
+    state.dom.currentGrossPay.textContent = getEmployeePayrollFigureDisplay(
+      formatCurrency(latest.gross_pay, latest.currency || "NGN"),
     );
   }
 
   if (state.dom.currentTotalDeductions) {
-    state.dom.currentTotalDeductions.textContent = formatCurrency(
-      latest.total_deductions,
-      latest.currency || "NGN",
+    state.dom.currentTotalDeductions.textContent = getEmployeePayrollFigureDisplay(
+      formatCurrency(latest.total_deductions, latest.currency || "NGN"),
     );
   }
 
   if (state.dom.currentNetPay) {
-    state.dom.currentNetPay.textContent = formatCurrency(
-      latest.net_pay,
-      latest.currency || "NGN",
+    state.dom.currentNetPay.textContent = getEmployeePayrollFigureDisplay(
+      formatCurrency(latest.net_pay, latest.currency || "NGN"),
     );
   }
 }
@@ -2068,9 +3103,13 @@ function renderPayrollHistory(records) {
     const taxValue = getPayrollTaxValue(record);
     const taxLabel = getPayrollTaxLabel(record);
     const employeePension = Number(record.employee_pension || 0);
-    // PAYROLL SECURE DELIVERY - STEP 2F-3B-2
-    // Show employee-friendly group label instead of raw stored group code.
-    const employeeGroup = formatPayrollDisplayGroupLabel(getPayrollDisplayGroup(record));
+
+    // EMPLOYEE UI CLEANUP - STEP 1F
+    // Keep payroll group under the Pay Cycle cell, matching the compact
+    // records-card style used elsewhere. This removes the separate Group column.
+    const employeeGroup = formatPayrollDisplayGroupLabel(
+      getPayrollDisplayGroup(record),
+    );
 
     const row = document.createElement("tr");
     row.className = "payroll-summary-row";
@@ -2086,56 +3125,71 @@ function renderPayrollHistory(records) {
           <div class="small text-secondary">No Tax</div>
         `;
 
+    // EMPLOYEE UI CLEANUP - STEP 1F
+    // Compact row layout:
+    // - Pay Cycle and Employee Group are grouped in the first cell.
+    // - Action buttons remain icon-only.
+    // - Column count is reduced from 11 to 10.
     row.innerHTML = `
-      <td>
+      <td class="text-nowrap">
         <div class="fw-semibold">${escapeHtml(record.pay_cycle || "--")}</div>
+        <div class="small text-secondary">${escapeHtml(employeeGroup || "--")}</div>
       </td>
-      <td>${formatDate(record.pay_date)}</td>
-      <td>${escapeHtml(employeeGroup)}</td>
-      <td>${formatCurrency(record.gross_pay, currency)}</td>
-      <td>${taxCellHtml}</td>
-      <td>${formatCurrency(employeePension, currency)}</td>
-      <td>${formatCurrency(record.total_deductions, currency)}</td>
-      <td>
+
+      <td class="text-nowrap">${formatDate(record.pay_date)}</td>
+
+      <td class="text-nowrap">${formatCurrency(record.gross_pay, currency)}</td>
+
+      <td class="text-nowrap">${taxCellHtml}</td>
+
+      <td class="text-nowrap">${formatCurrency(employeePension, currency)}</td>
+
+      <td class="text-nowrap">${formatCurrency(record.total_deductions, currency)}</td>
+
+      <td class="text-nowrap">
         <div class="fw-semibold">${formatCurrency(record.net_pay, currency)}</div>
       </td>
-      <td>
+
+      <td class="text-center text-nowrap">
         <span class="badge text-bg-success">
           ${escapeHtml(record.status || "Authorised")}
         </span>
       </td>
-      <td>
+
+      <td class="text-center text-nowrap">
         <button
           type="button"
-          class="btn btn-sm btn-outline-secondary payroll-breakdown-btn"
+          class="btn btn-sm btn-outline-secondary payroll-breakdown-btn d-inline-flex align-items-center justify-content-center"
           data-payroll-id="${escapeHtml(record.id)}"
           data-expanded="false"
+          title="View payslip details"
+          aria-label="View payslip details"
+          style="width: 36px; height: 32px;"
         >
-          <i class="bi bi-eye me-1"></i>View Breakdown
+          <i class="bi bi-eye"></i>
         </button>
       </td>
-      <td>
+
+      <td class="text-center text-nowrap">
         <button
           type="button"
-          class="btn btn-sm btn-outline-primary download-payslip-btn"
+          class="btn btn-sm btn-outline-primary download-payslip-btn d-inline-flex align-items-center justify-content-center"
           data-payroll-id="${escapeHtml(record.id)}"
+          title="Download payslip PDF"
+          aria-label="Download payslip PDF"
+          style="width: 36px; height: 32px;"
         >
-<i class="bi bi-file-earmark-pdf me-1"></i>Download Payslip PDF
+          <i class="bi bi-file-earmark-pdf"></i>
         </button>
       </td>
     `;
 
-    const detailRow = document.createElement("tr");
-    detailRow.className = "payroll-breakdown-row d-none";
-    detailRow.dataset.payrollBreakdownFor = record.id;
-    detailRow.innerHTML = `
-      <td colspan="11">
-        ${buildPayrollBreakdownRowHtml(record)}
-      </td>
-    `;
-
+    // EMPLOYEE UI CLEANUP - STEP 1Q-F PDF FIX
+    // Append the payroll row, then wire each row action separately:
+    // - PDF downloads the authorised payslip.
+    // - View opens the payslip details modal.
+    // This restores the PDF click handler removed during the modal conversion.
     tbody.appendChild(row);
-    tbody.appendChild(detailRow);
 
     const downloadButton = row.querySelector(".download-payslip-btn");
     downloadButton?.addEventListener("click", async () => {
@@ -2145,24 +3199,8 @@ function renderPayrollHistory(records) {
 
     const breakdownButton = row.querySelector(".payroll-breakdown-btn");
     breakdownButton?.addEventListener("click", () => {
-      const isExpanded = breakdownButton.getAttribute("data-expanded") === "true";
-
-      tbody
-        .querySelectorAll(".payroll-breakdown-row")
-        .forEach((item) => item.classList.add("d-none"));
-
-      tbody
-        .querySelectorAll(".payroll-breakdown-btn")
-        .forEach((btn) => {
-          btn.setAttribute("data-expanded", "false");
-          btn.innerHTML = `<i class="bi bi-eye me-1"></i>View Breakdown`;
-        });
-
-      if (!isExpanded) {
-        detailRow.classList.remove("d-none");
-        breakdownButton.setAttribute("data-expanded", "true");
-        breakdownButton.innerHTML = `<i class="bi bi-eye-slash me-1"></i>Hide Breakdown`;
-      }
+      const payrollId = breakdownButton.getAttribute("data-payroll-id");
+      openEmployeePayslipPreview(payrollId);
     });
   });
 }
@@ -2428,14 +3466,18 @@ function setPayslipDownloadLoading(buttonElement, isLoading) {
 
   if (isLoading) {
     buttonElement.innerHTML = `
-      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-      Generating...
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
     `;
-  } else {
-    buttonElement.innerHTML = `
-      <i class="bi bi-file-earmark-pdf me-1"></i>Download Payslip PDF
-    `;
+    buttonElement.title = "Generating payslip PDF";
+    buttonElement.setAttribute("aria-label", "Generating payslip PDF");
+    return;
   }
+
+  // EMPLOYEE UI CLEANUP - STEP 1E
+  // Restore icon-only PDF action after payslip generation completes.
+  buttonElement.innerHTML = `<i class="bi bi-file-earmark-pdf"></i>`;
+  buttonElement.title = "Download payslip PDF";
+  buttonElement.setAttribute("aria-label", "Download payslip PDF");
 }
 
 /* =========================================================
