@@ -81,7 +81,8 @@
           <div>
             <h2 class="section-heading h4 mb-1">Admin Workspace</h2>
             <p class="section-subtext mb-0">
-              Switch between your profile, platform overview, company setup, and user-to-company access.
+              Switch between your profile, platform overview, notification/audit centre, company setup, and
+              user-to-company access.
             </p>
           </div>
 
@@ -93,6 +94,14 @@
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
               id="adminTabOverviewBtn">
               <i class="bi bi-grid me-2"></i>Overview
+            </button>
+
+            <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+     Add a dedicated Admin workspace tab for audit visibility and active notifications.
+     This only opens the shell; individual HR/payroll/leave modules are not wired yet. -->
+            <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
+              id="adminTabAuditBtn">
+              <i class="bi bi-bell me-2"></i>Audit Centre
             </button>
 
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
@@ -342,6 +351,185 @@
     </section>
 
     <!-- =========================================================
+           ADMIN / HR NOTIFICATION & AUDIT CENTRE
+           ========================================================= -->
+    <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+         Admin gets one controlled place to review routine audit evidence
+         and active/action-required notifications. This is a read-only shell
+         for now; module-level event writing will be wired later. -->
+    <section id="adminAuditSection" class="workspace-section d-none">
+      <section class="card dashboard-section-card mb-4 shadow-sm">
+        <div class="card-body p-4 p-lg-5">
+          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+            <div>
+              <h2 class="section-heading h4 mb-1">Notification & Audit Centre</h2>
+              <p class="section-subtext mb-0">
+                Review system activity, active exceptions, and audit evidence without interrupting HR/Admin for routine
+                events.
+              </p>
+            </div>
+
+            <span class="badge rounded-pill text-bg-light border px-3 py-2">
+              Controlled HR/Admin Visibility
+            </span>
+          </div>
+
+          <div class="row g-4">
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Active Notifications</div>
+                <div class="summary-tile-value" id="adminAuditActiveNotificationCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Critical Events</div>
+                <div class="summary-tile-value" id="adminAuditCriticalCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Warnings</div>
+                <div class="summary-tile-value" id="adminAuditWarningCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Routine Audit Events</div>
+                <div class="summary-tile-value" id="adminAuditRoutineCount">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
+     Removed the large explanatory HR behaviour panel.
+     The Audit Centre should stay exception-first and compact for Admin review. -->
+        </div>
+      </section>
+
+      <section class="card dashboard-section-card mb-4 shadow-sm">
+        <div class="card-body p-4 p-lg-5">
+          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+            <div>
+              <h3 class="section-heading h5 mb-1">Audit Filters</h3>
+              <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
+     Keep the filter description aligned with the lean visible filter set.
+     Role and employee/target are covered through the keyword search. -->
+              <p class="section-subtext mb-0">
+                Search and filter audit activity by keyword, event type, severity, status, and date range.
+              </p>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" id="adminAuditRefreshBtn" class="btn btn-outline-primary dashboard-action-btn">
+                <i class="bi bi-arrow-clockwise me-2"></i>Refresh Audit
+              </button>
+
+              <button type="button" id="adminAuditClearFiltersBtn"
+                class="btn btn-outline-secondary dashboard-action-btn">
+                <i class="bi bi-x-circle me-2"></i>Clear Filters
+              </button>
+            </div>
+          </div>
+
+          <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
+     Keep filters professional and investigation-focused.
+     Employee/target and actor role are handled through keyword search instead
+     of separate visible controls, reducing noise for Admin/HR. -->
+          <div class="row g-3 align-items-end">
+            <div class="col-md-12 col-xl-4">
+              <label for="adminAuditSearchInput" class="form-label fw-semibold">Search</label>
+              <input type="text" id="adminAuditSearchInput" class="form-control"
+                placeholder="Search employee, email, event, source, reference, or actor" />
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <label for="adminAuditEventTypeFilter" class="form-label fw-semibold">Event Type</label>
+              <select id="adminAuditEventTypeFilter" class="form-select">
+                <option value="">All event types</option>
+              </select>
+            </div>
+
+            <div class="col-md-6 col-xl-2">
+              <label for="adminAuditSeverityFilter" class="form-label fw-semibold">Severity</label>
+              <select id="adminAuditSeverityFilter" class="form-select">
+                <option value="">All severities</option>
+                <option value="Critical">Critical</option>
+                <option value="Warning">Warning</option>
+                <option value="Success">Success</option>
+                <option value="Info">Info</option>
+              </select>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <label for="adminAuditStatusFilter" class="form-label fw-semibold">Status</label>
+              <select id="adminAuditStatusFilter" class="form-select">
+                <option value="">All statuses</option>
+                <option value="Open">Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Resolved">Resolved</option>
+                <option value="Dismissed">Dismissed</option>
+                <option value="Logged">Logged</option>
+              </select>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <label for="adminAuditDateFrom" class="form-label fw-semibold">Date From</label>
+              <input type="date" id="adminAuditDateFrom" class="form-control" />
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <label for="adminAuditDateTo" class="form-label fw-semibold">Date To</label>
+              <input type="date" id="adminAuditDateTo" class="form-control" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card dashboard-section-card mb-4 shadow-sm">
+        <div class="card-body p-4 p-lg-5">
+          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+            <div>
+              <h3 class="section-heading h5 mb-1" id="adminAuditRecordsHeader">Activity & Notification Records</h3>
+              <p class="section-subtext mb-0">
+                Displays the latest controlled system events from the audit ledger.
+              </p>
+            </div>
+
+            <span class="badge rounded-pill text-bg-light border px-3 py-2">
+              <span id="adminAuditVisibleCount">0</span> visible
+            </span>
+          </div>
+
+          <div id="adminAuditRecordsEmptyState" class="alert alert-light border mb-0">
+            No audit or notification records are available yet.
+          </div>
+
+          <div id="adminAuditRecordsTableWrapper" class="table-responsive d-none">
+            <table class="table align-middle dashboard-table mb-0">
+              <thead>
+                <tr>
+                  <th>Created</th>
+                  <th>Event</th>
+                  <th>Employee / Target</th>
+                  <th>Role</th>
+                  <th>Severity</th>
+                  <th>Status</th>
+                  <th>Notification</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody id="adminAuditRecordsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- =========================================================
            COMPANY SETUP SECTION
            ========================================================= -->
     <section id="adminTenantsSection" class="workspace-section d-none">
@@ -507,6 +695,100 @@
             </div>
 
             <div id="adminUserCompanyAssignmentCollapse">
+              <!-- ADMIN COMPANY USER BOOTSTRAP - STEP 1C
+       Platform Admin can invite a company-scoped HR/payroll/manager/employee user
+       directly into a selected company workspace. This avoids manual Supabase user
+       creation and does not require Admin to log into another company. -->
+              <div class="alert alert-light border rounded-4 mb-4">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+                  <div>
+                    <div class="fw-semibold mb-1">
+                      Invite company user
+                    </div>
+                    <div class="small text-secondary">
+                      Create a company-scoped login account for HR, payroll, manager, or employee access.
+                      Use this when a newly created company needs its first HR user.
+                    </div>
+                  </div>
+
+                  <span class="badge rounded-pill text-bg-primary px-3 py-2">
+                    Admin bootstrap
+                  </span>
+                </div>
+              </div>
+
+              <!-- ADMIN COMPANY USER BOOTSTRAP - STEP 1C
+       This form will call the secure invite-company-user Edge Function in the
+       next JavaScript step. It does not create employee records. -->
+              <form id="companyUserInviteForm" class="border rounded-4 p-4 bg-light-subtle mb-5" novalidate>
+                <div class="row g-4 align-items-start">
+                  <div class="col-lg-6">
+                    <label for="companyUserFullName" class="form-label fw-semibold">
+                      Full Name <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" id="companyUserFullName" class="form-control"
+                      placeholder="Example: Mr Samni Fatukasi" autocomplete="name" required />
+                    <div class="invalid-feedback">Enter the user’s full name.</div>
+                  </div>
+
+                  <div class="col-lg-6">
+                    <label for="companyUserEmail" class="form-label fw-semibold">
+                      Email Address <span class="text-danger">*</span>
+                    </label>
+                    <input type="email" id="companyUserEmail" class="form-control"
+                      placeholder="Example: fatukasivictor@gmail.com" autocomplete="email" required />
+                    <div class="invalid-feedback">Enter a valid email address.</div>
+                  </div>
+
+                  <div class="col-lg-6">
+                    <label for="companyUserRole" class="form-label fw-semibold">
+                      Role <span class="text-danger">*</span>
+                    </label>
+                    <select id="companyUserRole" class="form-select" required>
+                      <option value="hr" selected>HR</option>
+                      <option value="payroll">Payroll</option>
+                      <option value="manager">Manager</option>
+                      <option value="employee">Employee</option>
+                    </select>
+                    <div class="form-text">
+                      Use HR for the first company user who will manage people records.
+                    </div>
+                    <div class="invalid-feedback">Select a company role.</div>
+                  </div>
+
+                  <div class="col-lg-6">
+                    <label for="companyUserTenantId" class="form-label fw-semibold">
+                      Company <span class="text-danger">*</span>
+                    </label>
+                    <select id="companyUserTenantId" class="form-select" required>
+                      <option value="">Select company</option>
+                    </select>
+                    <div class="form-text">
+                      User will sign in using this company’s Company ID.
+                    </div>
+                    <div class="invalid-feedback">Select the company workspace.</div>
+                  </div>
+
+                  <div class="col-12">
+                    <div id="companyUserInviteAlert" class="alert d-none mb-3" role="alert"></div>
+
+                    <div class="d-flex flex-wrap gap-2">
+                      <button type="submit" id="inviteCompanyUserBtn" class="btn btn-secondary dashboard-action-btn"
+                        disabled>
+                        <i class="bi bi-envelope-plus me-2"></i>
+                        <span id="inviteCompanyUserBtnText">Send Company User Invite</span>
+                      </button>
+
+                      <button type="button" id="clearCompanyUserInviteBtn"
+                        class="btn btn-outline-secondary dashboard-action-btn">
+                        <i class="bi bi-x-circle me-2"></i>
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+
               <form id="profileTenantLinkForm" novalidate>
                 <input type="hidden" id="editingProfileTenantLinkProfileId" />
 
@@ -673,19 +955,10 @@
               Temporary Password <span class="text-danger">*</span>
             </label>
             <div class="input-group">
-              <input
-                type="password"
-                id="resetPasswordTempInput"
-                class="form-control"
-                placeholder="At least 8 characters"
-                autocomplete="new-password"
-              />
-              <button
-                type="button"
-                id="resetPasswordToggleBtn"
-                class="btn btn-outline-secondary"
-                title="Show / hide password"
-              >
+              <input type="password" id="resetPasswordTempInput" class="form-control"
+                placeholder="At least 8 characters" autocomplete="new-password" />
+              <button type="button" id="resetPasswordToggleBtn" class="btn btn-outline-secondary"
+                title="Show / hide password">
                 <i class="bi bi-eye" id="resetPasswordToggleIcon"></i>
               </button>
             </div>

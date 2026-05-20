@@ -25,6 +25,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Load profiles so Admin can manage company-scoped user access.
     await refreshProfileTenantLinkingWorkspace();
 
+    // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+    // Load the controlled event catalogue and latest audit ledger rows.
+    // This only reads the new audit tables; individual modules are not wired yet.
+    await refreshAdminAuditCentre();
+
     switchAdminWorkspace("profile");
 
     // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
@@ -78,6 +83,13 @@ const state = {
   // Tracks the profile currently being edited for company access.
   currentEditingProfileTenantLink: null,
 
+  // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+  // Read-only shell state for controlled audit/activity events.
+  // Future module wiring will write into system_activity_events through the RPC.
+  systemEventTypes: [],
+  systemActivityEvents: [],
+  filteredSystemActivityEvents: [],
+
   // ADMIN UI CLEANUP - STEP 1D
   // Holds the Admin profile image selected in the browser before upload.
   pendingProfileImageFile: null,
@@ -126,12 +138,21 @@ function cacheDomElements() {
     adminTabProfileBtn: document.getElementById("adminTabProfileBtn"),
     adminTabOverviewBtn: document.getElementById("adminTabOverviewBtn"),
 
+    // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+    // Dedicated workspace tab and section for audit visibility.
+    adminTabAuditBtn: document.getElementById("adminTabAuditBtn"),
+
     // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
     // Tenant workspace tab and section.
     adminTabTenantsBtn: document.getElementById("adminTabTenantsBtn"),
 
     adminProfileSection: document.getElementById("adminProfileSection"),
     adminOverviewSection: document.getElementById("adminOverviewSection"),
+
+    // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+    // Read-only audit/notification workspace section.
+    adminAuditSection: document.getElementById("adminAuditSection"),
+
     adminTenantsSection: document.getElementById("adminTenantsSection"),
 
     // ADMIN UI CLEANUP - STEP 1I
@@ -170,6 +191,27 @@ function cacheDomElements() {
     adminOverviewAccessHealthTitle: document.getElementById("adminOverviewAccessHealthTitle"),
     adminOverviewAccessHealthMessage: document.getElementById("adminOverviewAccessHealthMessage"),
     adminOverviewOpenCompaniesBtn: document.getElementById("adminOverviewOpenCompaniesBtn"),
+    // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+    // Summary, filter, and table controls for the controlled event ledger.
+    adminAuditActiveNotificationCount: document.getElementById("adminAuditActiveNotificationCount"),
+    adminAuditCriticalCount: document.getElementById("adminAuditCriticalCount"),
+    adminAuditWarningCount: document.getElementById("adminAuditWarningCount"),
+    adminAuditRoutineCount: document.getElementById("adminAuditRoutineCount"),
+    adminAuditRefreshBtn: document.getElementById("adminAuditRefreshBtn"),
+    adminAuditClearFiltersBtn: document.getElementById("adminAuditClearFiltersBtn"),
+    // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
+    // Keep the visible Audit Centre filters lean:
+    // search, event type, severity, status, and date range.
+    adminAuditEventTypeFilter: document.getElementById("adminAuditEventTypeFilter"),
+    adminAuditSeverityFilter: document.getElementById("adminAuditSeverityFilter"),
+    adminAuditStatusFilter: document.getElementById("adminAuditStatusFilter"),
+    adminAuditDateFrom: document.getElementById("adminAuditDateFrom"),
+    adminAuditDateTo: document.getElementById("adminAuditDateTo"),
+    adminAuditSearchInput: document.getElementById("adminAuditSearchInput"),
+    adminAuditVisibleCount: document.getElementById("adminAuditVisibleCount"),
+    adminAuditRecordsEmptyState: document.getElementById("adminAuditRecordsEmptyState"),
+    adminAuditRecordsTableWrapper: document.getElementById("adminAuditRecordsTableWrapper"),
+    adminAuditRecordsTableBody: document.getElementById("adminAuditRecordsTableBody"),
 
     adminProfileAvatar: document.getElementById("adminProfileAvatar"),
     adminProfileCardName: document.getElementById("adminProfileCardName"),
@@ -206,6 +248,20 @@ function cacheDomElements() {
     tenantRecordsEmptyState: document.getElementById("tenantRecordsEmptyState"),
     tenantRecordsTableWrapper: document.getElementById("tenantRecordsTableWrapper"),
     tenantRecordsTableBody: document.getElementById("tenantRecordsTableBody"),
+
+    // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+    // Platform Admin invites a company-scoped HR/payroll/manager/employee user
+    // into a selected company workspace through the secure invite-company-user
+    // Edge Function. This does not create employee records.
+    companyUserInviteForm: document.getElementById("companyUserInviteForm"),
+    companyUserFullName: document.getElementById("companyUserFullName"),
+    companyUserEmail: document.getElementById("companyUserEmail"),
+    companyUserRole: document.getElementById("companyUserRole"),
+    companyUserTenantId: document.getElementById("companyUserTenantId"),
+    companyUserInviteAlert: document.getElementById("companyUserInviteAlert"),
+    inviteCompanyUserBtn: document.getElementById("inviteCompanyUserBtn"),
+    inviteCompanyUserBtnText: document.getElementById("inviteCompanyUserBtnText"),
+    clearCompanyUserInviteBtn: document.getElementById("clearCompanyUserInviteBtn"),
 
     // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
     // User access setup controls.
@@ -586,10 +642,40 @@ function bindEvents() {
     switchAdminWorkspace("overview");
   });
 
+  // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+  // Open the read-only audit and notification workspace.
+  state.dom.adminTabAuditBtn?.addEventListener("click", () => {
+    switchAdminWorkspace("audit");
+  });
+
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
   // Open tenant/company setup workspace.
   state.dom.adminTabTenantsBtn?.addEventListener("click", () => {
     switchAdminWorkspace("tenants");
+  });
+
+  // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+  // Keep the audit shell responsive without wiring any business modules yet.
+  state.dom.adminAuditRefreshBtn?.addEventListener("click", async () => {
+    await refreshAdminAuditCentre({ showToast: true });
+  });
+
+  state.dom.adminAuditClearFiltersBtn?.addEventListener("click", () => {
+    clearAdminAuditFilters();
+  });
+
+  // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
+  // Bind only the lean professional filter set.
+  [
+    state.dom.adminAuditEventTypeFilter,
+    state.dom.adminAuditSeverityFilter,
+    state.dom.adminAuditStatusFilter,
+    state.dom.adminAuditDateFrom,
+    state.dom.adminAuditDateTo,
+    state.dom.adminAuditSearchInput,
+  ].forEach((field) => {
+    field?.addEventListener("input", applyAdminAuditFilters);
+    field?.addEventListener("change", applyAdminAuditFilters);
   });
 
   // ADMIN UI CLEANUP - STEP 1G
@@ -645,6 +731,29 @@ function bindEvents() {
       setAdminActionButtonLoading(state.dom.refreshTenantsBtn, false);
     }
   });
+
+  // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+// Invite a company-scoped user directly from Admin.
+// This is for first HR/payroll/company access setup after a company is created.
+state.dom.companyUserInviteForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await inviteCompanyUser();
+});
+
+[
+  state.dom.companyUserFullName,
+  state.dom.companyUserEmail,
+  state.dom.companyUserRole,
+  state.dom.companyUserTenantId,
+].forEach((field) => {
+  field?.addEventListener("input", updateCompanyUserInviteButtonState);
+  field?.addEventListener("change", updateCompanyUserInviteButtonState);
+});
+
+state.dom.clearCompanyUserInviteBtn?.addEventListener("click", () => {
+  resetCompanyUserInviteForm();
+  showCompanyUserInviteAlert("info", "Company user invite form cleared.");
+});
 
   state.dom.profileTenantLinkForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -804,10 +913,17 @@ function renderAdminOverviewSummary() {
 function switchAdminWorkspace(workspace) {
   const isProfile = workspace === "profile";
   const isOverview = workspace === "overview";
+
+  // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+  // Add Audit Centre as a fourth Admin workspace without changing
+  // Profile, Overview, or Companies behaviour.
+  const isAudit = workspace === "audit";
+
   const isTenants = workspace === "tenants";
 
   state.dom.adminProfileSection?.classList.toggle("d-none", !isProfile);
   state.dom.adminOverviewSection?.classList.toggle("d-none", !isOverview);
+  state.dom.adminAuditSection?.classList.toggle("d-none", !isAudit);
   state.dom.adminTenantsSection?.classList.toggle("d-none", !isTenants);
 
   // ADMIN UI CLEANUP - STEP 1A
@@ -825,6 +941,12 @@ function switchAdminWorkspace(workspace) {
       : "btn btn-outline-primary dashboard-action-btn text-nowrap";
   }
 
+  if (state.dom.adminTabAuditBtn) {
+    state.dom.adminTabAuditBtn.className = isAudit
+      ? "btn btn-primary dashboard-action-btn text-nowrap"
+      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
+  }
+
   if (state.dom.adminTabTenantsBtn) {
     state.dom.adminTabTenantsBtn.className = isTenants
       ? "btn btn-primary dashboard-action-btn text-nowrap"
@@ -836,7 +958,9 @@ function switchAdminWorkspace(workspace) {
       ? "Profile"
       : isOverview
         ? "Overview"
-        : "Company Setup";
+        : isAudit
+          ? "Notification & Audit Centre"
+          : "Company Setup";
   }
 }
 
@@ -882,6 +1006,461 @@ function formatDate(value) {
     month: "short",
     day: "2-digit",
   });
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Normalise text for client-side filtering without changing saved database values.
+function normalizeAdminAuditText(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Audit rows need date and time because they are evidence records, not just summary records.
+function formatAdminAuditDateTime(value) {
+  if (!value) return "--";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Keep UUID display compact until employee/profile joins are added in later wiring steps.
+function formatAdminAuditShortId(value = "") {
+  const cleanValue = String(value || "").trim();
+  if (!cleanValue) return "--";
+
+  return cleanValue.length > 12
+    ? `${cleanValue.slice(0, 8)}...`
+    : cleanValue;
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Badge colours reflect HR/Admin attention level only. They do not change stored severity.
+function getAdminAuditSeverityBadgeClass(severity = "") {
+  const normalisedSeverity = normalizeAdminAuditText(severity);
+
+  if (normalisedSeverity === "critical") return "text-bg-danger";
+  if (normalisedSeverity === "warning") return "text-bg-warning";
+  if (normalisedSeverity === "success") return "text-bg-success";
+  if (normalisedSeverity === "info") return "text-bg-primary";
+
+  return "text-bg-light border text-dark";
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Status badge is display-only and supports both activity status and notification status.
+function getAdminAuditStatusBadgeClass(status = "") {
+  const normalisedStatus = normalizeAdminAuditText(status);
+
+  if (normalisedStatus === "open") return "text-bg-warning";
+  if (normalisedStatus === "in progress") return "text-bg-primary";
+  if (normalisedStatus === "resolved") return "text-bg-success";
+  if (normalisedStatus === "dismissed") return "text-bg-secondary";
+  if (normalisedStatus === "logged") return "text-bg-light border text-dark";
+
+  return "text-bg-light border text-dark";
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Find the configured event type label from the event catalogue loaded from Supabase.
+function getAdminAuditEventType(eventTypeKey = "") {
+  const key = String(eventTypeKey || "").trim();
+
+  return (state.systemEventTypes || []).find(
+    (eventType) => String(eventType.event_type_key || "").trim() === key,
+  ) || null;
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Rebuild the Event Type filter from system_event_types so Admin filters remain database-driven.
+function populateAdminAuditEventTypeOptions() {
+  const select = state.dom.adminAuditEventTypeFilter;
+  if (!select) return;
+
+  const currentValue = String(select.value || "").trim();
+
+  select.innerHTML = `<option value="">All event types</option>`;
+
+  [...(state.systemEventTypes || [])]
+    .sort((a, b) => {
+      const aOrder = Number(a.sort_order || 100);
+      const bOrder = Number(b.sort_order || 100);
+
+      if (aOrder !== bOrder) return aOrder - bOrder;
+
+      return String(a.event_label || "").localeCompare(
+        String(b.event_label || ""),
+        undefined,
+        { sensitivity: "base" },
+      );
+    })
+    .forEach((eventType) => {
+      const option = document.createElement("option");
+      option.value = eventType.event_type_key;
+      option.textContent = eventType.event_label || eventType.event_type_key;
+      select.appendChild(option);
+    });
+
+  if (currentValue) {
+    const stillExists = Array.from(select.options).some(
+      (option) => option.value === currentValue,
+    );
+
+    if (stillExists) {
+      select.value = currentValue;
+    }
+  }
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Loading row for the read-only audit table.
+function renderAdminAuditLoadingState() {
+  const tbody = state.dom.adminAuditRecordsTableBody;
+  if (!tbody) return;
+
+  state.dom.adminAuditRecordsEmptyState?.classList.add("d-none");
+  state.dom.adminAuditRecordsTableWrapper?.classList.remove("d-none");
+
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="8" class="text-center text-secondary py-4">
+        Loading audit and notification records.
+      </td>
+    </tr>
+  `;
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Summary counts are calculated from all loaded ledger rows, not only visible filtered rows.
+function renderAdminAuditSummary(records = []) {
+  const rows = Array.isArray(records) ? records : [];
+
+  const activeNotifications = rows.filter((record) => {
+    const notificationStatus = normalizeAdminAuditText(record.notification_status);
+    return Boolean(record.is_active_notification) &&
+      ["open", "in progress"].includes(notificationStatus);
+  }).length;
+
+  const criticalEvents = rows.filter(
+    (record) => normalizeAdminAuditText(record.severity) === "critical",
+  ).length;
+
+  const warningEvents = rows.filter(
+    (record) => normalizeAdminAuditText(record.severity) === "warning",
+  ).length;
+
+  const routineEvents = rows.filter(
+    (record) => !record.is_active_notification,
+  ).length;
+
+  if (state.dom.adminAuditActiveNotificationCount) {
+    state.dom.adminAuditActiveNotificationCount.textContent = String(activeNotifications);
+  }
+
+  if (state.dom.adminAuditCriticalCount) {
+    state.dom.adminAuditCriticalCount.textContent = String(criticalEvents);
+  }
+
+  if (state.dom.adminAuditWarningCount) {
+    state.dom.adminAuditWarningCount.textContent = String(warningEvents);
+  }
+
+  if (state.dom.adminAuditRoutineCount) {
+    state.dom.adminAuditRoutineCount.textContent = String(routineEvents);
+  }
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Render latest audit rows. No resolve/dismiss actions are added in this shell step.
+function renderAdminAuditRecords(records = []) {
+  const tbody = state.dom.adminAuditRecordsTableBody;
+  if (!tbody) return;
+
+  const rows = Array.isArray(records) ? records : [];
+
+  if (state.dom.adminAuditVisibleCount) {
+    state.dom.adminAuditVisibleCount.textContent = String(rows.length);
+  }
+
+  tbody.innerHTML = "";
+
+  if (!rows.length) {
+    state.dom.adminAuditRecordsEmptyState?.classList.remove("d-none");
+    state.dom.adminAuditRecordsTableWrapper?.classList.add("d-none");
+    return;
+  }
+
+  state.dom.adminAuditRecordsEmptyState?.classList.add("d-none");
+  state.dom.adminAuditRecordsTableWrapper?.classList.remove("d-none");
+
+  rows.forEach((record) => {
+    const eventType = getAdminAuditEventType(record.event_type_key);
+    const eventLabel = eventType?.event_label || record.event_type_key || "System Event";
+
+    const employeeOrTarget =
+      String(record.target_email || "").trim() ||
+      String(record.employee_id || "").trim() ||
+      String(record.target_profile_id || "").trim() ||
+      "--";
+
+    const notificationLabel = record.is_active_notification
+      ? record.notification_status || "Open"
+      : "Audit Only";
+
+    const sourceLabel = [
+      record.source_module,
+      record.source_table,
+      record.related_reference,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" / ") || "--";
+
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td class="text-nowrap">
+        ${escapeHtml(formatAdminAuditDateTime(record.created_at))}
+      </td>
+
+      <td>
+        <div class="fw-semibold">${escapeHtml(record.event_title || eventLabel)}</div>
+        <div class="text-secondary small">${escapeHtml(eventLabel)}</div>
+        ${record.event_message
+        ? `<div class="small text-secondary mt-1">${escapeHtml(record.event_message)}</div>`
+        : ""}
+      </td>
+
+      <td>
+        <div class="text-break">${escapeHtml(employeeOrTarget.includes("@") ? employeeOrTarget : formatAdminAuditShortId(employeeOrTarget))}</div>
+      </td>
+
+      <td>
+        <span class="badge rounded-pill text-bg-light border">
+          ${escapeHtml(record.actor_role || "--")}
+        </span>
+        <div class="small text-secondary text-break mt-1">
+          ${escapeHtml(record.actor_email || "--")}
+        </div>
+      </td>
+
+      <td>
+        <span class="badge ${getAdminAuditSeverityBadgeClass(record.severity)}">
+          ${escapeHtml(record.severity || "--")}
+        </span>
+      </td>
+
+      <td>
+        <span class="badge ${getAdminAuditStatusBadgeClass(record.event_status)}">
+          ${escapeHtml(record.event_status || "--")}
+        </span>
+      </td>
+
+      <td>
+        <span class="badge ${record.is_active_notification ? getAdminAuditStatusBadgeClass(notificationLabel) : "text-bg-light border text-dark"}">
+          ${escapeHtml(notificationLabel)}
+        </span>
+      </td>
+
+      <td class="small text-secondary">
+        ${escapeHtml(sourceLabel)}
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Apply client-side filters against the loaded audit ledger rows.
+function applyAdminAuditFilters() {
+  // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
+  // Employee/target and actor role are covered by the keyword search.
+  // This keeps the visible filter surface lean while preserving investigation capability.
+  const eventTypeFilter = String(state.dom.adminAuditEventTypeFilter?.value || "").trim();
+  const severityFilter = normalizeAdminAuditText(state.dom.adminAuditSeverityFilter?.value || "");
+  const statusFilter = normalizeAdminAuditText(state.dom.adminAuditStatusFilter?.value || "");
+  const dateFrom = String(state.dom.adminAuditDateFrom?.value || "").trim();
+  const dateTo = String(state.dom.adminAuditDateTo?.value || "").trim();
+  const searchTerm = normalizeAdminAuditText(state.dom.adminAuditSearchInput?.value || "");
+
+  const fromTime = dateFrom
+    ? new Date(`${dateFrom}T00:00:00`).getTime()
+    : null;
+
+  const toTime = dateTo
+    ? new Date(`${dateTo}T23:59:59`).getTime()
+    : null;
+
+  let rows = [...(state.systemActivityEvents || [])];
+
+  rows = rows.filter((record) => {
+    if (eventTypeFilter && String(record.event_type_key || "").trim() !== eventTypeFilter) {
+      return false;
+    }
+
+    if (severityFilter && normalizeAdminAuditText(record.severity) !== severityFilter) {
+      return false;
+    }
+
+
+    if (statusFilter) {
+      const eventStatus = normalizeAdminAuditText(record.event_status);
+      const notificationStatus = normalizeAdminAuditText(record.notification_status);
+
+      if (eventStatus !== statusFilter && notificationStatus !== statusFilter) {
+        return false;
+      }
+    }
+
+    if (fromTime || toTime) {
+      const createdTime = new Date(record.created_at || "").getTime();
+
+      if (!Number.isFinite(createdTime)) return false;
+      if (fromTime && createdTime < fromTime) return false;
+      if (toTime && createdTime > toTime) return false;
+    }
+
+
+    if (searchTerm) {
+      const eventType = getAdminAuditEventType(record.event_type_key);
+
+      const searchableText = [
+        record.event_type_key,
+        eventType?.event_label,
+        eventType?.event_category,
+        record.event_title,
+        record.event_message,
+
+        // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
+        // Include employee and target profile identifiers in the single keyword search
+        // so Admin can investigate employee/target records without separate noisy filters.
+        record.employee_id,
+        record.target_profile_id,
+
+        record.actor_email,
+        record.actor_role,
+        record.target_email,
+        record.source_module,
+        record.source_table,
+        record.related_reference,
+        record.severity,
+        record.event_status,
+        record.notification_status,
+      ].join(" ").toLowerCase();
+
+      if (!searchableText.includes(searchTerm)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  state.filteredSystemActivityEvents = rows;
+  renderAdminAuditRecords(rows);
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Clear filters only; do not delete or update any audit records.
+function clearAdminAuditFilters() {
+  // ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
+  // Clear only the visible professional filter set.
+  [
+    state.dom.adminAuditEventTypeFilter,
+    state.dom.adminAuditSeverityFilter,
+    state.dom.adminAuditStatusFilter,
+    state.dom.adminAuditDateFrom,
+    state.dom.adminAuditDateTo,
+    state.dom.adminAuditSearchInput,
+  ].forEach((field) => {
+    if (field) field.value = "";
+  });
+
+  applyAdminAuditFilters();
+
+  showDashboardToast(
+    "info",
+    "Audit filters cleared",
+    "All audit and notification filters have been reset.",
+  );
+}
+
+// ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
+// Read the controlled event catalogue and latest activity ledger rows.
+// This is intentionally read-only in the UI shell step.
+async function refreshAdminAuditCentre(options = {}) {
+  const { showToast = false } = options;
+  const button = state.dom.adminAuditRefreshBtn;
+
+  try {
+    setAdminActionButtonLoading(button, true, "Refreshing Audit...");
+    renderAdminAuditLoadingState();
+
+    const supabase = getSupabaseClient();
+
+    const [eventTypesResponse, eventsResponse] = await Promise.all([
+      supabase
+        .from("system_event_types")
+        .select("event_type_key, event_label, event_category, default_severity, default_requires_notification, is_active, sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true }),
+
+      supabase
+        .from("system_activity_events")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(100),
+    ]);
+
+    if (eventTypesResponse.error) throw eventTypesResponse.error;
+    if (eventsResponse.error) throw eventsResponse.error;
+
+    state.systemEventTypes = Array.isArray(eventTypesResponse.data)
+      ? eventTypesResponse.data
+      : [];
+
+    state.systemActivityEvents = Array.isArray(eventsResponse.data)
+      ? eventsResponse.data
+      : [];
+
+    populateAdminAuditEventTypeOptions();
+    renderAdminAuditSummary(state.systemActivityEvents);
+    applyAdminAuditFilters();
+
+    if (showToast) {
+      showDashboardToast(
+        "success",
+        "Audit refreshed",
+        `${state.systemActivityEvents.length} audit record(s) loaded.`,
+      );
+    }
+  } catch (error) {
+    console.error("Error loading Admin Audit Centre:", error);
+
+    state.systemEventTypes = [];
+    state.systemActivityEvents = [];
+    state.filteredSystemActivityEvents = [];
+
+    populateAdminAuditEventTypeOptions();
+    renderAdminAuditSummary([]);
+    renderAdminAuditRecords([]);
+
+    showPageAlert(
+      "danger",
+      error.message || "Notification and audit records could not be loaded.",
+    );
+  } finally {
+    setAdminActionButtonLoading(button, false);
+  }
 }
 
 function getTenantStatusBadgeClass(status = "") {
@@ -1133,9 +1712,13 @@ async function refreshTenantWorkspace() {
     // Keep Overview company counts in sync after tenant/company refresh.
     renderAdminOverviewSummary();
 
-    // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
-    // Keep tenant assignment dropdown in sync with saved tenant records.
-    populateProfileTenantTenantOptions();
+// HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
+// Keep tenant assignment dropdown in sync with saved tenant records.
+populateProfileTenantTenantOptions();
+
+// ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+// Keep the company invite dropdown in sync with active company records.
+populateCompanyUserTenantOptions();
   } catch (error) {
     console.error("Error loading tenant records:", error);
     state.tenants = [];
@@ -1398,6 +1981,284 @@ function populateProfileTenantTenantOptions() {
   }
 
   updateProfileTenantLinkSaveButtonState();
+}
+
+// ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+// Populate the company dropdown used by the Admin company-user invite form.
+function populateCompanyUserTenantOptions() {
+  const select = state.dom.companyUserTenantId;
+  if (!select) return;
+
+  const currentValue = String(select.value || "").trim();
+
+  select.innerHTML = `<option value="">Select company</option>`;
+
+  const activeTenants = [...(state.tenants || [])]
+    .filter((tenant) => String(tenant.status || "").toLowerCase() === "active")
+    .sort((a, b) =>
+      String(a.company_name || "").localeCompare(
+        String(b.company_name || ""),
+        undefined,
+        { sensitivity: "base" },
+      ),
+    );
+
+  activeTenants.forEach((tenant) => {
+    const option = document.createElement("option");
+    option.value = tenant.id;
+    option.textContent = `${tenant.company_name || "Unnamed Company"} — ${tenant.tenant_code || "--"}`;
+    select.appendChild(option);
+  });
+
+  if (currentValue) {
+    const stillExists = Array.from(select.options).some(
+      (option) => option.value === currentValue,
+    );
+
+    if (stillExists) {
+      select.value = currentValue;
+    }
+  }
+
+  updateCompanyUserInviteButtonState();
+}
+
+// ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+// Email validation is kept lightweight and client-side only.
+// The Edge Function remains the authoritative security boundary.
+function isCompanyUserEmailValid(value = "") {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function clearCompanyUserInviteAlert() {
+  const alert = state.dom.companyUserInviteAlert;
+  if (!alert) return;
+
+  alert.className = "alert d-none mb-3";
+  alert.textContent = "";
+}
+
+function showCompanyUserInviteAlert(type, message) {
+  const alert = state.dom.companyUserInviteAlert;
+  if (!alert) {
+    showPageAlert(type, message);
+    return;
+  }
+
+  alert.className = `alert alert-${type} mb-3`;
+  alert.textContent = message;
+}
+
+function clearCompanyUserInviteValidationState() {
+  [
+    state.dom.companyUserFullName,
+    state.dom.companyUserEmail,
+    state.dom.companyUserRole,
+    state.dom.companyUserTenantId,
+  ].forEach((field) => {
+    field?.classList.remove("is-invalid");
+  });
+}
+
+function updateCompanyUserInviteButtonState() {
+  const button = state.dom.inviteCompanyUserBtn;
+  if (!button || button.dataset.isLoading === "true") return;
+
+  const fullName = String(state.dom.companyUserFullName?.value || "").trim();
+  const email = String(state.dom.companyUserEmail?.value || "").trim();
+  const role = String(state.dom.companyUserRole?.value || "").trim();
+  const tenantId = String(state.dom.companyUserTenantId?.value || "").trim();
+
+  const canSubmit = Boolean(
+    fullName &&
+    isCompanyUserEmailValid(email) &&
+    role &&
+    tenantId,
+  );
+
+  button.disabled = !canSubmit;
+  button.className = canSubmit
+    ? "btn btn-primary dashboard-action-btn"
+    : "btn btn-secondary dashboard-action-btn";
+}
+
+function validateCompanyUserInviteForm() {
+  clearCompanyUserInviteValidationState();
+  clearCompanyUserInviteAlert();
+
+  const fullName = String(state.dom.companyUserFullName?.value || "").trim();
+  const email = String(state.dom.companyUserEmail?.value || "").trim();
+  const role = String(state.dom.companyUserRole?.value || "").trim();
+  const tenantId = String(state.dom.companyUserTenantId?.value || "").trim();
+
+  if (!fullName) {
+    state.dom.companyUserFullName?.classList.add("is-invalid");
+    showCompanyUserInviteAlert("warning", "Enter the company user’s full name.");
+    state.dom.companyUserFullName?.focus();
+    return false;
+  }
+
+  if (!isCompanyUserEmailValid(email)) {
+    state.dom.companyUserEmail?.classList.add("is-invalid");
+    showCompanyUserInviteAlert("warning", "Enter a valid email address.");
+    state.dom.companyUserEmail?.focus();
+    return false;
+  }
+
+  if (!role) {
+    state.dom.companyUserRole?.classList.add("is-invalid");
+    showCompanyUserInviteAlert("warning", "Select the company user role.");
+    state.dom.companyUserRole?.focus();
+    return false;
+  }
+
+  if (!tenantId) {
+    state.dom.companyUserTenantId?.classList.add("is-invalid");
+    showCompanyUserInviteAlert("warning", "Select the company workspace.");
+    state.dom.companyUserTenantId?.focus();
+    return false;
+  }
+
+  return true;
+}
+
+function getSelectedCompanyUserTenant() {
+  const tenantId = String(state.dom.companyUserTenantId?.value || "").trim();
+
+  if (!tenantId) return null;
+
+  return getTenantByTenantId(tenantId);
+}
+
+function buildCompanyUserInvitePayload() {
+  const tenant = getSelectedCompanyUserTenant();
+
+  return {
+    fullName: String(state.dom.companyUserFullName?.value || "").trim(),
+    email: String(state.dom.companyUserEmail?.value || "").trim().toLowerCase(),
+    role: String(state.dom.companyUserRole?.value || "hr").trim().toLowerCase(),
+    tenantId: String(tenant?.id || state.dom.companyUserTenantId?.value || "").trim(),
+    companyName: String(tenant?.company_name || "").trim(),
+  };
+}
+
+function setCompanyUserInviteLoading(isLoading) {
+  const button = state.dom.inviteCompanyUserBtn;
+  if (!button) return;
+
+  button.dataset.isLoading = isLoading ? "true" : "false";
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    if (!button.dataset.originalClass) {
+      button.dataset.originalClass = button.className;
+    }
+
+    button.disabled = true;
+    button.className = "btn btn-secondary dashboard-action-btn";
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Sending Invite...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+
+  button.className =
+    button.dataset.originalClass || "btn btn-secondary dashboard-action-btn";
+
+  delete button.dataset.originalClass;
+  delete button.dataset.isLoading;
+
+  updateCompanyUserInviteButtonState();
+}
+
+function resetCompanyUserInviteForm() {
+  if (state.dom.companyUserInviteForm) {
+    state.dom.companyUserInviteForm.reset();
+  }
+
+  clearCompanyUserInviteValidationState();
+  updateCompanyUserInviteButtonState();
+}
+
+async function inviteCompanyUser() {
+  if (!validateCompanyUserInviteForm()) {
+    updateCompanyUserInviteButtonState();
+    return;
+  }
+
+  const payload = buildCompanyUserInvitePayload();
+
+  try {
+    setCompanyUserInviteLoading(true);
+    clearCompanyUserInviteAlert();
+
+    const supabase = getSupabaseClient();
+
+    // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+    // Secure backend creates/invites Auth user, creates profile, and links
+    // profile to the selected company tenant. Frontend never creates Auth users.
+    const { data, error } = await supabase.functions.invoke(
+      "invite-company-user",
+      {
+        body: payload,
+      },
+    );
+
+    if (error) throw error;
+
+    showCompanyUserInviteAlert(
+      "success",
+      data?.message ||
+      `${payload.fullName} has been invited to ${payload.companyName || "the selected company"}.`,
+    );
+
+    showPageAlert(
+      "success",
+      data?.message ||
+      `${payload.fullName} has been invited successfully.`,
+    );
+
+    showDashboardToast(
+      "success",
+      "Company user invited",
+      `${payload.fullName} was invited to ${payload.companyName || "the selected company"}.`,
+    );
+
+    resetCompanyUserInviteForm();
+
+    // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+    // Refresh access records so the newly created profile appears in the
+    // existing User Access Records table.
+    await refreshProfileTenantLinkingWorkspace();
+
+    redirectToAdminUserCompanyLinksAfterSave();
+  } catch (error) {
+    console.error("Company user invite error:", error);
+
+    const message =
+      String(error?.message || "").trim() ||
+      "Company user invite could not be sent.";
+
+    showCompanyUserInviteAlert("danger", message);
+    showPageAlert("danger", message);
+
+    showDashboardToast(
+      "danger",
+      "Invite failed",
+      message,
+    );
+  } finally {
+    setCompanyUserInviteLoading(false);
+  }
 }
 
 function updateProfileTenantLinkSaveButtonState() {

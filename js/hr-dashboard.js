@@ -20792,7 +20792,39 @@ async function handleEmployeeSave() {
         inviteNote;
     }
 
-    showPageAlert(loginInviteSent || isEditMode ? "success" : "warning", employeeSaveSuccessMessage);
+showPageAlert(loginInviteSent || isEditMode ? "success" : "warning", employeeSaveSuccessMessage);
+
+// ADMIN COMPANY / HR USER BOOTSTRAP - STEP 1G
+// HR-facing confirmation after employee create/update.
+// The page alert already contains the full save result; this floating toast
+// makes the key outcome visible even after the page scrolls back to the
+// Full Employee List.
+//
+// HR behaviour:
+// - New employee + invite sent = success notification.
+// - New employee saved but invite failed = warning notification.
+// - Edit mode = update notification only; no invite is expected on edit.
+if (isEditMode) {
+  showDashboardToast(
+    "success",
+    "Employee updated",
+    `Employee profile updated for ${savedEmployeeName}.`,
+  );
+} else if (loginInviteSent) {
+  showDashboardToast(
+    "success",
+    "Employee created",
+    `Login invite sent to ${employeePayload.work_email}.`,
+  );
+} else {
+  showDashboardToast(
+    "warning",
+    "Employee created, invite failed",
+    loginInviteError
+      ? `Employee saved, but login invite was not sent: ${loginInviteError}`
+      : "Employee saved, but login invite was not sent.",
+  );
+}
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // After create/update, clear the form and return HR to the employee list.
