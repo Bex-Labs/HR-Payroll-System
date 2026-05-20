@@ -35,6 +35,13 @@ const PROFILE_IMAGES_BUCKET = "profile-images";
 const state = {
   currentUser: null,
   currentProfile: null,
+  currentManagerEmployeeRecord: null,
+
+  // MANAGER PROFILE UI CLEANUP - STEP 1A
+  // Stores the last loaded/saved editable profile values.
+  // Save Profile Changes should only activate when the manager changes these values.
+  currentProfileEditableBaseline: null,
+
   teamMembers: [],
   filteredTeamMembers: [],
   pendingLeaveRequests: [],
@@ -45,6 +52,11 @@ const state = {
   pendingDecisionRequest: null,
   pendingDecisionButton: null,
   leaveDecisionModal: null,
+
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+  // Controls the temporary bottom-right manager notification.
+  dashboardToastTimeoutId: null,
+
   dom: {},
 };
 
@@ -140,6 +152,19 @@ function cacheDomElements() {
       "pendingRequestsTableBody",
     ),
 
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+    // Pending Leave Requests now supports default collapse and safe
+    // double-click collapse like the other cleaned manager cards.
+    pendingRequestsCardHeader: document.getElementById(
+      "pendingRequestsCardHeader",
+    ),
+    togglePendingRequestsCardBtn: document.getElementById(
+      "togglePendingRequestsCardBtn",
+    ),
+    pendingRequestsCardCollapse: document.getElementById(
+      "pendingRequestsCardCollapse",
+    ),
+
     processedRequestsEmptyState: document.getElementById(
       "processedRequestsEmptyState",
     ),
@@ -150,16 +175,265 @@ function cacheDomElements() {
       "processedRequestsTableBody",
     ),
 
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1H
+    // Processed leave decisions card supports default collapse and
+    // double-click collapse like other cleaned dashboard cards.
+    processedRequestsCardHeader: document.getElementById(
+      "processedRequestsCardHeader",
+    ),
+    toggleProcessedRequestsCardBtn: document.getElementById(
+      "toggleProcessedRequestsCardBtn",
+    ),
+    processedRequestsCardCollapse: document.getElementById(
+      "processedRequestsCardCollapse",
+    ),
+
     teamScheduleEmptyState: document.getElementById("teamScheduleEmptyState"),
     teamScheduleTableWrapper: document.getElementById(
       "teamScheduleTableWrapper",
     ),
     teamScheduleTableBody: document.getElementById("teamScheduleTableBody"),
 
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
+    // Team Leave Schedule is open by default but can be collapsed like the
+    // processed audit card, without touching leave approval logic.
+    teamScheduleCardHeader: document.getElementById("teamScheduleCardHeader"),
+    toggleTeamScheduleCardBtn: document.getElementById(
+      "toggleTeamScheduleCardBtn",
+    ),
+    teamScheduleCardCollapse: document.getElementById(
+      "teamScheduleCardCollapse",
+    ),
+
     teamEmptyState: document.getElementById("teamEmptyState"),
     teamTableWrapper: document.getElementById("teamTableWrapper"),
     teamTableBody: document.getElementById("teamTableBody"),
+
+    // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K
+    // Assigned Employee Records is a default-collapsed reference panel.
+    assignedEmployeeRecordsCardHeader: document.getElementById(
+      "assignedEmployeeRecordsCardHeader",
+    ),
+    toggleAssignedEmployeeRecordsCardBtn: document.getElementById(
+      "toggleAssignedEmployeeRecordsCardBtn",
+    ),
+    assignedEmployeeRecordsCardCollapse: document.getElementById(
+      "assignedEmployeeRecordsCardCollapse",
+    ),
+
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+    // Floating navigation and bottom-right notification controls.
+    backToTopBtn: document.getElementById("backToTopBtn"),
+    dashboardToast: document.getElementById("dashboardToast"),
+    dashboardToastAccent: document.getElementById("dashboardToastAccent"),
+    dashboardToastIcon: document.getElementById("dashboardToastIcon"),
+    dashboardToastTitle: document.getElementById("dashboardToastTitle"),
+    dashboardToastMessage: document.getElementById("dashboardToastMessage"),
+    dashboardToastCloseBtn: document.getElementById("dashboardToastCloseBtn"),
   };
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1H
+// Reusable card collapse behaviour for manager dashboard cards.
+// Mirrors the HR dashboard pattern but keeps the implementation local
+// to this file so no shared approval or RLS logic is disturbed.
+function setManagerCardExpanded(button, panel, shouldExpand) {
+  if (!button || !panel) return;
+
+  panel.classList.toggle("d-none", !shouldExpand);
+  button.setAttribute("aria-expanded", String(shouldExpand));
+
+  const icon = button.querySelector("i");
+  const label = button.querySelector("span");
+
+  if (icon) {
+    icon.className = shouldExpand
+      ? "bi bi-chevron-up me-2"
+      : "bi bi-chevron-down me-2";
+  }
+
+  if (label) {
+    label.textContent = shouldExpand ? "Collapse" : "Expand";
+  }
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I
+// Button toggles expand/collapse.
+// Double-click is collapse-only so it never accidentally opens an audit card.
+// The expanded panel also listens for double-click, so managers can collapse
+// the card even when they are deep inside long processed records.
+function bindManagerCardCollapseToggle(button, panel, header) {
+  if (!button || !panel) return;
+
+  const toggleCardFromButton = () => {
+    const shouldExpand = panel.classList.contains("d-none");
+    setManagerCardExpanded(button, panel, shouldExpand);
+  };
+
+  const collapseCardFromDoubleClick = (event) => {
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I-C
+    // Double-click is collapse-only. It should work on safe card surfaces
+    // such as the top/header, side padding, and bottom blank area, but must
+    // not collapse while the manager double-clicks inside actual records.
+    const blockedTarget = event?.target?.closest(
+      "button, a, input, select, textarea, label, table, thead, tbody, tr, th, td",
+    );
+
+    if (blockedTarget) return;
+    if (panel.classList.contains("d-none")) return;
+
+    setManagerCardExpanded(button, panel, false);
+  };
+
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I-C
+  // Listen from the whole card, not only the header/panel. This lets the
+  // manager collapse from top, side, and bottom blank areas while record cells
+  // remain protected by the blockedTarget guard above.
+  const cardSurface =
+    header?.closest(".dashboard-section-card") ||
+    panel.closest(".dashboard-section-card") ||
+    panel;
+
+  button.addEventListener("click", toggleCardFromButton);
+  cardSurface.addEventListener("dblclick", collapseCardFromDoubleClick);
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I
+// After a manager decision, show the audit-history card automatically.
+// This confirms the decision moved from Pending Requests into Processed Decisions.
+function openProcessedRequestsCardAfterDecision() {
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I-B
+  // After a decision, show the processed audit card exactly from the top:
+  // card heading visible, newest processed row visible, and inner scrollbar reset.
+  setManagerCardExpanded(
+    state.dom.toggleProcessedRequestsCardBtn,
+    state.dom.processedRequestsCardCollapse,
+    true,
+  );
+
+  if (state.dom.processedRequestsTableWrapper) {
+    state.dom.processedRequestsTableWrapper.scrollTop = 0;
+  }
+
+  window.requestAnimationFrame(() => {
+    const targetCard =
+      state.dom.processedRequestsCardHeader?.closest(".dashboard-section-card") ||
+      state.dom.processedRequestsCardHeader;
+
+    if (!targetCard) return;
+
+    const topWithBreathingRoom =
+      targetCard.getBoundingClientRect().top + window.scrollY - 24;
+
+    window.scrollTo({
+      top: Math.max(topWithBreathingRoom, 0),
+      behavior: "smooth",
+    });
+  });
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+// Show the blue Back to Top button only after the manager has scrolled down.
+function updateManagerBackToTopButtonVisibility() {
+  const button = state.dom.backToTopBtn;
+  if (!button) return;
+
+  button.classList.toggle("d-none", window.scrollY <= 420);
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+// Bottom-right manager toast. This mirrors the HR dashboard pattern but is
+// local to Manager so no HR/payroll functions are touched.
+function showManagerDashboardToast(type = "info", title = "Notification", message = "") {
+  const toast = state.dom.dashboardToast;
+  if (!toast) return;
+
+  const accent = state.dom.dashboardToastAccent;
+  const icon = state.dom.dashboardToastIcon;
+  const titleEl = state.dom.dashboardToastTitle;
+  const messageEl = state.dom.dashboardToastMessage;
+
+  const themeMap = {
+    success: {
+      accentClass: "bg-success",
+      iconClass: "text-bg-success",
+      iconHtml: '<i class="bi bi-check-circle"></i>',
+    },
+    warning: {
+      accentClass: "bg-warning",
+      iconClass: "text-bg-warning",
+      iconHtml: '<i class="bi bi-exclamation-triangle"></i>',
+    },
+    danger: {
+      accentClass: "bg-danger",
+      iconClass: "text-bg-danger",
+      iconHtml: '<i class="bi bi-x-octagon"></i>',
+    },
+    info: {
+      accentClass: "bg-primary",
+      iconClass: "text-bg-primary",
+      iconHtml: '<i class="bi bi-info-circle"></i>',
+    },
+  };
+
+  const theme = themeMap[type] || themeMap.info;
+
+  if (accent) {
+    accent.className = theme.accentClass;
+    accent.style.height = "4px";
+  }
+
+  if (icon) {
+    icon.className =
+      `rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 ${theme.iconClass}`;
+    icon.style.width = "36px";
+    icon.style.height = "36px";
+    icon.innerHTML = theme.iconHtml;
+  }
+
+  if (titleEl) {
+    titleEl.textContent = title;
+  }
+
+  if (messageEl) {
+    messageEl.textContent = message || "";
+  }
+
+  toast.classList.remove("d-none");
+
+  window.clearTimeout(state.dashboardToastTimeoutId);
+
+  state.dashboardToastTimeoutId = window.setTimeout(() => {
+    hideManagerDashboardToast();
+  }, 8000);
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+// Hide the manager toast without touching page data or leave workflow state.
+function hideManagerDashboardToast() {
+  state.dom.dashboardToast?.classList.add("d-none");
+
+  if (state.dashboardToastTimeoutId) {
+    window.clearTimeout(state.dashboardToastTimeoutId);
+    state.dashboardToastTimeoutId = null;
+  }
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+// Business-friendly notification title for manager decisions.
+function getLeaveDecisionToastTitle(status = "") {
+  const normalisedStatus = normalizeText(status);
+
+  if (normalisedStatus === "approved") return "Leave approved";
+  if (normalisedStatus === "rejected") return "Leave rejected";
+  if (
+    normalisedStatus === "returned" ||
+    normalisedStatus === "returned for clarification"
+  ) {
+    return "Leave returned";
+  }
+
+  return "Leave decision saved";
 }
 
 function bindEvents() {
@@ -179,6 +453,18 @@ function bindEvents() {
     event.preventDefault();
     await saveManagerOwnProfile();
   });
+
+  // MANAGER PROFILE UI CLEANUP - STEP 1A
+  // Keep Save Profile Changes grey until Full Name or Department is actually changed.
+  [
+    state.dom.managerProfileFullName,
+    state.dom.managerProfileDepartment,
+  ].forEach((field) => {
+    field?.addEventListener("input", updateManagerProfileSaveButtonState);
+    field?.addEventListener("change", updateManagerProfileSaveButtonState);
+  });
+
+  updateManagerProfileSaveButtonState();
 
   state.dom.managerProfileImageInput?.addEventListener("change", (event) => {
     const file = event.target.files?.[0] || null;
@@ -204,6 +490,61 @@ function bindEvents() {
   state.dom.teamSearchInput?.addEventListener("input", () => {
     applyTeamFilter();
   });
+
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+  // Page-level navigation and toast controls.
+  window.addEventListener("scroll", updateManagerBackToTopButtonVisibility, {
+    passive: true,
+  });
+
+  state.dom.backToTopBtn?.addEventListener("click", () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  });
+
+  state.dom.dashboardToastCloseBtn?.addEventListener("click", () => {
+    hideManagerDashboardToast();
+  });
+
+  updateManagerBackToTopButtonVisibility();
+
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+  // Pending Requests starts collapsed and uses safe double-click collapse.
+  // Double-click does not open a collapsed card and does not fire from table cells.
+  bindManagerCardCollapseToggle(
+    state.dom.togglePendingRequestsCardBtn,
+    state.dom.pendingRequestsCardCollapse,
+    state.dom.pendingRequestsCardHeader,
+  );
+
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1H
+  // Processed Decisions starts collapsed by HTML default and can be toggled
+  // by the button or by double-clicking the card header.
+  bindManagerCardCollapseToggle(
+    state.dom.toggleProcessedRequestsCardBtn,
+    state.dom.processedRequestsCardCollapse,
+    state.dom.processedRequestsCardHeader,
+  );
+
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
+  // Team Schedule stays open by default and can be collapsed from safe card
+  // surfaces. Double-click remains collapse-only via the shared helper.
+  bindManagerCardCollapseToggle(
+    state.dom.toggleTeamScheduleCardBtn,
+    state.dom.teamScheduleCardCollapse,
+    state.dom.teamScheduleCardHeader,
+  );
+
+  // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K
+  // Assigned Employee Records starts collapsed and uses the same safe
+  // double-click-collapse pattern as the other cleaned manager cards.
+  bindManagerCardCollapseToggle(
+    state.dom.toggleAssignedEmployeeRecordsCardBtn,
+    state.dom.assignedEmployeeRecordsCardCollapse,
+    state.dom.assignedEmployeeRecordsCardHeader,
+  );
 }
 
 function initialiseDecisionModal() {
@@ -378,6 +719,18 @@ async function submitLeaveDecisionFromModal() {
     setActionButtonLoading(state.pendingDecisionButton, true);
 
     if (status === "Approved") {
+      // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
+      // Defensive manager-side eligibility check. This blocks old bad pending
+      // rows such as an ineligible Maternity/Paternity request before any
+      // balance update or decision save can occur.
+      assertLeaveTypeEligibleForManagerApproval(request);
+
+      // MANAGER DASHBOARD WIRING - STEP 2F
+      // Validate same-employee overlap before reducing balance or saving the
+      // decision. Future leave is allowed, but overlapping approved leave for
+      // the same employee is not HR-safe.
+      await assertNoOverlappingApprovedLeaveForEmployee(request);
+
       await applyApprovedLeaveToBalance(request);
     }
 
@@ -385,13 +738,27 @@ async function submitLeaveDecisionFromModal() {
 
     notifyLeaveDecisionChanged();
 
-    showPageAlert(
+    const successMessage =
+      `${request.employeeName}'s leave request was ${status.toLowerCase()} successfully.`;
+
+    showPageAlert("success", successMessage);
+
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+    // Show a bottom-right notification immediately after approve/reject/return
+    // so the manager gets feedback even when the top alert is out of view.
+    showManagerDashboardToast(
       "success",
-      `${request.employeeName}'s leave request was ${status.toLowerCase()} successfully.`,
+      getLeaveDecisionToastTitle(status),
+      successMessage,
     );
 
     state.leaveDecisionModal?.hide();
     await loadTeamLeaveVisibility();
+
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1I
+    // A completed decision belongs in audit history, so open and focus the
+    // Processed Leave Decisions card immediately after the workspace refreshes.
+    openProcessedRequestsCardAfterDecision();
   } catch (error) {
     console.error("Error saving leave decision:", error);
 
@@ -402,6 +769,15 @@ async function submitLeaveDecisionFromModal() {
       "The leave decision could not be saved. Please try again.";
 
     showPageAlert("danger", errorMessage);
+
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
+    // Keep failure feedback visible near the manager's current viewport.
+    showManagerDashboardToast(
+      "danger",
+      "Leave decision failed",
+      errorMessage,
+    );
+
     window.alert(`Leave decision save failed:
 
 ${errorMessage}`);
@@ -481,6 +857,60 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
+// Date-only leave fields should display without timezone drift.
+// This keeps manager approval dates compact and predictable.
+function getDashboardDisplayDate(value) {
+  if (!value) return null;
+
+  const rawValue = String(value || "").trim();
+  const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+  const date = dateOnlyPattern.test(rawValue)
+    ? new Date(`${rawValue}T00:00:00`)
+    : new Date(rawValue);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
+// Format as "Jul 1" so Leave Period can show "Jul 1 - Jul 5"
+// with the year stacked underneath.
+function formatShortMonthDayFromDate(date) {
+  if (!date) return "--";
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
+// Split submitted timestamp into date and time, matching the cleaner HR-style
+// stacked timestamp pattern used elsewhere in the dashboards.
+function formatSubmittedDateTimeParts(value) {
+  const date = getDashboardDisplayDate(value);
+
+  if (!date) {
+    return {
+      dateLabel: "--",
+      timeLabel: "--",
+    };
+  }
+
+  return {
+    dateLabel: date.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }),
+    timeLabel: date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  };
 }
 
 function getInitials(fullName, fallback = "MG") {
@@ -607,6 +1037,62 @@ function renderManagerProfile(profile, user) {
   }
 
   void loadManagerProfileImages(profile?.profile_image_path, initials);
+
+  // MANAGER PROFILE UI CLEANUP - STEP 1A
+  // After rendering loaded/saved profile data, treat it as the clean baseline.
+  state.currentProfileEditableBaseline = getManagerProfileEditableSnapshot();
+  updateManagerProfileSaveButtonState();
+}
+
+// MANAGER PROFILE UI CLEANUP - STEP 1A
+// Shared button readiness behaviour for this manager page.
+// Incomplete or unchanged form = grey and disabled.
+// Changed and valid form = blue and enabled.
+function setPrimaryActionButtonReadyState(button, canSubmit) {
+  if (!button) return;
+
+  button.disabled = !canSubmit;
+  button.classList.toggle("btn-primary", canSubmit);
+  button.classList.toggle("btn-secondary", !canSubmit);
+}
+
+// MANAGER PROFILE UI CLEANUP - STEP 1A
+// Capture only fields the manager can edit from My Profile.
+function getManagerProfileEditableSnapshot() {
+  return {
+    full_name: String(state.dom.managerProfileFullName?.value || "").trim(),
+    department: String(state.dom.managerProfileDepartment?.value || "").trim(),
+  };
+}
+
+// MANAGER PROFILE UI CLEANUP - STEP 1A
+// Detect whether the manager changed an editable profile field.
+function hasManagerProfileEditableChanges() {
+  const currentSnapshot = getManagerProfileEditableSnapshot();
+  const baselineSnapshot = state.currentProfileEditableBaseline || {};
+
+  return Object.keys(currentSnapshot).some(
+    (key) => currentSnapshot[key] !== String(baselineSnapshot[key] || ""),
+  );
+}
+
+// MANAGER PROFILE UI CLEANUP - STEP 1A
+// Full Name remains required; Department is optional.
+function isManagerProfileFormReadyForSubmit() {
+  const hasFullName = Boolean(
+    String(state.dom.managerProfileFullName?.value || "").trim(),
+  );
+
+  return hasFullName && hasManagerProfileEditableChanges();
+}
+
+// MANAGER PROFILE UI CLEANUP - STEP 1A
+// Keep Save Profile Changes aligned with the HR/Admin profile behaviour.
+function updateManagerProfileSaveButtonState() {
+  setPrimaryActionButtonReadyState(
+    state.dom.saveManagerProfileBtn,
+    isManagerProfileFormReadyForSubmit(),
+  );
 }
 
 async function saveManagerOwnProfile() {
@@ -618,6 +1104,13 @@ async function saveManagerOwnProfile() {
   if (!fullName) {
     showPageAlert("warning", "Full name is required before saving your profile.");
     state.dom.managerProfileFullName?.focus();
+    return;
+  }
+
+  // MANAGER PROFILE UI CLEANUP - STEP 1A
+  // Pressing Enter inside the form should not save when no editable value changed.
+  if (!hasManagerProfileEditableChanges()) {
+    updateManagerProfileSaveButtonState();
     return;
   }
 
@@ -864,18 +1357,27 @@ function setProfileSaveLoading(isLoading) {
   const button = state.dom.saveManagerProfileBtn;
   if (!button) return;
 
-  button.disabled = isLoading;
-
   if (isLoading) {
-    button.dataset.originalHtml = button.innerHTML;
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       Saving...
     `;
-  } else if (button.dataset.originalHtml) {
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
     delete button.dataset.originalHtml;
   }
+
+  // MANAGER PROFILE UI CLEANUP - STEP 1A
+  // After saving/loading ends, recalculate whether editable profile changes still exist.
+  updateManagerProfileSaveButtonState();
 }
 
 function getFirstAvailableValue(row, keys) {
@@ -1014,6 +1516,160 @@ function getWorkEmail(row) {
   ]);
 }
 
+// MANAGER DASHBOARD WIRING - STEP 2A
+// Resolve the logged-in manager to their employee master record.
+// The reporting-line table uses employees.id as manager_employee_id, so the
+// dashboard must not rely on free-text manager names or global employee RLS.
+async function loadCurrentManagerEmployeeRecord() {
+  const supabase = getSupabaseClient();
+  const managerUserId = String(state.currentUser?.id || "").trim();
+  const managerEmail = normalizeText(
+    state.currentProfile?.email || state.currentUser?.email,
+  );
+
+  if (managerUserId) {
+    const { data, error } = await supabase
+      .from("employees")
+      .select("*")
+      .eq("user_id", managerUserId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Manager employee lookup by user_id failed:", error);
+    } else if (data) {
+      return data;
+    }
+  }
+
+  if (managerEmail) {
+    const { data, error } = await supabase
+      .from("employees")
+      .select("*")
+      .ilike("work_email", managerEmail)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) return data;
+  }
+
+  return null;
+}
+
+// MANAGER DASHBOARD WIRING - STEP 2A
+// Load active employee_reporting_lines rows for the resolved manager employee.
+// This is the source of truth for the manager's assigned team.
+async function loadActiveManagerReportingLineRows(managerEmployeeId) {
+  const supabase = getSupabaseClient();
+
+  // MANAGER DASHBOARD WIRING - STEP 2A FIX
+  // Use the manager-safe RPC first. Direct frontend reads from
+  // employee_reporting_lines can return 0 rows under RLS even when the
+  // reporting-line data exists. The RPC resolves the logged-in manager from
+  // auth.uid()/auth email and returns only that manager's active assignments.
+  const { data: rpcRows, error: rpcError } = await supabase.rpc(
+    "get_manager_reporting_line_assignments",
+  );
+
+  if (!rpcError && Array.isArray(rpcRows)) {
+    return rpcRows.filter(
+      (row) => normalizeText(row.status) === "active",
+    );
+  }
+
+  console.warn(
+    "Manager reporting-line RPC failed; falling back to direct table read:",
+    rpcError,
+  );
+
+  // MANAGER DASHBOARD WIRING - STEP 2A FIX
+  // Fallback only. This keeps the page usable in local/dev environments where
+  // the RPC has not yet been deployed, but production should use the RPC path.
+  if (!managerEmployeeId) return [];
+
+  const { data, error } = await supabase
+    .from("employee_reporting_lines")
+    .select("id, employee_id, manager_employee_id, manager_type, status, effective_date")
+    .eq("manager_employee_id", managerEmployeeId)
+    .order("effective_date", { ascending: false });
+
+  if (error) throw error;
+
+  return (Array.isArray(data) ? data : []).filter(
+    (row) => normalizeText(row.status) === "active",
+  );
+}
+
+// MANAGER DASHBOARD WIRING - STEP 2A
+// If an employee has more than one active row for the same manager, keep the
+// most HR-relevant row: Primary first, then latest effective date.
+function compareReportingLinePriority(left = {}, right = {}) {
+  const leftPrimaryRank = normalizeText(left.manager_type) === "primary" ? 0 : 1;
+  const rightPrimaryRank = normalizeText(right.manager_type) === "primary" ? 0 : 1;
+
+  if (leftPrimaryRank !== rightPrimaryRank) {
+    return leftPrimaryRank - rightPrimaryRank;
+  }
+
+  const leftDate = new Date(left.effective_date || 0).getTime();
+  const rightDate = new Date(right.effective_date || 0).getTime();
+
+  return rightDate - leftDate;
+}
+
+// MANAGER DASHBOARD WIRING - STEP 2A
+// Build a quick lookup so employee records, leave requests, and relationship
+// labels are all tied back to employee_reporting_lines rather than hardcoded
+// names such as a single test employee.
+function buildReportingLineByEmployeeId(reportingLineRows = []) {
+  const reportingLineByEmployeeId = new Map();
+
+  [...reportingLineRows]
+    .sort(compareReportingLinePriority)
+    .forEach((row) => {
+      const employeeId = String(row.employee_id || "").trim();
+      if (!employeeId || reportingLineByEmployeeId.has(employeeId)) return;
+
+      reportingLineByEmployeeId.set(employeeId, row);
+    });
+
+  return reportingLineByEmployeeId;
+}
+
+// MANAGER DASHBOARD WIRING - STEP 2A
+// Display-only relationship text. The security/wiring decision is still made
+// by employee_reporting_lines and Supabase RLS.
+function getReportingLineRelationshipLabel(reportingLineRow = {}) {
+  const managerType = String(reportingLineRow.manager_type || "").trim();
+
+  if (managerType) {
+    return `${managerType} Manager`;
+  }
+
+  return "Reporting Line Manager";
+}
+
+// MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-E
+// Employee portal access should be resolved by linked profile/user ID where
+// available, not email only. This keeps manually seeded/Supabase-created
+// employee records from showing "No login" when a real profile exists.
+function getEmployeeProfileIdCandidates(row = {}) {
+  const candidates = [
+    row.user_id,
+    row.profile_id,
+    row.auth_user_id,
+    row.profile_user_id,
+    row.employee_user_id,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  return [...new Set(candidates)];
+}
+
 function getTeamStatusLabel(profile) {
   if (!profile) return "Employees Missing Login";
   if (profile.is_active === false) return "Inactive";
@@ -1024,6 +1680,63 @@ function getTeamStatusBadgeClass(profile) {
   if (!profile) return "text-bg-warning";
   if (profile.is_active === false) return "text-bg-secondary";
   return "text-bg-success";
+}
+
+// MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-F
+// Read portal access from a manager-safe RPC instead of relying on direct
+// frontend reads from profiles, which can be blocked by RLS for other employees.
+async function loadManagerTeamPortalAccessStatusRows() {
+  try {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "get_manager_team_portal_access_status",
+    );
+
+    if (error) throw error;
+
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.warn("Unable to load manager team portal access status:", error);
+    return [];
+  }
+}
+
+// MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-F
+// Portal Access is not live presence. It means the employee has a linked
+// auth user and profile account for employee self-service.
+function getTeamStatusLabelFromPortalAccess(portalAccessRow, fallbackProfile) {
+  if (!portalAccessRow) {
+    return getTeamStatusLabel(fallbackProfile);
+  }
+
+  if (portalAccessRow.has_portal_access && portalAccessRow.portal_is_active) {
+    return "Active";
+  }
+
+  if (portalAccessRow.has_portal_access && !portalAccessRow.portal_is_active) {
+    return "Inactive";
+  }
+
+  return "Employees Missing Login";
+}
+
+// MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-F
+// Keep badge styling consistent with the existing manager table.
+function getTeamStatusBadgeClassFromPortalAccess(portalAccessRow, fallbackProfile) {
+  if (!portalAccessRow) {
+    return getTeamStatusBadgeClass(fallbackProfile);
+  }
+
+  if (portalAccessRow.has_portal_access && portalAccessRow.portal_is_active) {
+    return "text-bg-success";
+  }
+
+  if (portalAccessRow.has_portal_access && !portalAccessRow.portal_is_active) {
+    return "text-bg-secondary";
+  }
+
+  return "text-bg-warning";
 }
 
 function getLeaveIdentityCandidatesForMember(member) {
@@ -1117,6 +1830,200 @@ function buildOverlapCellHtml(item) {
   `;
 }
 
+// MANAGER DASHBOARD WIRING - STEP 2G
+// Pending approval rows should tell the manager when approval cannot succeed
+// because the employee has no remaining balance for the requested leave type.
+// This is display/readiness logic only; applyApprovedLeaveToBalance() remains
+// the final save-time control.
+function getPendingRequestBalanceWarning(request = {}) {
+  if (!request.leave_type_id) {
+    return "Leave type is missing, so approval cannot be completed.";
+  }
+
+  if (request.leaveBalanceMissing) {
+    return `No ${request.leaveTypeName || "leave"} balance record exists for this employee.`;
+  }
+
+  const requestedDays = Number(request.total_days || 0);
+  const remainingDays = Number(request.leaveBalanceRemainingDays);
+
+  if (!Number.isFinite(requestedDays) || requestedDays <= 0) {
+    return "Requested days are invalid, so approval cannot be completed.";
+  }
+
+  if (!Number.isFinite(remainingDays)) {
+    return null;
+  }
+
+  if (remainingDays < requestedDays) {
+    return `Remaining ${request.leaveTypeName || "leave"} balance is ${remainingDays}; requested days is ${requestedDays}.`;
+  }
+
+  return null;
+}
+
+// EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
+// Normalise employee gender from the HR employee record for manager-side
+// eligibility checks. This mirrors the Employee Dashboard rule but uses
+// the enriched manager request item.
+function getNormalisedEmployeeGenderForManagerEligibility(request = {}) {
+  const rawGender = normalizeText(
+    request.employeeGender ||
+    request.gender ||
+    request.sex ||
+    request.gender_identity ||
+    "",
+  );
+
+  if (["female", "f", "woman"].includes(rawGender)) {
+    return "female";
+  }
+
+  if (["male", "m", "man"].includes(rawGender)) {
+    return "male";
+  }
+
+  return "";
+}
+
+// EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
+// Manager-facing eligibility warning. Keep wording professional and neutral;
+// do not expose blunt gender wording in the approval queue.
+function getPendingRequestEligibilityWarning(request = {}) {
+  const eligibilityRule = normalizeText(
+    request.leaveTypeEligibilityRule || "all_employees",
+  );
+
+  if (!request.leave_type_id || eligibilityRule === "all_employees") {
+    return null;
+  }
+
+  const leaveTypeName = request.leaveTypeName || "This leave type";
+  const employeeName = request.employeeName || "this employee";
+
+  if (eligibilityRule === "hr_review_only") {
+    return `${leaveTypeName} requires HR review before manager approval. Return or reject the request, or contact HR for special handling.`;
+  }
+
+  const employeeGender = getNormalisedEmployeeGenderForManagerEligibility(request);
+
+  if (eligibilityRule === "female_only" && employeeGender === "female") {
+    return null;
+  }
+
+  if (eligibilityRule === "male_only" && employeeGender === "male") {
+    return null;
+  }
+
+  if (eligibilityRule === "female_only" || eligibilityRule === "male_only") {
+    return `${leaveTypeName} is not available for ${employeeName}'s employee profile. Return or reject the request, or contact HR if special handling is required.`;
+  }
+
+  return null;
+}
+
+// EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
+// Save-time defensive check. This protects against old pending rows, direct
+// database inserts, stale browser DOM, or any route that bypasses the visible
+// disabled Approve button.
+function assertLeaveTypeEligibleForManagerApproval(request = {}) {
+  const eligibilityWarning = getPendingRequestEligibilityWarning(request);
+
+  if (eligibilityWarning) {
+    throw new Error(eligibilityWarning);
+  }
+}
+
+// MANAGER DASHBOARD WIRING - STEP 2G
+// Keep this as a small wrapper so future HR controls can block approval
+// without disabling reject/return actions.
+function getPendingRequestApproveBlockReason(request = {}) {
+  // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
+  // Eligibility is checked before balance. If the employee profile is not
+  // eligible for the leave type, approval must not proceed regardless of
+  // remaining entitlement.
+  const eligibilityWarning = getPendingRequestEligibilityWarning(request);
+
+  if (eligibilityWarning) {
+    return eligibilityWarning;
+  }
+
+  return getPendingRequestBalanceWarning(request);
+}
+
+// MANAGER DASHBOARD WIRING - STEP 2F FIX
+// HR control: an employee can hold multiple future leave bookings, but they
+// must not have two approved leave records covering the same calendar days.
+// This check must query leave_requests using the leave-request identity
+// candidates, not only employees.id, because leave_requests.employee_id is
+// linked to the user/profile identity in this build.
+async function assertNoOverlappingApprovedLeaveForEmployee(request = {}) {
+  const supabase = getSupabaseClient();
+
+  const leaveRequestEmployeeIds = [
+    request.employee_id,
+    request.employeeRecordId,
+    ...(Array.isArray(request.employeeLeaveIdentityCandidates)
+      ? request.employeeLeaveIdentityCandidates
+      : []),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  const uniqueLeaveRequestEmployeeIds = [...new Set(leaveRequestEmployeeIds)];
+
+  if (
+    !uniqueLeaveRequestEmployeeIds.length ||
+    !request.start_date ||
+    !request.end_date
+  ) {
+    throw new Error(
+      "Employee or leave dates could not be resolved, so overlap validation could not be completed.",
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("leave_requests")
+    .select(`
+      id,
+      employee_id,
+      leave_type_id,
+      start_date,
+      end_date,
+      total_days,
+      status,
+      leave_types (
+        id,
+        code,
+        name
+      )
+    `)
+    .in("employee_id", uniqueLeaveRequestEmployeeIds)
+    .neq("id", request.id);
+
+  if (error) throw error;
+
+  const overlappingApprovedLeave = (Array.isArray(data) ? data : []).find(
+    (existingLeave) =>
+      normalizeText(existingLeave.status) === "approved" &&
+      rangesOverlap(
+        request.start_date,
+        request.end_date,
+        existingLeave.start_date,
+        existingLeave.end_date,
+      ),
+  );
+
+  if (!overlappingApprovedLeave) return;
+
+  const existingLeaveType =
+    overlappingApprovedLeave.leave_types?.name || "approved leave";
+
+  throw new Error(
+    `${request.employeeName} already has approved ${existingLeaveType} from ${formatDate(overlappingApprovedLeave.start_date)} to ${formatDate(overlappingApprovedLeave.end_date)}. Return, reject, or amend the duplicate/overlapping request before approving another leave for the same period.`,
+  );
+}
+
 function getStatusBadgeClass(status) {
   switch (normalizeText(status)) {
     case "approved":
@@ -1130,6 +2037,612 @@ function getStatusBadgeClass(status) {
       return "text-bg-secondary";
   }
 }
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1H
+// Keep long workflow labels compact in audit tables.
+// The saved status remains unchanged; this only affects display text.
+function getCompactDecisionStatusLabel(status) {
+  const normalizedStatus = normalizeText(status);
+
+  if (
+    normalizedStatus === "returned for clarification" ||
+    normalizedStatus === "returned"
+  ) {
+    return "Returned";
+  }
+
+  return status || "--";
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
+// Keep pending approval rows readable by grouping identity, period,
+// review signals, and actions. These helpers are display-only and do
+// not change approval, RLS, employee_reporting_lines, or balance logic.
+function getPendingRequestStableEmployeeKey(request = {}) {
+  return String(
+    request.employeeRecordId ||
+    request.employee_id ||
+    request.employeeEmail ||
+    request.employeeName ||
+    "",
+  ).trim();
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
+// Detect other pending requests for the same employee in the visible manager queue.
+// This gives the manager a review signal without changing the saved leave data.
+function getSameEmployeePendingRequestCount(request = {}, requests = []) {
+  const currentId = String(request.id || "").trim();
+  const currentEmployeeKey = getPendingRequestStableEmployeeKey(request);
+
+  if (!currentEmployeeKey) return 0;
+
+  return requests.filter((item) => {
+    return (
+      String(item.id || "").trim() !== currentId &&
+      getPendingRequestStableEmployeeKey(item) === currentEmployeeKey
+    );
+  }).length;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
+// Compact employee identity block for the pending approval queue.
+function buildPendingRequestIdentityHtml(request = {}) {
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(request.employeeName || "Unknown Employee")}
+    </div>
+    <div class="text-secondary small text-break mt-1">
+      ${escapeHtml(request.employeeEmail || "--")}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(request.employeeDepartment || "--")}
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
+// Compact leave-period block keeps the table narrower than separate
+// Start Date and End Date columns.
+function buildPendingRequestPeriodHtml(request = {}) {
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
+  // Show compact period first, then the year underneath:
+  // "Jul 1 - Jul 5" / "2026".
+  const startDate = getDashboardDisplayDate(request.start_date);
+  const endDate = getDashboardDisplayDate(request.end_date);
+
+  const startLabel = formatShortMonthDayFromDate(startDate);
+  const endLabel = formatShortMonthDayFromDate(endDate);
+
+  const startYear = startDate ? String(startDate.getFullYear()) : "";
+  const endYear = endDate ? String(endDate.getFullYear()) : "";
+
+  const yearLabel =
+    startYear && endYear && startYear !== endYear
+      ? `${startYear} - ${endYear}`
+      : startYear || endYear || "--";
+
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(startLabel)} - ${escapeHtml(endLabel)}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(yearLabel)}
+    </div>
+    <div class="mt-2">
+      <span class="badge rounded-pill text-bg-light border text-dark">
+        ${escapeHtml(request.leaveTypeName || "--")}
+      </span>
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
+// Submitted date should be readable at a glance:
+// "May 19, 2026" with the time underneath.
+function buildPendingRequestSubmittedHtml(value) {
+  const { dateLabel, timeLabel } = formatSubmittedDateTimeParts(value);
+
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(dateLabel)}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(timeLabel)}
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
+// Review signals combine workflow status, team conflict, and same-employee
+// duplicate pending-request warning. Balance is still enforced on approval
+// by applyApprovedLeaveToBalance().
+function buildPendingRequestReviewSignalsHtml(request = {}, requests = []) {
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1E
+  // HR behaviour is exception-first:
+  // - pending status is already implied by the Pending Leave Requests queue;
+  // - clear rows should show one readiness badge;
+  // - warning badges appear only when the manager should pause before deciding.
+  const duplicateCount = getSameEmployeePendingRequestCount(request, requests);
+  const hasTeamConflict = Boolean(request?.hasOverlap);
+  const hasDuplicatePendingRequest = duplicateCount > 0;
+
+  // MANAGER DASHBOARD WIRING - STEP 2G
+  // Approval readiness must include leave balance, otherwise managers see a
+  // false "Ready for decision" badge for requests that the system will later
+  // reject because the remaining balance is too low.
+  const balanceWarning = getPendingRequestBalanceWarning(request);
+  const hasBalanceWarning = Boolean(balanceWarning);
+
+  // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
+  // Existing ineligible pending rows should be visible to the manager as
+  // profile-eligibility exceptions, not as "Ready for decision".
+  const eligibilityWarning = getPendingRequestEligibilityWarning(request);
+  const hasEligibilityWarning = Boolean(eligibilityWarning);
+
+  if (
+    !hasTeamConflict &&
+    !hasDuplicatePendingRequest &&
+    !hasBalanceWarning &&
+    !hasEligibilityWarning
+  ) {
+    return `
+      <span class="badge text-bg-success">
+        Ready for decision
+      </span>
+    `;
+  }
+
+  const warningBadges = [];
+
+  if (hasTeamConflict) {
+    warningBadges.push(`
+      <span class="badge text-bg-warning">
+        Team conflict (${escapeHtml(request.overlapCount || 0)})
+      </span>
+    `);
+  }
+
+  if (hasDuplicatePendingRequest) {
+    warningBadges.push(`
+      <span class="badge text-bg-warning">
+        Duplicate request (${escapeHtml(duplicateCount)})
+      </span>
+    `);
+  }
+
+  if (hasBalanceWarning) {
+    warningBadges.push(`
+      <span class="badge text-bg-danger">
+        Insufficient balance
+      </span>
+    `);
+  }
+
+  if (hasEligibilityWarning) {
+    warningBadges.push(`
+      <span class="badge text-bg-danger">
+        Profile eligibility
+      </span>
+    `);
+  }
+
+  const warningDetails = [];
+
+  if (hasTeamConflict) {
+    warningDetails.push(getOverlapSummaryText(request));
+  }
+
+  if (hasDuplicatePendingRequest) {
+    warningDetails.push(
+      `Same employee has ${duplicateCount} other pending request${duplicateCount === 1 ? "" : "s"}.`,
+    );
+  }
+
+  if (hasBalanceWarning) {
+    warningDetails.push(balanceWarning);
+  }
+
+  if (hasEligibilityWarning) {
+    warningDetails.push(eligibilityWarning);
+  }
+
+  return `
+    <div class="d-flex flex-column gap-2">
+      <div class="d-inline-flex flex-wrap gap-2 align-items-center">
+        ${warningBadges.join("")}
+      </div>
+
+      <div class="small text-secondary">
+        ${escapeHtml(warningDetails.join(" "))}
+      </div>
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
+// Keep the existing window.managerHandleLeaveAction wiring intact.
+// This only groups the decision buttons into a cleaner manager action area.
+function buildPendingRequestDecisionActionsHtml(request = {}) {
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
+  // Keep action buttons inline and icon-only, but preserve title/aria-label
+  // so the controls remain understandable and accessible.
+  const safeLeaveId = String(request.id || "").replaceAll("'", "\\'");
+  const approveBlockReason = getPendingRequestApproveBlockReason(request);
+  const approveBlockedTitle = approveBlockReason
+    ? `Cannot approve: ${approveBlockReason}`
+    : "Approve request";
+
+  return `
+    <div class="d-inline-flex justify-content-end gap-2">
+      <button
+        type="button"
+        class="btn btn-sm ${approveBlockReason ? "btn-secondary" : "btn-success"} dashboard-action-btn px-2"
+        title="${escapeHtml(approveBlockedTitle)}"
+        aria-label="${escapeHtml(approveBlockedTitle)}"
+        ${approveBlockReason ? "disabled" : `onclick="window.managerHandleLeaveAction('${safeLeaveId}','approve',this)"`}
+      >
+        <i class="bi bi-check-circle"></i>
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-sm btn-danger dashboard-action-btn px-2"
+        title="Reject request"
+        aria-label="Reject request"
+        onclick="window.managerHandleLeaveAction('${safeLeaveId}','reject',this)"
+      >
+        <i class="bi bi-x-circle"></i>
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-sm btn-warning dashboard-action-btn px-2"
+        title="Return for clarification"
+        aria-label="Return for clarification"
+        onclick="window.managerHandleLeaveAction('${safeLeaveId}','return',this)"
+      >
+        <i class="bi bi-arrow-return-left"></i>
+      </button>
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
+// Processed leave decisions are audit records. These helpers format the
+// existing data only; they do not change workflow, RLS, or decision persistence.
+function buildProcessedRequestIdentityHtml(request = {}) {
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(request.employeeName || "Unknown Employee")}
+    </div>
+    <div class="text-secondary small text-break mt-1">
+      ${escapeHtml(request.employeeEmail || "--")}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(request.employeeDepartment || "--")}
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
+// Keep processed leave period consistent with the pending queue format.
+function buildProcessedRequestPeriodHtml(request = {}) {
+  const startDate = getDashboardDisplayDate(request.start_date);
+  const endDate = getDashboardDisplayDate(request.end_date);
+
+  const startLabel = formatShortMonthDayFromDate(startDate);
+  const endLabel = formatShortMonthDayFromDate(endDate);
+
+  const startYear = startDate ? String(startDate.getFullYear()) : "";
+  const endYear = endDate ? String(endDate.getFullYear()) : "";
+
+  const yearLabel =
+    startYear && endYear && startYear !== endYear
+      ? `${startYear} - ${endYear}`
+      : startYear || endYear || "--";
+
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(startLabel)} - ${escapeHtml(endLabel)}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(yearLabel)}
+    </div>
+    <div class="mt-2">
+      <span class="badge rounded-pill text-bg-light border text-dark">
+        ${escapeHtml(request.leaveTypeName || "--")}
+      </span>
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
+// Stack decision maker and timestamp so the audit trail is readable.
+function buildProcessedDecisionAuditHtml(request = {}) {
+  const { dateLabel, timeLabel } = formatSubmittedDateTimeParts(request.decision_at);
+
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(request.decision_by_name || "--")}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(dateLabel)}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(timeLabel)}
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
+// Keep comments readable without making empty comments look like missing rows.
+function buildProcessedDecisionCommentHtml(request = {}) {
+  const comment = String(request.decision_comment || "").trim();
+
+  if (!comment) {
+    return `
+      <span class="text-secondary small">
+        No comment recorded
+      </span>
+    `;
+  }
+
+  return `
+    <div class="small text-break">
+      ${escapeHtml(comment)}
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
+// Team schedule is a coverage-planning view. These helpers format existing
+// approved leave records only; they do not change approval or RLS logic.
+function buildTeamScheduleIdentityHtml(item = {}) {
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(item.employeeName || "Unknown Employee")}
+    </div>
+    <div class="text-secondary small text-break mt-1">
+      ${escapeHtml(item.employeeEmail || "--")}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(item.employeeDepartment || "--")}
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
+// Same-year leave remains compact. Cross-year leave is explicit so managers
+// do not have to infer which date belongs to which year.
+function buildTeamSchedulePeriodHtml(item = {}) {
+  const startDate = getDashboardDisplayDate(item.start_date);
+  const endDate = getDashboardDisplayDate(item.end_date);
+
+  if (!startDate || !endDate) {
+    return `
+      <div class="fw-semibold lh-sm">
+        ${escapeHtml(formatDate(item.start_date))} - ${escapeHtml(formatDate(item.end_date))}
+      </div>
+      <div class="mt-2">
+        <span class="badge rounded-pill text-bg-light border text-dark">
+          ${escapeHtml(item.leaveTypeName || "--")}
+        </span>
+      </div>
+    `;
+  }
+
+  const startYear = startDate.getFullYear();
+  const endYear = endDate.getFullYear();
+
+  const periodHtml =
+    startYear === endYear
+      ? `
+        <div class="fw-semibold lh-sm">
+          ${escapeHtml(formatShortMonthDayFromDate(startDate))} - ${escapeHtml(formatShortMonthDayFromDate(endDate))}
+        </div>
+        <div class="text-secondary small mt-1">
+          ${escapeHtml(startYear)}
+        </div>
+      `
+      : `
+        <div class="fw-semibold lh-sm">
+          ${escapeHtml(formatDate(item.start_date))}
+        </div>
+        <div class="text-secondary small mt-1">
+          to ${escapeHtml(formatDate(item.end_date))}
+        </div>
+      `;
+
+  return `
+    ${periodHtml}
+    <div class="mt-2">
+      <span class="badge rounded-pill text-bg-light border text-dark">
+        ${escapeHtml(item.leaveTypeName || "--")}
+      </span>
+    </div>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J-C
+// Display-only timing signal for approved team leave.
+// This does not change approval logic or the leave schedule query.
+function buildTeamScheduleTimingHtml(item = {}) {
+  const startDate = getDashboardDisplayDate(item.start_date);
+  const endDate = getDashboardDisplayDate(item.end_date);
+
+  if (!startDate || !endDate) {
+    return `
+      <span class="badge text-bg-light border text-dark">
+        Date unclear
+      </span>
+    `;
+  }
+
+  const today = new Date();
+  const todayDateOnly = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+
+  const startDateOnly = new Date(
+    startDate.getFullYear(),
+    startDate.getMonth(),
+    startDate.getDate(),
+  );
+
+  const endDateOnly = new Date(
+    endDate.getFullYear(),
+    endDate.getMonth(),
+    endDate.getDate(),
+  );
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const daysUntilStart = Math.round(
+    (startDateOnly.getTime() - todayDateOnly.getTime()) / dayMs,
+  );
+
+  if (todayDateOnly >= startDateOnly && todayDateOnly <= endDateOnly) {
+    return `
+      <div class="d-flex flex-column gap-1">
+        <span class="badge text-bg-primary align-self-start">
+          In progress
+        </span>
+        <span class="small text-secondary">
+          Ends ${escapeHtml(formatShortMonthDayFromDate(endDate))}
+        </span>
+      </div>
+    `;
+  }
+
+  if (daysUntilStart === 0) {
+    return `
+      <span class="badge text-bg-primary">
+        Starts today
+      </span>
+    `;
+  }
+
+  if (daysUntilStart > 0) {
+    return `
+      <div class="d-flex flex-column gap-1">
+        <span class="badge text-bg-light border text-dark align-self-start">
+          Upcoming
+        </span>
+        <span class="small text-secondary">
+          Starts in ${escapeHtml(daysUntilStart)} day${daysUntilStart === 1 ? "" : "s"}
+        </span>
+      </div>
+    `;
+  }
+
+  return `
+    <span class="badge text-bg-secondary">
+      Current schedule
+    </span>
+  `;
+}
+
+// MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
+// Replace raw "Conflict Details" with HR-facing coverage status.
+function buildTeamScheduleCoverageHtml(item = {}) {
+  // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J-B
+  // This is an overlap signal, not a full workforce coverage calculation.
+  // Keep the label HR-accurate: no overlap unless another approved team
+  // leave item intersects this period.
+  if (!item?.hasOverlap) {
+    return `
+      <span class="badge text-bg-success">
+        No overlap
+      </span>
+    `;
+  }
+
+  return `
+    <div class="d-flex flex-column gap-2">
+      <div>
+        <span class="badge text-bg-warning">
+          Overlap risk (${escapeHtml(item.overlapCount || 0)})
+        </span>
+      </div>
+      <div class="small text-secondary">
+        ${escapeHtml(getOverlapSummaryText(item))}
+      </div>
+    </div>
+  `;
+}
+
+// MANAGER TEAM RECORDS UI CLEANUP - STEP 1K
+// Assigned employee rows are display-only. Do not change the RLS-trusted
+// employee list returned by loadAssignedTeamMembers().
+function buildAssignedEmployeeIdentityHtml(member = {}) {
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(member.employeeFullName || "Unnamed Employee")}
+    </div>
+    <div class="text-secondary small text-break mt-1">
+      ${escapeHtml(member.work_email || "--")}
+    </div>
+  `;
+}
+
+// MANAGER TEAM RECORDS UI CLEANUP - STEP 1K
+// Combine role and department so the table reads like a people-management view,
+// not a raw employee export.
+function buildAssignedEmployeeRoleDepartmentHtml(member = {}) {
+  return `
+    <div class="fw-semibold lh-sm">
+      ${escapeHtml(member.job_title || "--")}
+    </div>
+    <div class="text-secondary small mt-1">
+      ${escapeHtml(member.department || "--")}
+    </div>
+  `;
+}
+
+// MANAGER TEAM RECORDS UI CLEANUP - STEP 1K
+// Keep long technical status values compact while preserving meaning.
+function getCompactAssignedEmployeeStatusLabel(statusLabel) {
+  const normalizedStatus = normalizeText(statusLabel);
+
+  if (normalizedStatus === "employees missing login") {
+    // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-C
+    // Shorter HR-facing badge label. Full meaning remains available through
+    // the helper text and title/aria-label.
+    return "No login";
+  }
+
+  return statusLabel || "--";
+}
+
+// MANAGER TEAM RECORDS UI CLEANUP - STEP 1K
+// Add a small explanation only for missing-login records so managers understand
+// the warning without expanding the table width.
+function buildAssignedEmployeeStatusHtml(member = {}) {
+  const statusLabel = member.teamStatusLabel || "--";
+  const compactLabel = getCompactAssignedEmployeeStatusLabel(statusLabel);
+
+  const helpText =
+    normalizeText(statusLabel) === "employees missing login"
+      ? "No linked user login"
+      : "";
+
+  return `
+    <div class="d-flex flex-column gap-1">
+      <span class="badge ${member.teamStatusBadgeClass || "text-bg-secondary"} align-self-start"
+        title="${escapeHtml(statusLabel)}"
+        aria-label="${escapeHtml(statusLabel)}">
+        ${escapeHtml(compactLabel)}
+      </span>
+      ${helpText
+      ? `<span class="small text-secondary">${escapeHtml(helpText)}</span>`
+      : ""
+    }
+    </div>
+  `;
+}
+
 
 function notifyLeaveDecisionChanged() {
   try {
@@ -1167,17 +2680,14 @@ async function refreshManagerWorkspace() {
 }
 
 async function loadAssignedTeamMembers() {
-  const supabase = getSupabaseClient();
-
   const managerEmail = normalizeText(
     state.currentProfile?.email || state.currentUser?.email,
   );
-  const managerFullName = normalizeText(state.currentProfile?.full_name || "");
 
-  if (!managerEmail && !managerFullName) {
+  if (!state.currentUser?.id && !managerEmail) {
     showPageAlert(
       "warning",
-      "Your manager profile is missing both email and full name, so assigned team members could not be resolved.",
+      "Your manager profile is missing a login identity and email, so assigned team members could not be resolved.",
     );
     renderTeamTable([]);
     renderSummaryTiles([]);
@@ -1185,47 +2695,149 @@ async function loadAssignedTeamMembers() {
   }
 
   try {
+    const supabase = getSupabaseClient();
+
+    // MANAGER DASHBOARD WIRING - STEP 2A
+    // Resolve the logged-in manager to employees.id first, then use that ID
+    // against employee_reporting_lines.manager_employee_id. This prevents the
+    // dashboard from showing all employees or behaving as if only one test
+    // employee is wired.
+    const managerEmployeeRecord = await loadCurrentManagerEmployeeRecord();
+
+    state.currentManagerEmployeeRecord = managerEmployeeRecord;
+
+    if (!managerEmployeeRecord?.id) {
+      showPageAlert(
+        "warning",
+        "Your login could not be matched to an employee manager record. Please check employees.user_id or employees.work_email for this manager.",
+      );
+      renderTeamTable([]);
+      renderSummaryTiles([]);
+      return false;
+    }
+
+    const reportingLineRows = await loadActiveManagerReportingLineRows(
+      managerEmployeeRecord.id,
+    );
+
+    const reportingLineByEmployeeId =
+      buildReportingLineByEmployeeId(reportingLineRows);
+
+    const assignedEmployeeIds = [...reportingLineByEmployeeId.keys()];
+
+    if (!assignedEmployeeIds.length) {
+      showPageAlert(
+        "warning",
+        "No active reporting-line employees were found for this manager.",
+      );
+      renderTeamTable([]);
+      renderSummaryTiles([]);
+      return false;
+    }
+
     const { data: employeeRows, error: employeeError } = await supabase
       .from("employees")
       .select("*")
+      .in("id", assignedEmployeeIds)
       .order("created_at", { ascending: false });
 
     if (employeeError) throw employeeError;
 
-    // MANAGER APPROVAL WIRING HARDENING - STEP 1B
-    // Employee visibility is now controlled by employee_reporting_lines + RLS.
-    // Do not re-filter with old free-text manager fields here, otherwise
-    // valid reporting-line employees can disappear from the Manager dashboard.
-    const matchedEmployees = Array.isArray(employeeRows) ? employeeRows : [];
+    // MANAGER DASHBOARD WIRING - STEP 2A
+    // Keep only employees backed by active employee_reporting_lines rows.
+    // The table query is explicit, so the page no longer depends on broad
+    // employees RLS or legacy manager-name fields for assignment scope.
+    const matchedEmployees = (Array.isArray(employeeRows) ? employeeRows : [])
+      .filter((employee) =>
+        reportingLineByEmployeeId.has(String(employee.id)),
+      );
+
+    // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-F
+    // Load manager-safe portal access status for all employees currently in
+    // this manager's reporting scope. This fixes false "No login" values
+    // caused by profiles RLS blocking direct frontend reads.
+    const portalAccessRows = await loadManagerTeamPortalAccessStatusRows();
+    const portalAccessByEmployeeId = new Map(
+      portalAccessRows.map((row) => [String(row.employee_id), row]),
+    );
 
     const workEmails = matchedEmployees
       .map((employee) => normalizeText(getWorkEmail(employee)))
       .filter(Boolean);
 
+    // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-E
+    // Resolve linked portal profiles by both email and known profile/user ID.
+    // This fixes cases where an employee can sign in from another browser
+    // but the manager table still shows "No login" because email-only matching
+    // did not resolve the profile row.
+    const profileIdCandidates = matchedEmployees.flatMap((employee) =>
+      getEmployeeProfileIdCandidates(employee),
+    );
+
     let profilesByEmail = new Map();
+    let profilesById = new Map();
 
     if (workEmails.length) {
       const uniqueEmails = [...new Set(workEmails)];
 
-      const { data: profileRows, error: profileError } = await supabase
+      const { data: profileRowsByEmail, error: profileEmailError } = await supabase
         .from("profiles")
         .select("id, email, full_name, role, is_active")
         .in("email", uniqueEmails);
 
-      if (profileError) throw profileError;
+      if (profileEmailError) throw profileEmailError;
 
-      profilesByEmail = new Map(
-        (profileRows || []).map((profile) => [
-          normalizeText(profile.email),
-          profile,
-        ]),
-      );
+      (profileRowsByEmail || []).forEach((profile) => {
+        if (profile?.email) {
+          profilesByEmail.set(normalizeText(profile.email), profile);
+        }
+
+        if (profile?.id) {
+          profilesById.set(String(profile.id), profile);
+        }
+      });
+    }
+
+    if (profileIdCandidates.length) {
+      const uniqueProfileIds = [...new Set(profileIdCandidates)];
+
+      const { data: profileRowsById, error: profileIdError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name, role, is_active")
+        .in("id", uniqueProfileIds);
+
+      if (profileIdError) throw profileIdError;
+
+      (profileRowsById || []).forEach((profile) => {
+        if (profile?.id) {
+          profilesById.set(String(profile.id), profile);
+        }
+
+        if (profile?.email) {
+          profilesByEmail.set(normalizeText(profile.email), profile);
+        }
+      });
     }
 
     const enrichedTeamMembers = matchedEmployees.map((employee) => {
       const workEmail = getWorkEmail(employee);
+      const reportingLineRow =
+        reportingLineByEmployeeId.get(String(employee.id)) || null;
+
+      // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-F
+      // Portal access is now resolved by employee_id from the safe RPC.
+      const portalAccessRow =
+        portalAccessByEmployeeId.get(String(employee.id)) || null;
+      const profileIdMatch = getEmployeeProfileIdCandidates(employee).find(
+        (profileId) => profilesById.has(profileId),
+      );
+
+      // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-E
+      // Prefer email match where it exists, then fall back to linked profile/user ID.
       const matchedProfile =
-        profilesByEmail.get(normalizeText(workEmail)) || null;
+        profilesByEmail.get(normalizeText(workEmail)) ||
+        (profileIdMatch ? profilesById.get(profileIdMatch) : null) ||
+        null;
 
       return {
         id: employee.id,
@@ -1236,14 +2848,21 @@ async function loadAssignedTeamMembers() {
         job_title: getJobTitle(employee),
         employment_date: getEmploymentDate(employee),
         matchedProfile,
-        // MANAGER APPROVAL WIRING HARDENING - STEP 1B
-        // RLS has already confirmed this employee is assigned to the manager.
-        // Keep any legacy label if present, otherwise show the new source-of-truth label.
-        relationshipLabel:
-          getManagerRelationshipLabel(employee, managerEmail, managerFullName) ||
-          "Primary Manager",
-        teamStatusLabel: getTeamStatusLabel(matchedProfile),
-        teamStatusBadgeClass: getTeamStatusBadgeClass(matchedProfile),
+        // MANAGER DASHBOARD WIRING - STEP 2A
+        // Relationship now comes from employee_reporting_lines, not legacy
+        // text columns or a hardcoded fallback.
+        relationshipLabel: getReportingLineRelationshipLabel(reportingLineRow),
+        // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-F
+        // Use the RPC status first. Fall back to the old profile match only
+        // if the RPC does not return this employee.
+        teamStatusLabel: getTeamStatusLabelFromPortalAccess(
+          portalAccessRow,
+          matchedProfile,
+        ),
+        teamStatusBadgeClass: getTeamStatusBadgeClassFromPortalAccess(
+          portalAccessRow,
+          matchedProfile,
+        ),
       };
     });
 
@@ -1253,7 +2872,7 @@ async function loadAssignedTeamMembers() {
     if (!enrichedTeamMembers.length) {
       showPageAlert(
         "warning",
-        "No assigned team members were found. This usually means no employees are assigned to this manager, or employee visibility is blocked.",
+        "No assigned employee records were returned for the active reporting lines. Please check employees RLS for manager team visibility.",
       );
       return false;
     }
@@ -1336,7 +2955,9 @@ function renderTeamLoadingState() {
   state.dom.teamTableWrapper.classList.remove("d-none");
   state.dom.teamTableBody.innerHTML = `
     <tr>
-      <td colspan="7" class="text-center text-secondary py-4">
+      <!-- MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-D
+           Assigned employee records now render in four manager-facing columns. -->
+      <td colspan="4" class="text-center text-secondary py-4">
         Loading assigned team records...
       </td>
     </tr>
@@ -1361,18 +2982,29 @@ function renderTeamTable(teamMembers) {
   teamMembers.forEach((member) => {
     const row = document.createElement("tr");
 
+    // MANAGER TEAM RECORDS UI CLEANUP - STEP 1K
+    // Render assigned employees as grouped HR-facing records while keeping
+    // the underlying RLS-scoped employee data unchanged.
     row.innerHTML = `
-      <td><div class="fw-semibold">${escapeHtml(member.employeeFullName)}</div></td>
-      <td class="text-break">${escapeHtml(member.work_email || "--")}</td>
-      <td>${escapeHtml(member.department || "--")}</td>
-      <td>${escapeHtml(member.job_title || "--")}</td>
-      <td>
-        <span class="badge ${member.teamStatusBadgeClass}">
-          ${escapeHtml(member.teamStatusLabel)}
-        </span>
+      <td class="px-3 py-3 align-top">
+        ${buildAssignedEmployeeIdentityHtml(member)}
       </td>
-      <td>${escapeHtml(member.relationshipLabel)}</td>
-      <td>${formatDate(member.employment_date)}</td>
+
+      <td class="px-3 py-3 align-top">
+        ${buildAssignedEmployeeRoleDepartmentHtml(member)}
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        ${buildAssignedEmployeeStatusHtml(member)}
+      </td>
+
+      <td class="px-3 py-3 align-top text-nowrap">
+        <!-- MANAGER TEAM RECORDS UI CLEANUP - STEP 1K-D
+             Manager assignment/scope labels are intentionally not shown here.
+             If the employee is visible, reporting-line/RLS has already scoped
+             the record to this manager. -->
+        ${formatDate(member.employment_date)}
+      </td>
     `;
 
     tbody.appendChild(row);
@@ -1427,7 +3059,8 @@ async function loadTeamLeaveVisibility() {
         leave_types (
           id,
           code,
-          name
+          name,
+          eligibility_rule
         )
       `,
       )
@@ -1437,6 +3070,46 @@ async function loadTeamLeaveVisibility() {
     if (leaveError) throw leaveError;
 
     const leaveRowsArray = Array.isArray(leaveRows) ? leaveRows : [];
+
+    // MANAGER DASHBOARD WIRING - STEP 2G
+    // Load leave balances for the visible manager-team leave rows so Pending
+    // Leave Requests can show accurate approval readiness before the manager
+    // opens the modal. Approval is still protected again at save time.
+    const leaveBalanceByEmployeeAndType = new Map();
+
+    const leaveBalanceEmployeeIds = [
+      ...new Set(
+        state.teamMembers
+          .map((member) =>
+            String(member.id || member.raw?.id || "").trim(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    const leaveBalanceTypeIds = [
+      ...new Set(
+        leaveRowsArray
+          .map((row) => String(row.leave_type_id || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    if (leaveBalanceEmployeeIds.length && leaveBalanceTypeIds.length) {
+      const { data: balanceRows, error: balanceError } = await supabase
+        .from("employee_leave_balances")
+        .select("id, employee_id, leave_type_id, entitled_days, used_days, remaining_days")
+        .in("employee_id", leaveBalanceEmployeeIds)
+        .in("leave_type_id", leaveBalanceTypeIds);
+
+      if (balanceError) throw balanceError;
+
+      (balanceRows || []).forEach((balanceRow) => {
+        const balanceKey = `${balanceRow.employee_id}|${balanceRow.leave_type_id}`;
+        leaveBalanceByEmployeeAndType.set(balanceKey, balanceRow);
+      });
+    }
+
     const teamMembersByIdentity = new Map();
 
     state.teamMembers.forEach((member) => {
@@ -1450,20 +3123,78 @@ async function loadTeamLeaveVisibility() {
         const owner = teamMembersByIdentity.get(String(leaveRow.employee_id));
         if (!owner) return null;
 
+        // MANAGER DASHBOARD WIRING - STEP 2G FIX
+        // Leave requests can be loaded through multiple identity candidates,
+        // but leave balances are keyed by the real employees.id record.
+        // Use owner.id here so the pending queue does not falsely report
+        // "No balance record" when the balance exists but is fully used.
+        const balanceKey = `${owner.id}|${leaveRow.leave_type_id}`;
+        const leaveBalance = leaveBalanceByEmployeeAndType.get(balanceKey) || null;
+
         return {
           ...leaveRow,
           employeeName: owner.employeeFullName,
           employeeEmail: owner.work_email,
           employeeDepartment: owner.department,
           leaveTypeName: leaveRow.leave_types?.name || "Unknown",
+
+          // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1D
+          // Manager approval must respect the same leave-type eligibility
+          // rule used by Employee Self Service. Keep these values on the
+          // request item so pending readiness and save-time approval checks
+          // can block ineligible requests without affecting reject/return.
+          leaveTypeCode: leaveRow.leave_types?.code || "",
+          leaveTypeEligibilityRule:
+            leaveRow.leave_types?.eligibility_rule || "all_employees",
+          employeeGender:
+            owner.raw?.gender ||
+            owner.raw?.sex ||
+            owner.raw?.gender_identity ||
+            "",
+
           employeeRecordId: owner.id,
+
+          // MANAGER DASHBOARD WIRING - STEP 2F FIX
+          // leave_requests.employee_id can be the linked user/profile ID,
+          // while balances use employees.id. Keep all known identity values
+          // so overlap validation checks the correct leave_request owner.
+          employeeLeaveIdentityCandidates: getLeaveIdentityCandidatesForMember(owner),
+
+          // MANAGER DASHBOARD WIRING - STEP 2G
+          // Balance values support manager-facing readiness badges and disabled
+          // approval buttons for impossible approvals. They do not replace the
+          // final save-time balance validation.
+          leaveBalanceMissing: !leaveBalance,
+          leaveBalanceEntitledDays: leaveBalance
+            ? Number(leaveBalance.entitled_days || 0)
+            : null,
+          leaveBalanceUsedDays: leaveBalance
+            ? Number(leaveBalance.used_days || 0)
+            : null,
+          leaveBalanceRemainingDays: leaveBalance
+            ? Number(leaveBalance.remaining_days || 0)
+            : null,
         };
       })
       .filter(Boolean);
 
-    const pendingRequests = enrichedLeaveItems.filter(
-      (item) => normalizeText(item.status) === "pending approval",
-    );
+    const pendingRequests = enrichedLeaveItems
+      .filter((item) => normalizeText(item.status) === "pending approval")
+      .sort((left, right) => {
+        // MANAGER DASHBOARD WIRING - STEP 2C
+        // Pending approval is a manager action queue, not a leave calendar.
+        // Show the newest submitted request first so managers review current
+        // requests before older pending items.
+        const leftSubmittedDate = new Date(
+          left.submitted_at || left.start_date || 0,
+        ).getTime();
+
+        const rightSubmittedDate = new Date(
+          right.submitted_at || right.start_date || 0,
+        ).getTime();
+
+        return rightSubmittedDate - leftSubmittedDate;
+      });
 
     const processedRequests = enrichedLeaveItems
       .filter((item) =>
@@ -1558,7 +3289,9 @@ function renderPendingRequestsLoadingState() {
   state.dom.pendingRequestsTableWrapper.classList.remove("d-none");
   state.dom.pendingRequestsTableBody.innerHTML = `
     <tr>
-      <td colspan="9" class="text-center text-secondary py-4">
+      <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
+           Pending approval table now has six manager-facing review columns. -->
+      <td colspan="6" class="text-center text-secondary py-4">
         Loading pending leave requests...
       </td>
     </tr>
@@ -1583,45 +3316,37 @@ function renderPendingLeaveRequests(requests) {
   requests.forEach((request) => {
     const row = document.createElement("tr");
 
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1C
+    // Render each pending leave request as a compact manager review row.
+    // Existing IDs, status values, modal launch, and approval persistence
+    // remain unchanged.
     row.innerHTML = `
-      <td>${escapeHtml(request.employeeName)}</td>
-      <td>${escapeHtml(request.leaveTypeName)}</td>
-      <td>${formatDate(request.start_date)}</td>
-      <td>${formatDate(request.end_date)}</td>
-      <td>${escapeHtml(request.total_days)}</td>
-      <td>
-        <span class="badge ${getStatusBadgeClass(request.status)}">
-          ${escapeHtml(request.status)}
+      <td class="px-3 py-3 align-top">
+        ${buildPendingRequestIdentityHtml(request)}
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        ${buildPendingRequestPeriodHtml(request)}
+      </td>
+
+      <td class="px-3 py-3 align-top text-center">
+        <span class="badge rounded-pill text-bg-light border text-dark px-3 py-2">
+          ${escapeHtml(request.total_days || "--")}
         </span>
       </td>
-      <td>${buildOverlapCellHtml(request)}</td>
-      <td>${formatDateTime(request.submitted_at)}</td>
-      <td>
-        <div class="d-flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="btn btn-sm btn-success"
-            onclick="window.managerHandleLeaveAction('${String(request.id).replaceAll("'", "\\'")}','approve',this)"
-          >
-            Approve
-          </button>
 
-          <button
-            type="button"
-            class="btn btn-sm btn-danger"
-            onclick="window.managerHandleLeaveAction('${String(request.id).replaceAll("'", "\\'")}','reject',this)"
-          >
-            Reject
-          </button>
+      <td class="px-3 py-3 align-top text-nowrap">
+        <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1D
+             Stack submitted date and time for easier manager review. -->
+        ${buildPendingRequestSubmittedHtml(request.submitted_at)}
+      </td>
 
-          <button
-            type="button"
-            class="btn btn-sm btn-warning"
-            onclick="window.managerHandleLeaveAction('${String(request.id).replaceAll("'", "\\'")}','return',this)"
-          >
-            Return
-          </button>
-        </div>
+      <td class="px-3 py-3 align-top">
+        ${buildPendingRequestReviewSignalsHtml(request, requests)}
+      </td>
+
+      <td class="px-3 py-3 align-top text-end">
+        ${buildPendingRequestDecisionActionsHtml(request)}
       </td>
     `;
     tbody.appendChild(row);
@@ -1635,7 +3360,9 @@ function renderProcessedRequestsLoadingState() {
   state.dom.processedRequestsTableWrapper?.classList.remove("d-none");
   state.dom.processedRequestsTableBody.innerHTML = `
     <tr>
-      <td colspan="8" class="text-center text-secondary py-4">
+      <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
+           Processed decisions now render in six audit-focused columns. -->
+      <td colspan="6" class="text-center text-secondary py-4">
         Loading processed leave decisions...
       </td>
     </tr>
@@ -1660,22 +3387,42 @@ function renderProcessedLeaveRequests(requests) {
   requests.forEach((request) => {
     const row = document.createElement("tr");
 
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1G
+    // Render processed leave decisions as audit history:
+    // request identity, leave period, days, final decision, audit, and comment.
     row.innerHTML = `
-      <td>${escapeHtml(request.employeeName)}</td>
-      <td>${escapeHtml(request.leaveTypeName)}</td>
-      <td>
-        <div>${formatDate(request.start_date)}</div>
-        <div class="text-secondary small">to ${formatDate(request.end_date)}</div>
+      <td class="px-3 py-3 align-top">
+        ${buildProcessedRequestIdentityHtml(request)}
       </td>
-      <td>${escapeHtml(request.total_days)}</td>
-      <td>
-        <span class="badge ${getStatusBadgeClass(request.status)}">
-          ${escapeHtml(request.status)}
+
+      <td class="px-3 py-3 align-top">
+        ${buildProcessedRequestPeriodHtml(request)}
+      </td>
+
+      <td class="px-3 py-3 align-top text-center">
+        <span class="badge rounded-pill text-bg-light border text-dark px-3 py-2">
+          ${escapeHtml(request.total_days || "--")}
         </span>
       </td>
-      <td>${escapeHtml(request.decision_by_name || "--")}</td>
-      <td>${formatDateTime(request.decision_at)}</td>
-      <td>${escapeHtml(request.decision_comment || "--")}</td>
+
+      <td class="px-3 py-3 align-top">
+        <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1H
+             Show a compact badge label while preserving the full saved
+             status in title/aria-label for clarity and accessibility. -->
+        <span class="badge ${getStatusBadgeClass(request.status)}"
+          title="${escapeHtml(request.status || "--")}"
+          aria-label="${escapeHtml(request.status || "--")}">
+          ${escapeHtml(getCompactDecisionStatusLabel(request.status))}
+        </span>
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        ${buildProcessedDecisionAuditHtml(request)}
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        ${buildProcessedDecisionCommentHtml(request)}
+      </td>
     `;
 
     tbody.appendChild(row);
@@ -1689,7 +3436,9 @@ function renderTeamScheduleLoadingState() {
   state.dom.teamScheduleTableWrapper.classList.remove("d-none");
   state.dom.teamScheduleTableBody.innerHTML = `
     <tr>
-      <td colspan="7" class="text-center text-secondary py-4">
+      <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
+           Team schedule now renders in four coverage-planning columns. -->
+      <td colspan="5" class="text-center text-secondary py-4">
         Loading team leave schedule...
       </td>
     </tr>
@@ -1714,18 +3463,34 @@ function renderTeamLeaveSchedule(scheduleItems) {
   scheduleItems.forEach((item) => {
     const row = document.createElement("tr");
 
+    // MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J
+    // Render approved/current/upcoming leave as a coverage-planning view.
+    // Status is intentionally not repeated because this card only shows
+    // approved schedule items.
     row.innerHTML = `
-      <td>${escapeHtml(item.employeeName)}</td>
-      <td>${escapeHtml(item.leaveTypeName)}</td>
-      <td>${formatDate(item.start_date)}</td>
-      <td>${formatDate(item.end_date)}</td>
-      <td>${escapeHtml(item.total_days)}</td>
-      <td>
-        <span class="badge ${getStatusBadgeClass(item.status)}">
-          ${escapeHtml(item.status)}
+      <td class="px-3 py-3 align-top">
+        ${buildTeamScheduleIdentityHtml(item)}
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        ${buildTeamSchedulePeriodHtml(item)}
+      </td>
+
+      <td class="px-3 py-3 align-top text-center">
+        <span class="badge rounded-pill text-bg-light border text-dark px-3 py-2">
+          ${escapeHtml(item.total_days || "--")}
         </span>
       </td>
-      <td>${buildOverlapCellHtml(item)}</td>
+
+      <td class="px-3 py-3 align-top">
+        <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1J-C
+             Timing is display-only and helps managers plan upcoming absence. -->
+        ${buildTeamScheduleTimingHtml(item)}
+      </td>
+
+      <td class="px-3 py-3 align-top">
+        ${buildTeamScheduleCoverageHtml(item)}
+      </td>
     `;
 
     tbody.appendChild(row);

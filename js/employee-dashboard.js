@@ -116,6 +116,19 @@ const state = {
   isPayrollFiguresHidden: false,
   leaveRefreshTimer: null,
   pendingProfileImageFile: null,
+
+  // EMPLOYEE LEAVE UX WIRING - STEP 1A
+  // Controls the temporary bottom-right employee notification.
+  // This is separate from the existing top page alert.
+  dashboardToastTimeoutId: null,
+
+  // RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
+  // When an employee edits a returned request, we update and resubmit the
+  // same leave_requests row instead of creating a duplicate request. The
+  // database audit trigger preserves the previous returned decision.
+  returnedLeaveAmendmentRequestId: null,
+  returnedLeaveAmendmentOriginalStatus: null,
+
   identity: {
     authUserId: null,
     employeeRowId: null,
@@ -161,6 +174,120 @@ function getPreferredEmployeeReferenceId() {
     state.identity?.employeeRowId ||
     null
   );
+}
+
+// RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
+// Only returned requests can be edited and resubmitted by the employee.
+// Approved, rejected, and pending requests remain read-only from Employee
+// Self Service.
+function isReturnedLeaveRequest(request = {}) {
+  const status = normalizeText(request.status || "");
+
+  return (
+    status === "returned" ||
+    status === "returned for clarification"
+  );
+}
+
+// RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
+// Keep the submit button label aligned with the current workflow mode.
+function getLeaveSubmitButtonDefaultHtml() {
+  if (state.returnedLeaveAmendmentRequestId) {
+    return `<i class="bi bi-arrow-repeat me-2"></i>Resubmit Returned Request`;
+  }
+
+  return `<i class="bi bi-send-check me-2"></i>Submit for Approval`;
+}
+
+// RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
+// Find the returned request currently being amended.
+function getReturnedLeaveAmendmentRequest() {
+  if (!state.returnedLeaveAmendmentRequestId) return null;
+
+  return (state.leaveRequests || []).find(
+    (request) =>
+      String(request.id) === String(state.returnedLeaveAmendmentRequestId),
+  ) || null;
+}
+
+// RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
+// Put the Request Leave form into amendment mode using the returned request
+// values. This does not save anything until the employee submits again.
+function startReturnedLeaveAmendment(leaveRequestId) {
+  const request = (state.leaveRequests || []).find(
+    (item) => String(item.id) === String(leaveRequestId),
+  );
+
+  if (!request) {
+    showPageAlert(
+      "warning",
+      "The returned leave request could not be found. Please refresh leave history and try again.",
+    );
+    return;
+  }
+
+  if (!isReturnedLeaveRequest(request)) {
+    showPageAlert(
+      "warning",
+      "Only returned leave requests can be edited and resubmitted.",
+    );
+    return;
+  }
+
+  state.returnedLeaveAmendmentRequestId = request.id;
+  state.returnedLeaveAmendmentOriginalStatus = request.status || null;
+
+  if (state.dom.leaveType) {
+    state.dom.leaveType.value = request.leave_type_id || "";
+  }
+
+  if (state.dom.startDate) {
+    state.dom.startDate.value = request.start_date || "";
+  }
+
+  if (state.dom.endDate) {
+    state.dom.endDate.value = request.end_date || "";
+  }
+
+  if (state.dom.leaveReason) {
+    state.dom.leaveReason.value = request.reason || "";
+  }
+
+  calculateLeaveDays();
+  updateLeaveRequestBlockNotice();
+
+  if (state.dom.submitLeaveBtn) {
+    state.dom.submitLeaveBtn.innerHTML = getLeaveSubmitButtonDefaultHtml();
+  }
+
+  updateLeaveSubmitButtonState();
+
+  showSection("leave");
+  setEmployeeLeaveHistoryCardExpanded(true);
+
+  showPageAlert(
+    "info",
+    "Editing returned leave request. Update the details and resubmit for manager review.",
+  );
+
+  window.setTimeout(() => {
+    state.dom.leaveRequestForm?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, 50);
+}
+
+// RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
+// Reset amendment mode after successful resubmission or when the form returns
+// to normal submission mode.
+function clearReturnedLeaveAmendmentMode() {
+  state.returnedLeaveAmendmentRequestId = null;
+  state.returnedLeaveAmendmentOriginalStatus = null;
+
+  if (state.dom.submitLeaveBtn) {
+    state.dom.submitLeaveBtn.innerHTML = getLeaveSubmitButtonDefaultHtml();
+  }
 }
 
 /* =========================================================
@@ -471,6 +598,11 @@ function setEmployeeLeaveBalancesCardExpanded(shouldExpand) {
   if (label) {
     label.textContent = shouldExpand ? "Collapse" : "Expand";
   }
+
+  // EMPLOYEE LEAVE UX WIRING - STEP 1A
+  // Keep double-click collapse visually identical to pressing the Collapse
+  // button by clearing/reapplying the desktop equal-height calculation.
+  requestEmployeeLeaveLayoutSync();
 }
 
 // EMPLOYEE UI CLEANUP - STEP 1L-C
@@ -625,7 +757,7 @@ function bindEmployeeLeaveHistoryCardEvents() {
   // Interactive controls are ignored so Refresh History remains safe.
   card.addEventListener("dblclick", (event) => {
     const ignoredTarget = event.target.closest(
-      "button, a, input, select, textarea, label, [contenteditable='true']",
+      "button, a, input, select, textarea, label, .employee-leave-history-scroll-area, [contenteditable='true']",
     );
 
     if (ignoredTarget) return;
@@ -633,7 +765,12 @@ function bindEmployeeLeaveHistoryCardEvents() {
     const isExpanded = !panel.classList.contains("d-none");
     if (!isExpanded) return;
 
-    setEmployeeLeaveHistoryCardExpanded(false);
+    // EMPLOYEE LEAVE UX WIRING - STEP 1B
+    // Double-click should behave exactly like pressing the visible Collapse
+    // button. The HTML layout-sync script already listens to that button click,
+    // so using button.click() avoids the tall blank card left by the direct
+    // collapse path.
+    button.click();
   });
 }
 
@@ -757,6 +894,17 @@ function waitForNextPaint() {
       window.requestAnimationFrame(resolve);
     });
   });
+}
+
+// EMPLOYEE LEAVE UX WIRING - STEP 1A
+// My Leave History has a desktop equal-height helper in employee-dashboard.html.
+// Button-click collapse already triggers that helper through its click listener,
+// but double-click collapse happens inside this JS file. Dispatching resize here
+// makes double-click produce the same compact result as the Collapse button.
+function requestEmployeeLeaveLayoutSync() {
+  window.setTimeout(() => {
+    window.dispatchEvent(new Event("resize"));
+  }, 50);
 }
 
 async function refreshEmployeeLeaveBalancesManually() {
@@ -953,6 +1101,45 @@ function showSection(sectionName) {
   }
 }
 
+// EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1E
+// Employee eligibility depends on HR master data such as gender.
+// The original lookup used exact work_email matching after user_id lookup.
+// That is too brittle for seeded/test data where email casing or profile email
+// source can differ. This helper keeps the lookup employee-scoped but makes
+// email matching case-insensitive.
+async function findEmployeeRecordByKnownEmails(emailValues = []) {
+  const supabase = getSupabaseClient();
+
+  const emails = [
+    ...new Set(
+      emailValues
+        .map((value) => normalizeEmail(value))
+        .filter(Boolean),
+    ),
+  ];
+
+  for (const email of emails) {
+    const { data, error } = await supabase
+      .from("employees")
+      .select("*")
+      .ilike("work_email", email)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Employee lookup by case-insensitive work_email failed:", error);
+      continue;
+    }
+
+    if (data) {
+      return data;
+    }
+  }
+
+  return null;
+}
+
 /* =========================================================
    Employee record loading
 ========================================================= */
@@ -977,20 +1164,23 @@ async function loadEmployeeRecord(userId, userEmail) {
     console.warn("Lookup by user_id failed:", err);
   }
 
-  if (!employee && userEmail) {
+  if (!employee) {
     try {
-      const { data, error } = await supabase
-        .from("employees")
-        .select("*")
-        .eq("work_email", userEmail)
-        .maybeSingle();
+      // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1E
+      // Use both auth email and profile email, case-insensitively, so the
+      // signed-in employee resolves to the full employees row including gender.
+      const emailMatchedEmployee = await findEmployeeRecordByKnownEmails([
+        userEmail,
+        state.currentProfile?.email,
+        state.currentUser?.email,
+      ]);
 
-      if (!error && data) {
-        employee = data;
+      if (emailMatchedEmployee) {
+        employee = emailMatchedEmployee;
         lookupMethod = "work_email";
       }
     } catch (err) {
-      console.warn("Lookup by work_email failed:", err);
+      console.warn("Lookup by known employee email failed:", err);
     }
   }
 
@@ -1651,6 +1841,13 @@ function getSelectedLeaveTypeDetails() {
     id: String(select?.value || "").trim(),
     name: String(selectedOption?.textContent || "").trim(),
     code: String(selectedOption?.dataset?.code || "").trim(),
+
+    // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1C
+    // Eligibility is configured in leave_types. This keeps maternity/paternity
+    // controls data-driven instead of hardcoded against leave names only.
+    eligibilityRule: String(
+      selectedOption?.dataset?.eligibilityRule || "all_employees",
+    ).trim(),
   };
 }
 
@@ -1710,6 +1907,15 @@ function doesLeaveRequestTouchYear(request = {}, leaveYear) {
 function getLeaveRequestPolicyBlock() {
   const selectedLeaveType = getSelectedLeaveTypeDetails();
   const leaveYear = getSelectedLeaveRequestYear();
+
+  // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1C
+  // Eligibility is checked before date-overlap and duplicate checks, because
+  // an ineligible leave type should be blocked as soon as it is selected.
+  const eligibilityBlock = getLeaveTypeEligibilityBlock(selectedLeaveType);
+
+  if (eligibilityBlock) {
+    return eligibilityBlock;
+  }
 
   const startDateValue = String(state.dom.startDate?.value || "").trim();
   const endDateValue = String(state.dom.endDate?.value || "").trim();
@@ -1803,6 +2009,81 @@ function getLeaveRequestPolicyBlock() {
   };
 }
 
+// EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1C
+// Normalise employee gender values from HR master data.
+// This avoids brittle comparisons if the stored value is "Male", "male", "M",
+// "Female", "female", or "F".
+function getNormalisedEmployeeGenderForLeaveEligibility() {
+  const rawGender = normalizeText(
+    state.employeeRecord?.gender ||
+    state.employeeRecord?.sex ||
+    state.employeeRecord?.gender_identity ||
+    "",
+  );
+
+  if (["female", "f", "woman"].includes(rawGender)) {
+    return "female";
+  }
+
+  if (["male", "m", "man"].includes(rawGender)) {
+    return "male";
+  }
+
+  return "";
+}
+
+// EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1C
+// HR-facing leave eligibility guard.
+// Keep the employee message neutral and professional. Do not expose sensitive
+// or embarrassing wording such as "male employees cannot apply for maternity".
+function getLeaveTypeEligibilityBlock(leaveType = {}) {
+  if (!leaveType.id) return null;
+
+  const eligibilityRule = normalizeText(
+    leaveType.eligibilityRule || "all_employees",
+  );
+
+  if (eligibilityRule === "all_employees") {
+    return null;
+  }
+
+  if (eligibilityRule === "hr_review_only") {
+    return {
+      message:
+        `${leaveType.name || "This leave type"} requires HR review before it can be requested through Employee Self Service. Please contact HR for support.`,
+    };
+  }
+
+  const employeeGender = getNormalisedEmployeeGenderForLeaveEligibility();
+
+  // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1E
+  // If HR profile gender cannot be resolved, do not falsely say the leave is
+  // unavailable. Tell the employee the profile could not be verified.
+  if (!employeeGender && (eligibilityRule === "female_only" || eligibilityRule === "male_only")) {
+    return {
+      message:
+        `${leaveType.name || "This leave type"} eligibility could not be verified from your employee profile. Please contact HR to check your profile details.`,
+    };
+  }
+
+  if (eligibilityRule === "female_only" && employeeGender === "female") {
+    return null;
+  }
+
+  if (eligibilityRule === "male_only" && employeeGender === "male") {
+    return null;
+  }
+
+  if (eligibilityRule === "female_only" || eligibilityRule === "male_only") {
+    return {
+      message:
+        `${leaveType.name || "This leave type"} is not available for your employee profile. Please contact HR if this is incorrect or requires special handling.`,
+    };
+  }
+
+  return null;
+}
+
 // EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
 // Show or hide the in-form block notice without touching page layout.
 function updateLeaveRequestBlockNotice() {
@@ -1835,7 +2116,7 @@ async function loadLeaveTypes() {
 
   const { data, error } = await supabase
     .from("leave_types")
-    .select("id, code, name")
+    .select("id, code, name, eligibility_rule")
     .eq("is_active", true)
     .order("name", { ascending: true });
 
@@ -1854,6 +2135,13 @@ async function loadLeaveTypes() {
     option.value = leaveType.id;
     option.textContent = leaveType.name;
     option.dataset.code = leaveType.code;
+
+    // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1C
+    // Store the configured eligibility rule on the option so the existing
+    // form policy guard can block ineligible leave before submission.
+    option.dataset.eligibilityRule =
+      leaveType.eligibility_rule || "all_employees";
+
     state.dom.leaveType.appendChild(option);
   });
 
@@ -1947,6 +2235,58 @@ function validateLeaveRequestForm() {
   return isValid;
 }
 
+// RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C-FIX B
+// Resubmit through a controlled Supabase RPC instead of a direct table update.
+// The function validates ownership, returned status, dates, days, and reason
+// before moving the same leave request row back to Pending Approval.
+async function resubmitReturnedLeaveRequest(payload = {}) {
+  const amendmentRequest = getReturnedLeaveAmendmentRequest();
+
+  if (!amendmentRequest) {
+    throw new Error(
+      "Returned leave request could not be resolved for resubmission. Please refresh leave history and try again.",
+    );
+  }
+
+  if (!isReturnedLeaveRequest(amendmentRequest)) {
+    throw new Error(
+      "Only returned leave requests can be edited and resubmitted.",
+    );
+  }
+
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase.rpc(
+    "resubmit_returned_leave_request",
+    {
+      p_leave_request_id: amendmentRequest.id,
+      p_leave_type_id: payload.leave_type_id,
+      p_start_date: payload.start_date,
+      p_end_date: payload.end_date,
+      p_total_days: payload.total_days,
+      p_reason: payload.reason,
+    },
+  );
+
+  if (error) throw error;
+
+  const updatedRequest = Array.isArray(data) ? data[0] : data;
+
+  if (!updatedRequest) {
+    throw new Error(
+      "Returned leave request was not resubmitted. Please refresh leave history and try again.",
+    );
+  }
+
+  if (normalizeText(updatedRequest.status) !== "pending approval") {
+    throw new Error(
+      `Returned leave request resubmission verification failed. Expected Pending Approval but Supabase returned ${updatedRequest.status || "--"}.`,
+    );
+  }
+
+  return updatedRequest;
+}
+
 async function handleLeaveRequestSubmit() {
   clearPageAlert();
 
@@ -1973,19 +2313,36 @@ async function handleLeaveRequestSubmit() {
     status: "Pending Approval",
   };
 
+  const isReturnedResubmission = Boolean(state.returnedLeaveAmendmentRequestId);
+
   try {
     setLeaveSubmitLoading(true);
 
-    const { error } = await supabase.from("leave_requests").insert([payload]);
+    if (isReturnedResubmission) {
+      await resubmitReturnedLeaveRequest(payload);
+    } else {
+      const { error } = await supabase.from("leave_requests").insert([payload]);
 
-    if (error) {
-      throw error;
+      if (error) {
+        throw error;
+      }
     }
 
-    showPageAlert(
+    const successMessage = isReturnedResubmission
+      ? "Returned leave request updated and resubmitted for manager review."
+      : "Leave request submitted successfully and saved with Pending Approval status.";
+
+    showPageAlert("success", successMessage);
+
+    showEmployeeDashboardToast(
       "success",
-      "Leave request submitted successfully and saved with Pending Approval status.",
+      isReturnedResubmission ? "Leave request resubmitted" : "Leave request submitted",
+      isReturnedResubmission
+        ? "Your returned leave request was updated and sent back for manager review."
+        : "Your leave request was submitted successfully and is pending manager review.",
     );
+
+    clearReturnedLeaveAmendmentMode();
 
     state.dom.leaveRequestForm.reset();
     state.dom.totalDays.value = "";
@@ -2030,14 +2387,16 @@ function setLeaveSubmitLoading(isLoading) {
     button.classList.remove("btn-secondary");
     button.classList.add("btn-primary");
 
+    const loadingLabel = state.returnedLeaveAmendmentRequestId
+      ? "Resubmitting for approval..."
+      : "Submitting for approval...";
+
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-      Submitting for approval...
+      ${loadingLabel}
     `;
   } else {
-    button.innerHTML = `
-      <i class="bi bi-send-check me-2"></i>Submit for Approval
-    `;
+    button.innerHTML = getLeaveSubmitButtonDefaultHtml();
 
     updateLeaveSubmitButtonState();
   }
@@ -2066,6 +2425,7 @@ async function loadEmployeeLeaveRequests() {
       start_date,
       end_date,
       total_days,
+      reason,
       status,
       submitted_at,
       decision_at,
@@ -2167,6 +2527,26 @@ function renderLeaveRequests(requests) {
         ? decisionAt
         : "Awaiting decision";
 
+    // RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
+    // Returned requests should be amendable by the employee. Other statuses
+    // remain read-only to protect approved, rejected, and pending workflows.
+    const canEditAndResubmit = isReturnedLeaveRequest(request);
+
+    const editAndResubmitActionHtml = canEditAndResubmit
+      ? `
+        <div class="d-flex justify-content-end border-top mt-3 pt-3">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary dashboard-action-btn edit-returned-leave-request-btn"
+            data-leave-request-id="${escapeHtml(request.id)}"
+            title="Edit and resubmit this returned leave request"
+            aria-label="Edit and resubmit this returned leave request">
+            <i class="bi bi-arrow-repeat me-2"></i>Edit & Resubmit
+          </button>
+        </div>
+      `
+      : "";
+
     const item = document.createElement("div");
     item.className = "mb-2";
 
@@ -2218,10 +2598,19 @@ function renderLeaveRequests(requests) {
             </div>
           </div>
         </div>
+
+        ${editAndResubmitActionHtml}
       </div>
     `;
 
     list.appendChild(item);
+    // RETURNED LEAVE AMENDMENT WORKFLOW - STEP 1C
+    // Wire the returned-request amendment action after the card is rendered.
+    item
+      .querySelector(".edit-returned-leave-request-btn")
+      ?.addEventListener("click", () => {
+        startReturnedLeaveAmendment(request.id);
+      });
   });
 }
 
@@ -3767,6 +4156,130 @@ function clearPageAlert() {
   if (!state.dom.pageAlert) return;
   state.dom.pageAlert.className = "alert d-none mb-4";
   state.dom.pageAlert.textContent = "";
+}
+
+// EMPLOYEE LEAVE UX WIRING - STEP 1A
+// Creates a lightweight bottom-right toast from JS so employee-dashboard.html
+// does not need a structural patch. This is notification-only.
+function ensureEmployeeDashboardToast() {
+  let toast = document.getElementById("employeeDashboardToast");
+
+  if (toast) return toast;
+
+  toast = document.createElement("div");
+  toast.id = "employeeDashboardToast";
+  toast.className =
+    "position-fixed bottom-0 end-0 m-4 bg-white border shadow-lg rounded-4 overflow-hidden d-none";
+  toast.style.zIndex = "1080";
+  toast.style.width = "calc(100% - 2rem)";
+  toast.style.maxWidth = "360px";
+
+  toast.innerHTML = `
+    <div id="employeeDashboardToastAccent" class="bg-primary" style="height: 4px;"></div>
+
+    <div class="d-flex align-items-start gap-3 p-3">
+      <div id="employeeDashboardToastIcon"
+        class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 text-bg-primary"
+        style="width: 36px; height: 36px;">
+        <i class="bi bi-info-circle"></i>
+      </div>
+
+      <div class="flex-grow-1">
+        <div id="employeeDashboardToastTitle" class="fw-semibold">
+          Notification
+        </div>
+        <div id="employeeDashboardToastMessage" class="small text-secondary mt-1">
+        </div>
+      </div>
+
+      <button type="button" id="employeeDashboardToastCloseBtn"
+        class="btn btn-sm btn-link text-secondary p-0"
+        aria-label="Close notification">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+
+  toast
+    .querySelector("#employeeDashboardToastCloseBtn")
+    ?.addEventListener("click", hideEmployeeDashboardToast);
+
+  return toast;
+}
+
+// EMPLOYEE LEAVE UX WIRING - STEP 1A
+// Bottom-right employee feedback. Used after successful leave submission so
+// the employee sees confirmation even when the top alert is out of view.
+function showEmployeeDashboardToast(type = "info", title = "Notification", message = "") {
+  const toast = ensureEmployeeDashboardToast();
+
+  const accent = toast.querySelector("#employeeDashboardToastAccent");
+  const icon = toast.querySelector("#employeeDashboardToastIcon");
+  const titleEl = toast.querySelector("#employeeDashboardToastTitle");
+  const messageEl = toast.querySelector("#employeeDashboardToastMessage");
+
+  const themeMap = {
+    success: {
+      accentClass: "bg-success",
+      iconClass: "text-bg-success",
+      iconHtml: '<i class="bi bi-check-circle"></i>',
+    },
+    warning: {
+      accentClass: "bg-warning",
+      iconClass: "text-bg-warning",
+      iconHtml: '<i class="bi bi-exclamation-triangle"></i>',
+    },
+    danger: {
+      accentClass: "bg-danger",
+      iconClass: "text-bg-danger",
+      iconHtml: '<i class="bi bi-x-octagon"></i>',
+    },
+    info: {
+      accentClass: "bg-primary",
+      iconClass: "text-bg-primary",
+      iconHtml: '<i class="bi bi-info-circle"></i>',
+    },
+  };
+
+  const theme = themeMap[type] || themeMap.info;
+
+  if (accent) {
+    accent.className = theme.accentClass;
+    accent.style.height = "4px";
+  }
+
+  if (icon) {
+    icon.className =
+      `rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 ${theme.iconClass}`;
+    icon.style.width = "36px";
+    icon.style.height = "36px";
+    icon.innerHTML = theme.iconHtml;
+  }
+
+  if (titleEl) titleEl.textContent = title;
+  if (messageEl) messageEl.textContent = message || "";
+
+  toast.classList.remove("d-none");
+
+  window.clearTimeout(state.dashboardToastTimeoutId);
+
+  state.dashboardToastTimeoutId = window.setTimeout(() => {
+    hideEmployeeDashboardToast();
+  }, 8000);
+}
+
+// EMPLOYEE LEAVE UX WIRING - STEP 1A
+// Hide the toast without touching leave form, history, balance, or payroll data.
+function hideEmployeeDashboardToast() {
+  const toast = document.getElementById("employeeDashboardToast");
+  toast?.classList.add("d-none");
+
+  if (state.dashboardToastTimeoutId) {
+    window.clearTimeout(state.dashboardToastTimeoutId);
+    state.dashboardToastTimeoutId = null;
+  }
 }
 
 function formatDate(dateValue) {

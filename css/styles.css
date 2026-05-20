@@ -20,6 +20,37 @@ body {
 /* Smooth scroll for navbar anchor links */
 html {
   scroll-behavior: smooth;
+
+  /* LANDING PAGE HR/PROFESSIONAL RESTRUCTURE - STEP 1C FIX 3
+     Landing sections already have internal top padding. Keep the browser
+     anchor position natural so previous sections do not hang above the
+     selected Features, Roles, or Access section. */
+  scroll-padding-top: 0;
+}
+
+/* =========================================================
+   LANDING PAGE HR/PROFESSIONAL RESTRUCTURE - STEP 1C FIX 4
+   Exact anchor landing positions.
+
+   HR behaviour:
+   - Features / Explore System should land with the Features section
+     clearly framed as the main content.
+   - Roles should land with the role workspace section clearly framed.
+   - Access is intentionally left natural for now because it sits near
+     the bottom of the page.
+   ========================================================= */
+
+body:not(.dashboard-page) #home,
+body:not(.dashboard-page) #access {
+  scroll-margin-top: 0;
+}
+
+body:not(.dashboard-page) #features {
+  scroll-margin-top: 0.5rem;
+}
+
+body:not(.dashboard-page) #roles {
+  scroll-margin-top: 2rem;
 }
 
 /*
@@ -1012,6 +1043,130 @@ html {
   .hr-feature-card:hover,
   .hr-role-card:hover {
     transform: none;
+  }
+}
+
+/* =========================================================
+   LANDING PAGE HR/PROFESSIONAL RESTRUCTURE - STEP 1B
+   Landing page spacing and visual density cleanup.
+
+   HR behaviour:
+   - the landing page should feel operational, not like a loose brochure
+   - hero, features, roles, and access sections should read as one product
+   - spacing should be tighter while preserving the existing premium look
+   - dashboard, modal, sign-in logic, and role routing remain untouched
+   ========================================================= */
+
+body:not(.dashboard-page) .hr-hero-section {
+  padding-top: 6.75rem;
+  padding-bottom: 3.25rem;
+}
+
+body:not(.dashboard-page) .hr-hero-copy {
+  line-height: 1.65;
+  max-width: 590px;
+}
+
+body:not(.dashboard-page) .hr-hero-panel {
+  min-height: 440px;
+}
+
+body:not(.dashboard-page) .hr-hero-panel h2 {
+  line-height: 1.2;
+}
+
+body:not(.dashboard-page) .hr-panel-box small {
+  line-height: 1.55;
+}
+
+/* Keep the public sections tighter without changing dashboard sections. */
+body:not(.dashboard-page)>section.py-5.landing-animate-in {
+  padding-top: 3rem !important;
+  padding-bottom: 3rem !important;
+}
+
+body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
+}
+
+#features .text-center.mb-5 {
+  margin-bottom: 2rem !important;
+}
+
+#features .hr-feature-card {
+  min-height: 100%;
+}
+
+#features .hr-feature-card p,
+#roles .hr-role-card .small,
+#access .hr-section-copy {
+  line-height: 1.6;
+}
+
+#roles .row.align-items-center.g-4 {
+  row-gap: 2rem !important;
+}
+
+#roles .hr-role-card {
+  min-height: 94px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+#access .hr-access-card {
+  box-shadow: 0 16px 36px rgba(18, 28, 42, 0.07);
+}
+
+/* Desktop-only tightening so mobile keeps comfortable breathing room. */
+@media (min-width: 992px) {
+  body:not(.dashboard-page) .hr-hero-title {
+    font-size: clamp(3rem, 4.6vw, 4.45rem);
+    max-width: 650px;
+  }
+
+  body:not(.dashboard-page) .hr-hero-section .row.align-items-center {
+    align-items: center !important;
+  }
+
+  #features {
+    margin-top: -0.75rem;
+  }
+
+  #roles {
+    padding-top: 2.5rem !important;
+  }
+
+  #access {
+    padding-top: 2.25rem !important;
+  }
+}
+
+@media (max-width: 991.98px) {
+  body:not(.dashboard-page) .hr-hero-section {
+    padding-top: 6.25rem;
+    padding-bottom: 2.75rem;
+  }
+
+  body:not(.dashboard-page)>section.py-5.landing-animate-in {
+    padding-top: 2.5rem !important;
+    padding-bottom: 2.5rem !important;
+  }
+}
+
+@media (max-width: 575.98px) {
+  body:not(.dashboard-page) .hr-hero-section {
+    padding-top: 5.75rem;
+    padding-bottom: 2.25rem;
+  }
+
+  body:not(.dashboard-page) .hr-hero-title {
+    line-height: 1.08;
+  }
+
+  #roles .hr-role-card {
+    min-height: auto;
   }
 }
 
