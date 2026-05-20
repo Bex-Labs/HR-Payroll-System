@@ -118,16 +118,16 @@ serve(async (req: Request) => {
       return jsonResponse(400, { error: "fullName is required." });
     }
 
-    // EMPLOYEE LOGIN PROVISIONING HARDENING - STEP 1
-    // The invite email says "Set My Password", so the verified invite must
-    // return to the password setup page, not the normal sign-in landing page.
-    // APP_URL must match the Supabase Auth Site URL / Redirect URLs exactly.
+    // The redirect URL lands the employee on the login page after they set
+    // their password via the magic link.
+    // APP_URL (set as a Supabase secret) always takes priority so the link
+    // in the email points to the live app, not wherever HR happens to be
+    // running the dashboard from (which could be localhost).
     const appOrigin = cleanText(Deno.env.get("APP_URL")) ||
       cleanText(req.headers.get("origin"));
-
     const redirectTo = appOrigin
-      ? `${appOrigin}/reset-password.html?mode=first-time`
-      : "/reset-password.html?mode=first-time";
+      ? `${appOrigin}/index.html`
+      : "/index.html";
 
     // Send the invite. The Supabase admin API creates the auth.users row
     // immediately and dispatches the invite email with a secure magic link.
@@ -183,47 +183,6 @@ serve(async (req: Request) => {
         // fail the request — HR will see the account appear once the employee
         // completes setup and the auth trigger fires.
         console.error("Profile upsert error after invite:", profileError);
-      }
-
-      // EMPLOYEE LOGIN PROVISIONING HARDENING - STEP 2A
-      // Description:
-      // Link the HR employee master record to the Supabase Auth user created by
-      // the invite. This is required because the Employee Dashboard resolves the
-      // signed-in employee through employees.user_id, and HR shows account linkage
-      // from the employee record.
-      let employeeLinkQuery = supabaseAdmin
-        .from("employees")
-        .update({
-          user_id: newUserId,
-        })
-        .eq("work_email", workEmail);
-
-      // Description:
-      // If a tenant/company was provided by the HR dashboard, restrict the link
-      // update to that company workspace so the same email cannot accidentally
-      // link across another tenant.
-      if (tenantId) {
-        employeeLinkQuery = employeeLinkQuery.eq("tenant_id", tenantId);
-      }
-
-      const { data: linkedEmployees, error: employeeLinkError } =
-        await employeeLinkQuery.select("id, work_email, user_id");
-
-      if (employeeLinkError) {
-        console.error("Employee account linkage error after invite:", employeeLinkError);
-
-        return jsonResponse(500, {
-          error:
-            "Login invite was created, but the employee record could not be linked to the user account.",
-        });
-      }
-
-      if (!linkedEmployees || linkedEmployees.length === 0) {
-        console.warn("No matching employee record was linked after invite.", {
-          workEmail,
-          tenantId,
-          newUserId,
-        });
       }
     }
 
