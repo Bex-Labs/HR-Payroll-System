@@ -20465,17 +20465,52 @@ async function toggleEmployeeManagerRole(employeeId) {
     const supabase = getSupabaseClient();
 
     // Find the matching auth profile.
+    // Try the in-memory cache first; if it misses (e.g. the employee activated
+    // their account after the People tab was last loaded) fall back to a fresh
+    // database query so a stale cache never blocks the role toggle.
     const employeeUserId = String(employee?.auth_user_id || employee?.user_id || "").trim();
     const workEmail = normalizeText(employee?.work_email || "");
 
-    const profile = employeeUserId
+    let profile = employeeUserId
       ? (state.authProfiles || []).find((p) => String(p.id || "").trim() === employeeUserId)
       : (state.authProfiles || []).find((p) => normalizeText(p.email || "") === workEmail);
 
     if (!profile) {
+      // Cache miss — query the profiles table directly with the current session.
+      try {
+        let freshQuery = supabase
+          .from("profiles")
+          .select("id, email, full_name, role");
+
+        if (employeeUserId) {
+          freshQuery = freshQuery.eq("id", employeeUserId);
+        } else if (workEmail) {
+          freshQuery = freshQuery.eq("email", employee?.work_email?.trim() || "");
+        }
+
+        const { data: freshProfiles } = await freshQuery.maybeSingle();
+
+        if (freshProfiles) {
+          profile = freshProfiles;
+          // Merge into cache so other UI elements reflect the fresh data.
+          const idx = (state.authProfiles || []).findIndex(
+            (p) => String(p.id || "").trim() === String(freshProfiles.id || "").trim(),
+          );
+          if (idx >= 0) {
+            state.authProfiles[idx] = freshProfiles;
+          } else {
+            state.authProfiles = [...(state.authProfiles || []), freshProfiles];
+          }
+        }
+      } catch (lookupError) {
+        console.warn("Fresh profile lookup failed:", lookupError);
+      }
+    }
+
+    if (!profile) {
       showPageAlert(
         "warning",
-        `No login account found for ${fullName}. Please send them a login invite first.`,
+        `No login account found for ${fullName}. If they have already activated their account, try refreshing the People list and trying again. Otherwise, send them a login invite first.`,
       );
       return;
     }
