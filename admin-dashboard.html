@@ -478,6 +478,221 @@
             </div>
           </div>
 
+          <!-- ADMIN EMAIL SETUP - STEP 1D
+               Admin owns approved validation recipients per company.
+               HR can only use these approved recipients from Setup > Email Integration. -->
+          <div class="border rounded-4 p-4 bg-white mb-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
+              <div class="d-flex align-items-start gap-3">
+                <div
+                  class="rounded-circle bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
+                  style="width: 40px; height: 40px;">
+                  <i class="bi bi-envelope-check text-primary"></i>
+                </div>
+
+                <div>
+                  <h3 class="section-heading h5 mb-1">Email Setup</h3>
+                  <p class="section-subtext mb-0">
+                    Register approved validation recipients and review email delivery health by company workspace.
+                  </p>
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge rounded-pill text-bg-light border px-3 py-2">
+                  Admin controlled
+                </span>
+
+                <button type="button" id="toggleAdminEmailSetupCardBtn"
+                  class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                  aria-controls="adminEmailSetupCollapse">
+                  <i class="bi bi-chevron-up me-2"></i>
+                  <span>Collapse</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="adminEmailSetupCollapse">
+              <div class="alert alert-light border rounded-4 mb-4">
+                <div class="fw-semibold mb-1">Controlled validation only</div>
+                <div class="small text-secondary">
+                  Admin registers approved recipients here. HR can then send safe validation emails only to those
+                  approved recipients from the HR Email Integration panel. Provider secrets remain server-side.
+                </div>
+              </div>
+
+              <div class="row g-4 mb-4">
+                <div class="col-md-6 col-xl-3">
+                  <div class="summary-tile">
+                    <div class="summary-tile-label">Approved Recipients</div>
+                    <div class="summary-tile-value h6 mb-0" id="adminEmailRecipientCountValue">0</div>
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-3">
+                  <div class="summary-tile">
+                    <div class="summary-tile-label">Active Recipients</div>
+                    <div class="summary-tile-value h6 mb-0" id="adminEmailActiveRecipientCountValue">0</div>
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-3">
+                  <div class="summary-tile">
+                    <div class="summary-tile-label">Validation History</div>
+                    <div class="summary-tile-value h6 mb-0" id="adminEmailDeliveryLogCountValue">0</div>
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-3">
+                  <div class="summary-tile">
+                    <div class="summary-tile-label">Last Result</div>
+                    <div class="summary-tile-value h6 mb-0" id="adminEmailLastResultValue">--</div>
+                  </div>
+                </div>
+              </div>
+
+              <form id="adminEmailRecipientForm" class="border rounded-4 p-4 bg-light-subtle mb-4" novalidate>
+                <input type="hidden" id="editingAdminEmailRecipientId" />
+
+                <div class="row g-3 align-items-start">
+                  <!-- ADMIN EMAIL SETUP - STEP 1D-1
+       Keep all required recipient fields aligned on one row on wide screens.
+       This avoids the Status field wrapping awkwardly under Company. -->
+                  <div class="col-12 col-md-6 col-xl-3">
+                    <label for="adminEmailSetupCompanyId" class="form-label fw-semibold">
+                      Company <span class="text-danger">*</span>
+                    </label>
+                    <select id="adminEmailSetupCompanyId" class="form-select" required>
+                      <option value="">Select company</option>
+                    </select>
+                    <div class="form-text">
+                      Recipient will be available only in the selected company workspace.
+                    </div>
+                    <div class="invalid-feedback">Select the company workspace.</div>
+                  </div>
+
+                  <div class="col-12 col-md-6 col-xl-3">
+                    <!-- ADMIN EMAIL SETUP - STEP 1D-2
+     Recipient Label is the friendly name HR sees when selecting
+     an approved validation recipient. It is not the email address. -->
+                    <label for="adminEmailRecipientDisplayName" class="form-label fw-semibold">
+                      Recipient Label <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" id="adminEmailRecipientDisplayName" class="form-control"
+                      placeholder="Example: Payroll Validation Mailbox" autocomplete="off" required />
+                    <div class="invalid-feedback">Enter a clear recipient label.</div>
+                  </div>
+
+                  <div class="col-12 col-md-6 col-xl-3">
+                    <label for="adminEmailRecipientEmail" class="form-label fw-semibold">
+                      Recipient Email <span class="text-danger">*</span>
+                    </label>
+                    <input type="email" id="adminEmailRecipientEmail" class="form-control"
+                      placeholder="validation@example.com" autocomplete="off" required />
+                    <div class="invalid-feedback">Enter a valid recipient email.</div>
+                  </div>
+
+                  <div class="col-12 col-md-6 col-xl-3">
+                    <label for="adminEmailRecipientStatus" class="form-label fw-semibold">
+                      Status <span class="text-danger">*</span>
+                    </label>
+                    <select id="adminEmailRecipientStatus" class="form-select" required>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="d-flex flex-wrap gap-2">
+                      <button type="submit" id="saveAdminEmailRecipientBtn"
+                        class="btn btn-secondary dashboard-action-btn" disabled>
+                        <i class="bi bi-save me-2"></i>
+                        <span id="saveAdminEmailRecipientBtnText">Add Approved Recipient</span>
+                      </button>
+
+                      <button type="button" id="cancelAdminEmailRecipientEditBtn"
+                        class="btn btn-outline-secondary dashboard-action-btn d-none">
+                        <i class="bi bi-x-circle me-2"></i>
+                        Cancel Edit
+                      </button>
+
+                      <button type="button" id="refreshAdminEmailSetupBtn"
+                        class="btn btn-outline-primary dashboard-action-btn">
+                        <i class="bi bi-arrow-clockwise me-2"></i>
+                        Refresh Email Setup
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+
+              <div class="mt-4">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+                  <div>
+                    <h4 class="h6 fw-semibold mb-1" id="adminEmailRecipientsHeader">
+                      Approved Validation Recipients
+                    </h4>
+                    <p class="text-secondary small mb-0">
+                      These recipients appear in HR Setup &gt; Email Integration for the selected company.
+                    </p>
+                  </div>
+                </div>
+
+                <div id="adminEmailRecipientsEmptyState" class="alert alert-light border mb-0">
+                  No approved validation recipients have been configured for this company.
+                </div>
+
+                <div id="adminEmailRecipientsTableWrapper" class="table-responsive d-none">
+                  <table class="table align-middle dashboard-table mb-0">
+                    <thead>
+                      <tr>
+                        <th>Recipient</th>
+                        <th>Company</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                        <th class="text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adminEmailRecipientsTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <hr class="my-5" />
+
+              <div>
+                <div class="mb-3">
+                  <h4 class="h6 fw-semibold mb-1">Validation History</h4>
+                  <p class="text-secondary small mb-0">
+                    Recent controlled validation email outcomes for the selected company.
+                  </p>
+                </div>
+
+                <div id="adminEmailDeliveryLogsEmptyState" class="alert alert-light border mb-0">
+                  No validation email history is available for this company yet.
+                </div>
+
+                <!-- ADMIN EMAIL SETUP CLEANUP - STEP 1F
+     Validation History can grow quickly as HR validates email delivery.
+     Keep it visibly contained inside the Email Setup card with its own inner scroll. -->
+                <div id="adminEmailDeliveryLogsTableWrapper" class="table-responsive d-none border rounded-4"
+                  style="max-height: 220px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain;">
+                  <table class="table align-middle dashboard-table mb-0" style="min-width: 720px;">
+                    <thead>
+                      <tr>
+                        <th>Recipient</th>
+                        <th>Status</th>
+                        <th>Provider</th>
+                        <th>Sent / Created</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adminEmailDeliveryLogsTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="border rounded-4 p-4 bg-white">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
               <div class="d-flex align-items-start gap-3">

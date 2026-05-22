@@ -25,29 +25,39 @@ document.addEventListener("DOMContentLoaded", async () => {
     // before rendering the avatar/photo preview.
     await loadLatestAdminProfile();
 
-renderAdminProfile(state.currentProfile, access.session.user);
+    renderAdminProfile(state.currentProfile, access.session.user);
 
-// ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Restore the remembered Admin workspace before long company/user-access
-// refreshes continue. Fresh login still opens Profile because logout clears memory.
-restoreAdminWorkspaceAfterRefresh();
+    // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Restore the remembered Admin workspace before long company/user-access
+    // refreshes continue. Fresh login still opens Profile because logout clears memory.
+    restoreAdminWorkspaceAfterRefresh();
 
-// HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
-// Load tenant/company records after Admin access is confirmed.
-await refreshTenantWorkspace();
+    // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
+    // Load tenant/company records after Admin access is confirmed.
+    await refreshTenantWorkspace();
+
+    // ADMIN EMAIL SETUP - STEP 1D
+    // Load Admin-owned approved validation recipients after companies are loaded,
+    // because each recipient is scoped to a company workspace.
+    await refreshAdminEmailSetupWorkspace();
 
     // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
     // Load profiles so Admin can manage company-scoped user access.
-await refreshProfileTenantLinkingWorkspace();
+    await refreshProfileTenantLinkingWorkspace();
 
-// ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Workspace was already restored early. Re-assert top after async startup loads.
-forceAdminDashboardToTopAfterRefresh();
+    // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Workspace was already restored early. Re-assert top after async startup loads.
+    forceAdminDashboardToTopAfterRefresh();
 
-// HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
+    // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
     // Expose tenant edit action for the Tenant Records table.
     window.adminEditTenantRecord = (tenantId) => {
       startTenantEdit(tenantId);
+    };
+    // ADMIN EMAIL SETUP - STEP 1D
+    // Expose approved validation recipient edit action for the records table.
+    window.adminEditEmailRecipientRecord = (recipientId) => {
+      startAdminEmailRecipientEdit(recipientId);
     };
 
     // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
@@ -96,6 +106,12 @@ const state = {
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
   // Tracks the tenant currently being edited.
   currentEditingTenant: null,
+  // ADMIN EMAIL SETUP - STEP 1D
+  // Admin-owned approved validation recipients and company-scoped email history.
+  // HR Setup > Email Integration reads these tenant-scoped recipient records.
+  adminEmailSetupRecipients: [],
+  adminEmailSetupLogs: [],
+  currentEditingAdminEmailRecipient: null,
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
   // Holds user profiles for Admin access setup.
@@ -332,6 +348,31 @@ function cacheDomElements() {
     tenantRecordsEmptyState: document.getElementById("tenantRecordsEmptyState"),
     tenantRecordsTableWrapper: document.getElementById("tenantRecordsTableWrapper"),
     tenantRecordsTableBody: document.getElementById("tenantRecordsTableBody"),
+    // ADMIN EMAIL SETUP - STEP 1D
+    // Admin controls company-scoped validation recipients used by HR Email Integration.
+    toggleAdminEmailSetupCardBtn: document.getElementById("toggleAdminEmailSetupCardBtn"),
+    adminEmailSetupCollapse: document.getElementById("adminEmailSetupCollapse"),
+    adminEmailRecipientCountValue: document.getElementById("adminEmailRecipientCountValue"),
+    adminEmailActiveRecipientCountValue: document.getElementById("adminEmailActiveRecipientCountValue"),
+    adminEmailDeliveryLogCountValue: document.getElementById("adminEmailDeliveryLogCountValue"),
+    adminEmailLastResultValue: document.getElementById("adminEmailLastResultValue"),
+    adminEmailRecipientForm: document.getElementById("adminEmailRecipientForm"),
+    editingAdminEmailRecipientId: document.getElementById("editingAdminEmailRecipientId"),
+    adminEmailSetupCompanyId: document.getElementById("adminEmailSetupCompanyId"),
+    adminEmailRecipientDisplayName: document.getElementById("adminEmailRecipientDisplayName"),
+    adminEmailRecipientEmail: document.getElementById("adminEmailRecipientEmail"),
+    adminEmailRecipientStatus: document.getElementById("adminEmailRecipientStatus"),
+    saveAdminEmailRecipientBtn: document.getElementById("saveAdminEmailRecipientBtn"),
+    saveAdminEmailRecipientBtnText: document.getElementById("saveAdminEmailRecipientBtnText"),
+    cancelAdminEmailRecipientEditBtn: document.getElementById("cancelAdminEmailRecipientEditBtn"),
+    refreshAdminEmailSetupBtn: document.getElementById("refreshAdminEmailSetupBtn"),
+    adminEmailRecipientsHeader: document.getElementById("adminEmailRecipientsHeader"),
+    adminEmailRecipientsEmptyState: document.getElementById("adminEmailRecipientsEmptyState"),
+    adminEmailRecipientsTableWrapper: document.getElementById("adminEmailRecipientsTableWrapper"),
+    adminEmailRecipientsTableBody: document.getElementById("adminEmailRecipientsTableBody"),
+    adminEmailDeliveryLogsEmptyState: document.getElementById("adminEmailDeliveryLogsEmptyState"),
+    adminEmailDeliveryLogsTableWrapper: document.getElementById("adminEmailDeliveryLogsTableWrapper"),
+    adminEmailDeliveryLogsTableBody: document.getElementById("adminEmailDeliveryLogsTableBody"),
 
     // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
     // Platform Admin invites a company-scoped HR/payroll/manager/employee user
@@ -596,6 +637,13 @@ function collapseAdminDashboardWorkingCardsByDefault() {
     state.dom.adminUserCompanyAssignmentCollapse,
     false,
   );
+  // ADMIN EMAIL SETUP - STEP 1D
+  // Start Email Setup collapsed so Company Setup remains scan-friendly.
+  setAdminDashboardCardExpanded(
+    state.dom.toggleAdminEmailSetupCardBtn,
+    state.dom.adminEmailSetupCollapse,
+    false,
+  );
 }
 
 function scrollToAdminDashboardTarget(target, offset = 96) {
@@ -614,11 +662,11 @@ function redirectToAdminCompanyRecordsAfterSave() {
   // ADMIN UI CLEANUP - STEP 1J
   // After company create/update, open the records panel and land on the
   // Company Records header without cutting it off.
-// ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Programmatic navigation to Companies should also survive refresh.
-rememberAdminWorkspace("tenants");
-switchAdminWorkspace("tenants");
-openAdminCompanyRecordsPanel();
+  // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+  // Programmatic navigation to Companies should also survive refresh.
+  rememberAdminWorkspace("tenants");
+  switchAdminWorkspace("tenants");
+  openAdminCompanyRecordsPanel();
 
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
@@ -672,11 +720,11 @@ function redirectToAdminUserCompanyLinksAfterSave() {
   // ADMIN UI CLEANUP - STEP 1J
   // After user/company link save, open the assignment panel and land on
   // User Company Links without cutting the header.
-// ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Programmatic navigation to Companies should also survive refresh.
-rememberAdminWorkspace("tenants");
-switchAdminWorkspace("tenants");
-openAdminUserCompanyAssignmentPanel();
+  // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+  // Programmatic navigation to Companies should also survive refresh.
+  rememberAdminWorkspace("tenants");
+  switchAdminWorkspace("tenants");
+  openAdminUserCompanyAssignmentPanel();
 
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
@@ -693,13 +741,13 @@ openAdminUserCompanyAssignmentPanel();
 }
 
 function bindEvents() {
-state.dom.logoutBtn?.addEventListener("click", async () => {
-  // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-  // Logout must reset the next Admin session to Profile.
-  clearRememberedAdminWorkspace();
+  state.dom.logoutBtn?.addEventListener("click", async () => {
+    // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Logout must reset the next Admin session to Profile.
+    clearRememberedAdminWorkspace();
 
-  await window.SessionManager.logoutUser("logout");
-});
+    await window.SessionManager.logoutUser("logout");
+  });
 
   // ADMIN UI CLEANUP - STEP 1H
   // Back to Top and floating notification close behaviour.
@@ -719,6 +767,14 @@ state.dom.logoutBtn?.addEventListener("click", async () => {
     state.dom.adminUserCompanyAssignmentCollapse,
   );
 
+  // ADMIN EMAIL SETUP - STEP 1D
+  // Email Setup follows the same Admin collapse behaviour as Company Identity
+  // and User Access Setup.
+  bindAdminCardCollapseToggle(
+    state.dom.toggleAdminEmailSetupCardBtn,
+    state.dom.adminEmailSetupCollapse,
+  );
+
   collapseAdminDashboardWorkingCardsByDefault();
 
   state.dom.dashboardToastCloseBtn?.addEventListener("click", () => {
@@ -728,28 +784,28 @@ state.dom.logoutBtn?.addEventListener("click", async () => {
   window.addEventListener("scroll", updateBackToTopButtonVisibility);
   updateBackToTopButtonVisibility();
 
-state.dom.adminTabProfileBtn?.addEventListener("click", () => {
-  // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-  // Remember Profile only for refresh in the current browser session.
-  rememberAdminWorkspace("profile");
-  switchAdminWorkspace("profile");
-});
+  state.dom.adminTabProfileBtn?.addEventListener("click", () => {
+    // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Remember Profile only for refresh in the current browser session.
+    rememberAdminWorkspace("profile");
+    switchAdminWorkspace("profile");
+  });
 
-state.dom.adminTabOverviewBtn?.addEventListener("click", () => {
-  // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-  // Remember Overview only for refresh. No overview data is stored.
-  rememberAdminWorkspace("overview");
-  switchAdminWorkspace("overview");
-});
+  state.dom.adminTabOverviewBtn?.addEventListener("click", () => {
+    // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Remember Overview only for refresh. No overview data is stored.
+    rememberAdminWorkspace("overview");
+    switchAdminWorkspace("overview");
+  });
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1C
   // Open tenant/company setup workspace.
-state.dom.adminTabTenantsBtn?.addEventListener("click", () => {
-  // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
-  // Remember Companies only for refresh. No company or user-access data is stored.
-  rememberAdminWorkspace("tenants");
-  switchAdminWorkspace("tenants");
-});
+  state.dom.adminTabTenantsBtn?.addEventListener("click", () => {
+    // ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Remember Companies only for refresh. No company or user-access data is stored.
+    rememberAdminWorkspace("tenants");
+    switchAdminWorkspace("tenants");
+  });
 
 
   // ADMIN UI CLEANUP - STEP 1G
@@ -801,9 +857,60 @@ state.dom.adminTabTenantsBtn?.addEventListener("click", () => {
       // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
       // Keep the tenant assignment dropdown current after tenant refresh.
       populateProfileTenantTenantOptions();
+
+      // ADMIN EMAIL SETUP - STEP 1D
+      // Keep Email Setup company selector and records current after company refresh.
+      populateAdminEmailSetupCompanyOptions();
+      await refreshAdminEmailSetupWorkspace({ preserveCompany: true });
     } finally {
       setAdminActionButtonLoading(state.dom.refreshTenantsBtn, false);
     }
+  });
+
+  // ADMIN EMAIL SETUP - STEP 1D-2
+  // Bind Email Setup directly during page startup.
+  // This must not sit inside the company-user invite submit handler,
+  // otherwise the Add Approved Recipient button will never turn blue
+  // until an unrelated invite form is submitted.
+  state.dom.adminEmailRecipientForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveAdminEmailRecipient();
+  });
+
+  [
+    state.dom.adminEmailSetupCompanyId,
+    state.dom.adminEmailRecipientDisplayName,
+    state.dom.adminEmailRecipientEmail,
+    state.dom.adminEmailRecipientStatus,
+  ].forEach((field) => {
+    field?.addEventListener("input", updateAdminEmailRecipientSaveButtonState);
+    field?.addEventListener("keyup", updateAdminEmailRecipientSaveButtonState);
+    field?.addEventListener("blur", updateAdminEmailRecipientSaveButtonState);
+
+    field?.addEventListener("change", async () => {
+      updateAdminEmailRecipientSaveButtonState();
+
+      if (field === state.dom.adminEmailSetupCompanyId) {
+        await refreshAdminEmailSetupWorkspace({ preserveCompany: true });
+        updateAdminEmailRecipientSaveButtonState();
+      }
+    });
+  });
+
+  state.dom.cancelAdminEmailRecipientEditBtn?.addEventListener("click", () => {
+    resetAdminEmailRecipientForm({ preserveCompany: true });
+    showPageAlert("info", "Approved validation recipient edit was cancelled.");
+  });
+
+  state.dom.refreshAdminEmailSetupBtn?.addEventListener("click", async () => {
+    await refreshAdminEmailSetupWorkspace({
+      showAlert: true,
+      preserveCompany: true,
+    });
+  });
+
+  window.requestAnimationFrame(() => {
+    updateAdminEmailRecipientSaveButtonState();
   });
 
   // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
@@ -901,15 +1008,15 @@ state.dom.adminTabTenantsBtn?.addEventListener("click", () => {
     clearResetPasswordAlert();
   });
 
-// ADMIN PASSWORD RESET VISIBILITY - STEP 1H
-// Toggle visual masking only. The field remains type="text" to avoid
-// browser password-manager overlays inside the Admin reset modal.
-state.dom.resetPasswordToggleBtn?.addEventListener("click", () => {
-  const isCurrentlyVisible =
-    state.dom.resetPasswordTempInput?.dataset?.passwordVisible === "true";
+  // ADMIN PASSWORD RESET VISIBILITY - STEP 1H
+  // Toggle visual masking only. The field remains type="text" to avoid
+  // browser password-manager overlays inside the Admin reset modal.
+  state.dom.resetPasswordToggleBtn?.addEventListener("click", () => {
+    const isCurrentlyVisible =
+      state.dom.resetPasswordTempInput?.dataset?.passwordVisible === "true";
 
-  setResetPasswordVisibility(!isCurrentlyVisible);
-});
+    setResetPasswordVisibility(!isCurrentlyVisible);
+  });
 
   state.dom.resetPasswordSubmitBtn?.addEventListener("click", async () => {
     await submitPasswordReset();
@@ -1322,6 +1429,9 @@ async function refreshTenantWorkspace() {
     // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
     // Keep the company invite dropdown in sync with active company records.
     populateCompanyUserTenantOptions();
+    // ADMIN EMAIL SETUP - STEP 1D
+    // Keep the Email Setup company dropdown in sync with active company records.
+    populateAdminEmailSetupCompanyOptions();
   } catch (error) {
     console.error("Error loading tenant records:", error);
     state.tenants = [];
@@ -1625,7 +1735,654 @@ function populateCompanyUserTenantOptions() {
 
   updateCompanyUserInviteButtonState();
 }
+// ADMIN EMAIL SETUP - STEP 1D
+// Populate the company dropdown used by Admin Email Setup.
+function populateAdminEmailSetupCompanyOptions() {
+  const select = state.dom.adminEmailSetupCompanyId;
+  if (!select) return;
 
+  const currentValue = String(select.value || "").trim();
+
+  select.innerHTML = `<option value="">Select company</option>`;
+
+  const activeTenants = [...(state.tenants || [])]
+    .filter((tenant) => String(tenant.status || "").toLowerCase() === "active")
+    .sort((a, b) =>
+      String(a.company_name || "").localeCompare(
+        String(b.company_name || ""),
+        undefined,
+        { sensitivity: "base" },
+      ),
+    );
+
+  activeTenants.forEach((tenant) => {
+    const option = document.createElement("option");
+    option.value = tenant.id;
+    option.textContent = `${tenant.company_name || "Unnamed Company"} — ${tenant.tenant_code || "--"}`;
+    select.appendChild(option);
+  });
+
+  const hasCurrentValue = currentValue &&
+    activeTenants.some((tenant) => String(tenant.id || "") === currentValue);
+
+  if (hasCurrentValue) {
+    select.value = currentValue;
+  } else if (activeTenants.length) {
+    select.value = activeTenants[0].id;
+  }
+
+  updateAdminEmailRecipientSaveButtonState();
+}
+
+function getSelectedAdminEmailSetupTenant() {
+  const tenantId = String(state.dom.adminEmailSetupCompanyId?.value || "").trim();
+
+  if (!tenantId) return null;
+
+  return getTenantByTenantId(tenantId);
+}
+
+function normaliseAdminEmailSetupStatus(status = "") {
+  return String(status || "").trim().toLowerCase();
+}
+
+function getAdminEmailSetupStatusBadgeClass(status = "") {
+  const normalisedStatus = normaliseAdminEmailSetupStatus(status);
+
+  if (normalisedStatus === "active" || normalisedStatus === "sent") {
+    return "text-bg-success";
+  }
+
+  if (normalisedStatus === "failed") {
+    return "text-bg-danger";
+  }
+
+  if (normalisedStatus === "pending") {
+    return "text-bg-secondary";
+  }
+
+  return "text-bg-light border text-dark";
+}
+
+function getAdminEmailSetupDisplayStatus(status = "") {
+  const normalisedStatus = normaliseAdminEmailSetupStatus(status);
+
+  if (normalisedStatus === "sent") return "Successful";
+  if (normalisedStatus === "failed") return "Needs Review";
+  if (normalisedStatus === "pending") return "Pending";
+  if (normalisedStatus === "active") return "Active";
+  if (normalisedStatus === "inactive") return "Inactive";
+
+  return String(status || "--").trim() || "--";
+}
+
+function updateAdminEmailSetupSummary() {
+  const recipients = Array.isArray(state.adminEmailSetupRecipients)
+    ? state.adminEmailSetupRecipients
+    : [];
+
+  const logs = Array.isArray(state.adminEmailSetupLogs)
+    ? state.adminEmailSetupLogs
+    : [];
+
+  const activeRecipientCount = recipients.filter(
+    (recipient) => normaliseAdminEmailSetupStatus(recipient.status) === "active",
+  ).length;
+
+  if (state.dom.adminEmailRecipientCountValue) {
+    state.dom.adminEmailRecipientCountValue.textContent = String(recipients.length);
+  }
+
+  if (state.dom.adminEmailActiveRecipientCountValue) {
+    state.dom.adminEmailActiveRecipientCountValue.textContent = String(activeRecipientCount);
+  }
+
+  if (state.dom.adminEmailDeliveryLogCountValue) {
+    state.dom.adminEmailDeliveryLogCountValue.textContent = String(logs.length);
+  }
+
+  if (state.dom.adminEmailLastResultValue) {
+    const latestLog = logs[0] || null;
+
+    state.dom.adminEmailLastResultValue.textContent = latestLog
+      ? getAdminEmailSetupDisplayStatus(latestLog.status)
+      : "--";
+
+    state.dom.adminEmailLastResultValue.className = latestLog
+      ? `summary-tile-value h6 mb-0 ${normaliseAdminEmailSetupStatus(latestLog.status) === "sent"
+        ? "text-success"
+        : normaliseAdminEmailSetupStatus(latestLog.status) === "failed"
+          ? "text-danger"
+          : "text-secondary"
+      }`
+      : "summary-tile-value h6 mb-0";
+  }
+}
+
+function renderAdminEmailRecipients(records = []) {
+  const tbody = state.dom.adminEmailRecipientsTableBody;
+  if (!tbody) return;
+
+  const tenant = getSelectedAdminEmailSetupTenant();
+  const recipients = Array.isArray(records) ? records : [];
+
+  tbody.innerHTML = "";
+
+  if (!recipients.length) {
+    state.dom.adminEmailRecipientsEmptyState?.classList.remove("d-none");
+    state.dom.adminEmailRecipientsTableWrapper?.classList.add("d-none");
+    updateAdminEmailSetupSummary();
+    return;
+  }
+
+  state.dom.adminEmailRecipientsEmptyState?.classList.add("d-none");
+  state.dom.adminEmailRecipientsTableWrapper?.classList.remove("d-none");
+
+  recipients.forEach((recipient) => {
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>
+        <div class="fw-semibold">${escapeHtml(recipient.display_name || "--")}</div>
+        <div class="text-secondary small text-break">${escapeHtml(recipient.recipient_email || "--")}</div>
+      </td>
+
+      <td>
+        <div class="fw-semibold">${escapeHtml(tenant?.company_name || "--")}</div>
+        <div class="text-secondary small">${escapeHtml(tenant?.tenant_code || "--")}</div>
+      </td>
+
+      <td>
+        <span class="badge ${getAdminEmailSetupStatusBadgeClass(recipient.status)}">
+          ${escapeHtml(getAdminEmailSetupDisplayStatus(recipient.status))}
+        </span>
+      </td>
+
+      <td class="text-nowrap">${formatDate(recipient.updated_at || recipient.created_at)}</td>
+
+      <td class="text-center">
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-primary"
+          title="Edit approved recipient"
+          onclick="window.adminEditEmailRecipientRecord('${escapeHtml(recipient.id)}')"
+        >
+          <i class="bi bi-pencil-square"></i>
+        </button>
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+
+  updateAdminEmailSetupSummary();
+}
+
+function renderAdminEmailDeliveryLogs(records = []) {
+  const tbody = state.dom.adminEmailDeliveryLogsTableBody;
+  if (!tbody) return;
+
+  const logs = Array.isArray(records) ? records : [];
+
+  tbody.innerHTML = "";
+
+  if (!logs.length) {
+    state.dom.adminEmailDeliveryLogsEmptyState?.classList.remove("d-none");
+    state.dom.adminEmailDeliveryLogsTableWrapper?.classList.add("d-none");
+    updateAdminEmailSetupSummary();
+    return;
+  }
+
+  state.dom.adminEmailDeliveryLogsEmptyState?.classList.add("d-none");
+  state.dom.adminEmailDeliveryLogsTableWrapper?.classList.remove("d-none");
+
+  logs.forEach((log) => {
+    const sentOrCreatedDate = log.sent_at || log.created_at;
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>
+        <div class="fw-semibold">${escapeHtml(log.recipient_name || "--")}</div>
+        <div class="text-secondary small text-break">${escapeHtml(log.recipient_email || "--")}</div>
+      </td>
+
+      <td>
+        <span class="badge ${getAdminEmailSetupStatusBadgeClass(log.status)}">
+          ${escapeHtml(getAdminEmailSetupDisplayStatus(log.status))}
+        </span>
+      </td>
+
+      <td>${escapeHtml(log.provider_name || "--")}</td>
+
+      <td class="text-nowrap">${formatDate(sentOrCreatedDate)}</td>
+    `;
+
+    tbody.appendChild(row);
+  });
+
+  updateAdminEmailSetupSummary();
+}
+
+function getAdminEmailRecipientById(recipientId = "") {
+  const id = String(recipientId || "").trim();
+
+  if (!id) return null;
+
+  return (state.adminEmailSetupRecipients || []).find(
+    (recipient) => String(recipient.id || "").trim() === id,
+  ) || null;
+}
+
+function updateAdminEmailRecipientSaveButtonState() {
+  const button = state.dom.saveAdminEmailRecipientBtn;
+  if (!button || button.dataset.isLoading === "true") return;
+
+  const tenantId = String(state.dom.adminEmailSetupCompanyId?.value || "").trim();
+  const displayName = String(state.dom.adminEmailRecipientDisplayName?.value || "").trim();
+  const email = String(state.dom.adminEmailRecipientEmail?.value || "").trim();
+  const status = String(state.dom.adminEmailRecipientStatus?.value || "").trim();
+
+  const canSubmit = Boolean(
+    tenantId &&
+    displayName &&
+    isCompanyUserEmailValid(email) &&
+    status,
+  );
+
+  button.disabled = !canSubmit;
+  button.className = canSubmit
+    ? "btn btn-primary dashboard-action-btn"
+    : "btn btn-secondary dashboard-action-btn";
+}
+
+function clearAdminEmailRecipientValidationState() {
+  [
+    state.dom.adminEmailSetupCompanyId,
+    state.dom.adminEmailRecipientDisplayName,
+    state.dom.adminEmailRecipientEmail,
+    state.dom.adminEmailRecipientStatus,
+  ].forEach((field) => {
+    field?.classList.remove("is-invalid");
+  });
+}
+
+function validateAdminEmailRecipientForm() {
+  clearAdminEmailRecipientValidationState();
+
+  const tenantId = String(state.dom.adminEmailSetupCompanyId?.value || "").trim();
+  const displayName = String(state.dom.adminEmailRecipientDisplayName?.value || "").trim();
+  const email = String(state.dom.adminEmailRecipientEmail?.value || "").trim();
+  const status = String(state.dom.adminEmailRecipientStatus?.value || "").trim();
+
+  if (!tenantId) {
+    state.dom.adminEmailSetupCompanyId?.classList.add("is-invalid");
+    showPageAlert("warning", "Select the company before adding an approved validation recipient.");
+    state.dom.adminEmailSetupCompanyId?.focus();
+    return false;
+  }
+
+  if (!displayName) {
+    state.dom.adminEmailRecipientDisplayName?.classList.add("is-invalid");
+    // ADMIN EMAIL SETUP - STEP 1D-2
+    // Recipient Label is the friendly mailbox label HR sees in Email Integration.
+    showPageAlert("warning", "Enter a clear recipient label for the approved validation recipient.");
+    state.dom.adminEmailRecipientDisplayName?.focus();
+    return false;
+  }
+
+  if (!isCompanyUserEmailValid(email)) {
+    state.dom.adminEmailRecipientEmail?.classList.add("is-invalid");
+    showPageAlert("warning", "Enter a valid approved validation recipient email address.");
+    state.dom.adminEmailRecipientEmail?.focus();
+    return false;
+  }
+
+  if (!status) {
+    state.dom.adminEmailRecipientStatus?.classList.add("is-invalid");
+    showPageAlert("warning", "Select the approved validation recipient status.");
+    state.dom.adminEmailRecipientStatus?.focus();
+    return false;
+  }
+
+  return true;
+}
+
+function buildAdminEmailRecipientPayload() {
+  return {
+    tenant_id: String(state.dom.adminEmailSetupCompanyId?.value || "").trim(),
+    display_name: String(state.dom.adminEmailRecipientDisplayName?.value || "").trim(),
+    recipient_email: String(state.dom.adminEmailRecipientEmail?.value || "").trim().toLowerCase(),
+    status: String(state.dom.adminEmailRecipientStatus?.value || "Active").trim(),
+    created_by: state.currentUser?.id || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function setAdminEmailRecipientSaveLoading(isLoading) {
+  const button = state.dom.saveAdminEmailRecipientBtn;
+  if (!button) return;
+
+  button.dataset.isLoading = isLoading ? "true" : "false";
+
+  if (isLoading) {
+    if (!button.dataset.originalHtml) {
+      button.dataset.originalHtml = button.innerHTML;
+    }
+
+    button.disabled = true;
+    button.className = "btn btn-secondary dashboard-action-btn";
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Saving Recipient...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+    state.dom.saveAdminEmailRecipientBtnText =
+      document.getElementById("saveAdminEmailRecipientBtnText");
+  }
+
+  delete button.dataset.isLoading;
+  updateAdminEmailRecipientSaveButtonState();
+}
+
+function resetAdminEmailRecipientForm(options = {}) {
+  const { preserveCompany = false } = options;
+  const selectedCompanyId = String(state.dom.adminEmailSetupCompanyId?.value || "").trim();
+
+  state.currentEditingAdminEmailRecipient = null;
+
+  if (state.dom.editingAdminEmailRecipientId) {
+    state.dom.editingAdminEmailRecipientId.value = "";
+  }
+
+  if (state.dom.adminEmailRecipientDisplayName) {
+    state.dom.adminEmailRecipientDisplayName.value = "";
+  }
+
+  if (state.dom.adminEmailRecipientEmail) {
+    state.dom.adminEmailRecipientEmail.value = "";
+  }
+
+  if (state.dom.adminEmailRecipientStatus) {
+    state.dom.adminEmailRecipientStatus.value = "Active";
+  }
+
+  if (!preserveCompany && state.dom.adminEmailSetupCompanyId) {
+    state.dom.adminEmailSetupCompanyId.value = "";
+  }
+
+  if (preserveCompany && selectedCompanyId && state.dom.adminEmailSetupCompanyId) {
+    state.dom.adminEmailSetupCompanyId.value = selectedCompanyId;
+  }
+
+  state.dom.cancelAdminEmailRecipientEditBtn?.classList.add("d-none");
+
+  if (state.dom.saveAdminEmailRecipientBtn) {
+    state.dom.saveAdminEmailRecipientBtn.innerHTML = `
+      <i class="bi bi-save me-2"></i>
+      <span id="saveAdminEmailRecipientBtnText">Add Approved Recipient</span>
+    `;
+    state.dom.saveAdminEmailRecipientBtnText =
+      document.getElementById("saveAdminEmailRecipientBtnText");
+  }
+
+  clearAdminEmailRecipientValidationState();
+  updateAdminEmailRecipientSaveButtonState();
+}
+
+async function refreshAdminEmailSetupWorkspace(options = {}) {
+  const { showAlert = false, preserveCompany = false } = options;
+  const selectedCompanyIdBeforeRefresh = String(
+    state.dom.adminEmailSetupCompanyId?.value || "",
+  ).trim();
+
+  try {
+    setAdminActionButtonLoading(
+      state.dom.refreshAdminEmailSetupBtn,
+      true,
+      "Refreshing Email Setup...",
+    );
+
+    populateAdminEmailSetupCompanyOptions();
+
+    if (
+      preserveCompany &&
+      selectedCompanyIdBeforeRefresh &&
+      state.dom.adminEmailSetupCompanyId
+    ) {
+      const stillExists = Array.from(state.dom.adminEmailSetupCompanyId.options)
+        .some((option) => option.value === selectedCompanyIdBeforeRefresh);
+
+      if (stillExists) {
+        state.dom.adminEmailSetupCompanyId.value = selectedCompanyIdBeforeRefresh;
+      }
+    }
+
+    const tenantId = String(state.dom.adminEmailSetupCompanyId?.value || "").trim();
+
+    if (!tenantId) {
+      state.adminEmailSetupRecipients = [];
+      state.adminEmailSetupLogs = [];
+      renderAdminEmailRecipients([]);
+      renderAdminEmailDeliveryLogs([]);
+
+      if (showAlert) {
+        showPageAlert("warning", "Create or activate a company before configuring Email Setup.");
+      }
+
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+
+    const [recipientsResponse, logsResponse] = await Promise.all([
+      supabase
+        .from("email_integration_test_recipients")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("updated_at", { ascending: false }),
+
+      supabase
+        .from("email_delivery_logs")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .limit(25),
+    ]);
+
+    if (recipientsResponse.error) throw recipientsResponse.error;
+    if (logsResponse.error) throw logsResponse.error;
+
+    state.adminEmailSetupRecipients = Array.isArray(recipientsResponse.data)
+      ? recipientsResponse.data
+      : [];
+
+    state.adminEmailSetupLogs = Array.isArray(logsResponse.data)
+      ? logsResponse.data
+      : [];
+
+    renderAdminEmailRecipients(state.adminEmailSetupRecipients);
+    renderAdminEmailDeliveryLogs(state.adminEmailSetupLogs);
+    updateAdminEmailRecipientSaveButtonState();
+
+    if (showAlert) {
+      showPageAlert("success", "Email Setup was refreshed successfully.");
+    }
+  } catch (error) {
+    console.error("Error refreshing Admin Email Setup:", error);
+
+    state.adminEmailSetupRecipients = [];
+    state.adminEmailSetupLogs = [];
+    renderAdminEmailRecipients([]);
+    renderAdminEmailDeliveryLogs([]);
+
+    showPageAlert(
+      "danger",
+      error.message || "Email Setup could not be loaded.",
+    );
+  } finally {
+    setAdminActionButtonLoading(state.dom.refreshAdminEmailSetupBtn, false);
+  }
+}
+
+function startAdminEmailRecipientEdit(recipientId) {
+  const recipient = getAdminEmailRecipientById(recipientId);
+
+  if (!recipient) {
+    showPageAlert(
+      "warning",
+      "The selected approved validation recipient could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  state.currentEditingAdminEmailRecipient = recipient;
+
+  openAdminEmailSetupPanel();
+
+  if (state.dom.editingAdminEmailRecipientId) {
+    state.dom.editingAdminEmailRecipientId.value = recipient.id || "";
+  }
+
+  if (state.dom.adminEmailSetupCompanyId) {
+    state.dom.adminEmailSetupCompanyId.value = recipient.tenant_id || "";
+  }
+
+  if (state.dom.adminEmailRecipientDisplayName) {
+    state.dom.adminEmailRecipientDisplayName.value = recipient.display_name || "";
+  }
+
+  if (state.dom.adminEmailRecipientEmail) {
+    state.dom.adminEmailRecipientEmail.value = recipient.recipient_email || "";
+  }
+
+  if (state.dom.adminEmailRecipientStatus) {
+    state.dom.adminEmailRecipientStatus.value = recipient.status || "Active";
+  }
+
+  state.dom.cancelAdminEmailRecipientEditBtn?.classList.remove("d-none");
+
+  if (state.dom.saveAdminEmailRecipientBtn) {
+    state.dom.saveAdminEmailRecipientBtn.innerHTML = `
+      <i class="bi bi-save me-2"></i>
+      <span id="saveAdminEmailRecipientBtnText">Update Approved Recipient</span>
+    `;
+    state.dom.saveAdminEmailRecipientBtnText =
+      document.getElementById("saveAdminEmailRecipientBtnText");
+  }
+
+  updateAdminEmailRecipientSaveButtonState();
+
+  focusAdminFieldWithoutJump(state.dom.adminEmailRecipientDisplayName);
+  scrollToAdminOpenedPanel(
+    state.dom.toggleAdminEmailSetupCardBtn,
+    state.dom.adminEmailSetupCollapse,
+    150,
+  );
+}
+
+function openAdminEmailSetupPanel() {
+  setAdminDashboardCardExpanded(
+    state.dom.toggleAdminEmailSetupCardBtn,
+    state.dom.adminEmailSetupCollapse,
+    true,
+  );
+}
+
+async function saveAdminEmailRecipient() {
+  if (!validateAdminEmailRecipientForm()) {
+    updateAdminEmailRecipientSaveButtonState();
+    return;
+  }
+
+  const payload = buildAdminEmailRecipientPayload();
+  const editingId = String(
+    state.currentEditingAdminEmailRecipient?.id ||
+    state.dom.editingAdminEmailRecipientId?.value ||
+    "",
+  ).trim();
+
+  try {
+    setAdminEmailRecipientSaveLoading(true);
+
+    const supabase = getSupabaseClient();
+
+    let response;
+
+    if (editingId) {
+      const updatePayload = { ...payload };
+      delete updatePayload.created_by;
+
+      response = await supabase
+        .from("email_integration_test_recipients")
+        .update(updatePayload)
+        .eq("id", editingId)
+        .select("*")
+        .maybeSingle();
+    } else {
+      response = await supabase
+        .from("email_integration_test_recipients")
+        .insert([payload])
+        .select("*")
+        .maybeSingle();
+    }
+
+    if (response.error) throw response.error;
+
+    await refreshAdminEmailSetupWorkspace({ preserveCompany: true });
+
+    showPageAlert(
+      "success",
+      `Approved validation recipient was ${editingId ? "updated" : "added"} successfully.`,
+    );
+
+    showDashboardToast(
+      "success",
+      editingId ? "Recipient updated" : "Recipient added",
+      "HR Email Integration will now reflect the approved recipient for the selected company.",
+    );
+
+    resetAdminEmailRecipientForm({ preserveCompany: true });
+
+    openAdminEmailSetupPanel();
+
+    window.requestAnimationFrame(() => {
+      scrollToAdminDashboardTarget(
+        state.dom.adminEmailRecipientsHeader ||
+        state.dom.adminEmailRecipientsTableWrapper ||
+        state.dom.adminEmailSetupCollapse,
+        96,
+      );
+    });
+  } catch (error) {
+    console.error("Error saving approved validation recipient:", error);
+
+    const message = String(error.message || "").toLowerCase();
+
+    if (
+      message.includes("duplicate key value") ||
+      message.includes("recipient_email") ||
+      message.includes("email_integration_test_recipients")
+    ) {
+      showPageAlert(
+        "warning",
+        "This approved validation recipient email already exists. Edit the existing recipient instead.",
+      );
+      return;
+    }
+
+    showPageAlert(
+      "danger",
+      error.message || "Approved validation recipient could not be saved.",
+    );
+  } finally {
+    setAdminEmailRecipientSaveLoading(false);
+  }
+}
 // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
 // Email validation is kept lightweight and client-side only.
 // The Edge Function remains the authoritative security boundary.
@@ -2774,14 +3531,14 @@ function setResetPasswordVisibility(isVisible = false) {
 function clearResetPasswordModal() {
   state.currentResetTarget = null;
 
-// ADMIN PASSWORD RESET VISIBILITY - STEP 1H
-// Clear the temporary password and return the field to masked display.
-// Do not switch back to type="password"; that reopens browser password-manager prompts.
-if (state.dom.resetPasswordTempInput) {
-  state.dom.resetPasswordTempInput.value = "";
-}
+  // ADMIN PASSWORD RESET VISIBILITY - STEP 1H
+  // Clear the temporary password and return the field to masked display.
+  // Do not switch back to type="password"; that reopens browser password-manager prompts.
+  if (state.dom.resetPasswordTempInput) {
+    state.dom.resetPasswordTempInput.value = "";
+  }
 
-setResetPasswordVisibility(false);
+  setResetPasswordVisibility(false);
 
   clearResetPasswordAlert();
   updateResetPasswordSubmitButtonState();
@@ -2819,16 +3576,16 @@ function openResetPasswordModal(profileId) {
   const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   modal.show();
 
-// ADMIN PASSWORD RESET VISIBILITY - STEP 1H
-// Ensure every fresh modal open starts masked, then focus the input.
-modalEl.addEventListener(
-  "shown.bs.modal",
-  () => {
-    setResetPasswordVisibility(false);
-    state.dom.resetPasswordTempInput?.focus();
-  },
-  { once: true },
-);
+  // ADMIN PASSWORD RESET VISIBILITY - STEP 1H
+  // Ensure every fresh modal open starts masked, then focus the input.
+  modalEl.addEventListener(
+    "shown.bs.modal",
+    () => {
+      setResetPasswordVisibility(false);
+      state.dom.resetPasswordTempInput?.focus();
+    },
+    { once: true },
+  );
 }
 
 async function submitPasswordReset() {

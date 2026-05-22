@@ -201,24 +201,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     // so long school/course suggestion lists do not show a heavy scrollbar.
     bindEducationSuggestionPanels();
 
-// MANAGE ORGANIZATION CARD - STEP 3
-// Load the single organization settings record after HR access is confirmed.
-await refreshOrganizationSettingsWorkspace();
+    // MANAGE ORGANIZATION CARD - STEP 3
+    // Load the single organization settings record after HR access is confirmed.
+    await refreshOrganizationSettingsWorkspace();
 
-// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
-// Organization Settings are now loaded, so apply read-only controls for
-// Payroll, Auditor, QA, and custom HR-routed roles.
-applyHrOrganizationSetupAccessControls();
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+    // Organization Settings are now loaded, so apply read-only controls for
+    // Payroll, Auditor, QA, and custom HR-routed roles.
+    applyHrOrganizationSetupAccessControls();
 
-// ORGANIZATION HR SETUP VALUES - STEP 3
-// Load HR-managed Departments and Job Titles before employee/payroll forms
-// need dropdown values. This is read-only for now.
-await refreshOrganizationHrSetupValues();
+    // ORGANIZATION HR SETUP VALUES - STEP 3
+    // Load HR-managed Departments and Job Titles before employee/payroll forms
+    // need dropdown values. This is read-only for now.
+    await refreshOrganizationHrSetupValues();
 
-// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
-// Department and Job Title records are now loaded/rendered, so re-apply
-// Organization Setup restrictions after the setup tables are rebuilt.
-applyHrOrganizationSetupAccessControls();
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+    // Department and Job Title records are now loaded/rendered, so re-apply
+    // Organization Setup restrictions after the setup tables are rebuilt.
+    applyHrOrganizationSetupAccessControls();
 
     // DESCRIPTION ITEM 3 - STEP 2A-4
     // Load controlled Payroll Grade / Level values before Payroll Master Data,
@@ -244,6 +244,12 @@ applyHrOrganizationSetupAccessControls();
     // are available, because overrides are linked to Payroll Master Data.
     await refreshPayrollEmployeeOverrideWorkspace();
 
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+    // Payroll Setup cards are now loaded/rendered, so lock setup maintenance
+    // for Auditor, QA, and custom HR-routed roles.
+    // Payroll and Payroll Manager remain allowed to maintain Payroll Setup.
+    applyHrPayrollSetupAccessControls();
+
     await refreshPayrollWorkspace();
 
     // PAYROLL EMAIL STATUS - STEP 2F-2B
@@ -251,6 +257,11 @@ applyHrOrganizationSetupAccessControls();
     // This fixes the parked issue where the badges stayed at 0 until HR
     // manually clicked Refresh Status.
     await refreshPayslipEmailLogs();
+
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+    // Payroll Operations are now loaded/rendered, so lock create/edit/export/send
+    // actions for Auditor, QA, and custom HR-routed roles.
+    applyHrPayrollOperationsAccessControls();
 
     // BANK DIRECTORY - STEP 7A
     // Load saved banks from Supabase so Bank Directory records survive page refresh.
@@ -261,6 +272,12 @@ applyHrOrganizationSetupAccessControls();
     // are already available, so the Employee Bank Records table is populated
     // when HR opens the payroll workspace.
     await refreshEmployeeBankDetailsWorkspace();
+
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+    // Payment Setup is now loaded/rendered, so lock Bank Directory and Employee
+    // Bank Details maintenance for Auditor, QA, and custom HR-routed roles.
+    // HR/Payroll roles remain allowed to maintain payment setup.
+    applyHrPaymentSetupAccessControls();
 
     // HRP-85 - STEP 1E
     // Load approved Bex recipients and recent delivery logs for the
@@ -664,27 +681,39 @@ const state = {
   dom: {},
 };
 
-const PAYROLL_MASTER_MAINTENANCE_ROLES = new Set([
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+// Payroll Setup maintenance is controlled by the signed-in user's business role,
+// not profiles.role alone. profiles.role may be "hr" temporarily for Payroll,
+// Auditor, and QA until dedicated dashboards exist.
+const HR_PAYROLL_SETUP_MAINTENANCE_ROLES = new Set([
   "hr",
+  "hr_manager",
+  "payroll",
+  "payroll_manager",
   "admin",
+  "system_admin",
 ]);
 
 function getCurrentUserRoleValue() {
-  // DESCRIPTION ITEM 7 - STEP 7A
-  // Normalise the signed-in user's role so Payroll Master maintenance
-  // can be restricted consistently across save, edit, and table actions.
-  return String(
-    state.currentProfile?.role ||
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // Keep this helper for older checks, but normalise the profile fallback only.
+  // New role-sensitive checks should prefer getCurrentHrBusinessRole().
+  return normaliseHrBusinessRole(
     state.currentProfile?.system_role ||
     state.currentProfile?.user_role ||
+    state.currentProfile?.role ||
     "",
-  )
-    .trim()
-    .toLowerCase();
+  );
+}
+
+function canCurrentUserMaintainPayrollSetupData() {
+  return HR_PAYROLL_SETUP_MAINTENANCE_ROLES.has(getCurrentHrBusinessRole());
 }
 
 function canCurrentUserMaintainPayrollMasterData() {
-  return PAYROLL_MASTER_MAINTENANCE_ROLES.has(getCurrentUserRoleValue());
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // Existing Payroll Master checks now follow the full Payroll Setup rule.
+  return canCurrentUserMaintainPayrollSetupData();
 }
 
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
@@ -892,6 +921,67 @@ function setHrControlsDisabled(controls = [], isDisabled = true) {
   });
 }
 
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1C
+// Add Read Only badges inside the expanded card content only.
+// Do not place badges beside/under collapsed card headings because that makes
+// collapsed Setup cards look awkward and inconsistent with Allowance Components.
+function setHrSetupCardReadOnlyBadge(collapsePanel, badgeId, label = "Read Only") {
+  if (!collapsePanel || !badgeId) return;
+
+  const badgeRowId = `${badgeId}Row`;
+
+  const contentHost =
+    collapsePanel.firstElementChild?.classList?.contains("card-body")
+      ? collapsePanel.firstElementChild
+      : collapsePanel.querySelector(".card-body") || collapsePanel;
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1C
+  // Clean up the earlier misplaced badge if it was injected outside the
+  // collapsible panel/header content.
+  const misplacedBadge = document.getElementById(badgeId);
+  if (misplacedBadge && !collapsePanel.contains(misplacedBadge)) {
+    misplacedBadge.remove();
+  }
+
+  const misplacedBadgeRow = document.getElementById(badgeRowId);
+  if (misplacedBadgeRow && !collapsePanel.contains(misplacedBadgeRow)) {
+    misplacedBadgeRow.remove();
+  }
+
+  let badgeRow = document.getElementById(badgeRowId);
+
+  if (!badgeRow) {
+    badgeRow = document.createElement("div");
+    badgeRow.id = badgeRowId;
+    badgeRow.className =
+      "d-flex justify-content-end align-items-center gap-2 mb-3";
+
+    contentHost.insertBefore(badgeRow, contentHost.firstChild);
+  }
+
+  let badge = document.getElementById(badgeId);
+
+  if (!badge) {
+    badge = document.createElement("span");
+    badge.id = badgeId;
+  }
+
+  badge.textContent = label;
+  badge.className = "badge rounded-pill text-bg-warning border px-3 py-2";
+
+  badgeRow.appendChild(badge);
+}
+
+function removeHrSetupCardReadOnlyBadge(badgeId) {
+  if (!badgeId) return;
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1C
+  // Remove both the injected row and badge when HR/Payroll roles have
+  // maintenance access.
+  document.getElementById(`${badgeId}Row`)?.remove();
+  document.getElementById(badgeId)?.remove();
+}
+
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
 // Lock Organization Setup maintenance for Payroll, Auditor, QA, and custom roles.
 // This is UI-level protection; backend/RLS still remains the authority.
@@ -970,17 +1060,444 @@ function applyHrCommunicationSetupAccessControls() {
   );
 }
 
-function showPayrollMasterAccessDeniedMessage() {
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+// Shared warning for Payroll Setup cards.
+function showHrPayrollSetupAccessDeniedMessage(areaLabel = "Payroll Setup") {
   showPageAlert(
     "warning",
-    "Payroll Master Data can only be maintained by authorised HR/payroll roles.",
+    `${areaLabel} is read-only for this role. Use an HR, HR Manager, Payroll, or Payroll Manager account to maintain payroll setup records.`,
   );
 
   showDashboardToast(
     "warning",
-    "Payroll Master restricted",
-    "You can review payroll master records, but you are not authorised to create or maintain salary setup data.",
+    "Payroll Setup is view-only",
+    `${areaLabel} can be reviewed, but not changed by this role.`,
   );
+}
+
+function showPayrollMasterAccessDeniedMessage() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // Keep older Payroll Master calls working through the new shared message.
+  showHrPayrollSetupAccessDeniedMessage("Payroll Master Data");
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+// Lock Payroll Setup maintenance for Auditor, QA, and custom HR-routed roles.
+// Payroll/Payroll Manager are allowed here because payroll setup is their work area.
+function applyHrPayrollSetupAccessControls() {
+  if (canCurrentUserMaintainPayrollSetupData()) {
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1B
+    // Remove injected read-only badges for HR/Payroll maintenance roles.
+    removeHrSetupCardReadOnlyBadge("payrollStatutoryReadOnlyBadge");
+    removeHrSetupCardReadOnlyBadge("payrollOtherDeductionReadOnlyBadge");
+    removeHrSetupCardReadOnlyBadge("payrollEmployeeOverrideReadOnlyBadge");
+
+    applyPayrollMasterAccessControls();
+    return;
+  }
+
+  setHrControlsDisabled(
+    [
+      state.dom.payrollMasterEmployeeId,
+      state.dom.payrollMasterGradeLevel,
+      state.dom.payrollMasterBasicSalary,
+      state.dom.payrollMasterEffectiveDate,
+      state.dom.payrollMasterPayCycle,
+      state.dom.payrollMasterStatus,
+      state.dom.payrollMasterNotes,
+      state.dom.savePayrollMasterBtn,
+      state.dom.resetPayrollMasterFormBtn,
+      state.dom.cancelPayrollMasterEditBtn,
+
+      state.dom.payrollAllowanceMasterRecordId,
+      state.dom.payrollAllowanceType,
+      state.dom.payrollAllowanceAmount,
+      state.dom.payrollAllowanceEffectiveDate,
+      state.dom.payrollAllowanceStatus,
+      state.dom.payrollAllowanceNotes,
+      state.dom.savePayrollAllowanceBtn,
+      state.dom.resetPayrollAllowanceFormBtn,
+      state.dom.cancelPayrollAllowanceEditBtn,
+
+      state.dom.payrollStatutoryMasterRecordId,
+      state.dom.payrollStatutoryDeductionType,
+      state.dom.payrollStatutoryCalculationMethod,
+      state.dom.payrollStatutoryDeductionValue,
+      state.dom.payrollStatutoryEffectiveDate,
+      state.dom.payrollStatutoryConfigSource,
+      state.dom.payrollStatutoryStatus,
+      state.dom.savePayrollStatutoryBtn,
+      state.dom.resetPayrollStatutoryFormBtn,
+      state.dom.cancelPayrollStatutoryEditBtn,
+
+      state.dom.payrollOtherDeductionMasterRecordId,
+      state.dom.payrollOtherDeductionType,
+      state.dom.payrollOtherDeductionAmount,
+      state.dom.payrollOtherDeductionDurationMonths,
+      state.dom.payrollOtherDeductionStartDate,
+      state.dom.payrollOtherDeductionReferenceNumber,
+      state.dom.payrollOtherDeductionStatus,
+      state.dom.payrollOtherDeductionNotes,
+      state.dom.savePayrollOtherDeductionBtn,
+      state.dom.resetPayrollOtherDeductionFormBtn,
+      state.dom.cancelPayrollOtherDeductionEditBtn,
+
+      state.dom.payrollEmployeeOverrideMasterRecordId,
+      state.dom.payrollEmployeeOverrideCategory,
+      state.dom.payrollEmployeeOverrideElement,
+      state.dom.payrollEmployeeOverrideMethod,
+      state.dom.payrollEmployeeOverrideOriginalValue,
+      state.dom.payrollEmployeeOverrideValue,
+      state.dom.payrollEmployeeOverrideEffectiveDate,
+      state.dom.payrollEmployeeOverrideEndDate,
+      state.dom.payrollEmployeeOverrideStatus,
+      state.dom.payrollEmployeeOverrideApprovalReference,
+      state.dom.payrollEmployeeOverrideRuleSnapshot,
+      state.dom.payrollEmployeeOverrideReason,
+      state.dom.payrollEmployeeOverrideNotes,
+      state.dom.savePayrollEmployeeOverrideBtn,
+      state.dom.resetPayrollEmployeeOverrideFormBtn,
+      state.dom.cancelPayrollEmployeeOverrideEditBtn,
+    ],
+    true,
+  );
+
+  if (state.dom.payrollMasterFormModeBadge) {
+    state.dom.payrollMasterFormModeBadge.textContent = "Read Only";
+    state.dom.payrollMasterFormModeBadge.className =
+      "badge rounded-pill text-bg-warning border px-3 py-2";
+  }
+
+  if (state.dom.payrollAllowanceFormModeBadge) {
+    state.dom.payrollAllowanceFormModeBadge.textContent = "Read Only";
+    state.dom.payrollAllowanceFormModeBadge.className =
+      "badge rounded-pill text-bg-warning border px-3 py-2";
+  }
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1B
+  // These payroll setup cards do not have existing form-mode badges in the HTML,
+  // so inject a small header badge to make the read-only state obvious.
+  setHrSetupCardReadOnlyBadge(
+    state.dom.payrollStatutoryCardCollapse,
+    "payrollStatutoryReadOnlyBadge",
+    "Read Only",
+  );
+
+  setHrSetupCardReadOnlyBadge(
+    state.dom.payrollOtherDeductionCardCollapse,
+    "payrollOtherDeductionReadOnlyBadge",
+    "Read Only",
+  );
+
+  setHrSetupCardReadOnlyBadge(
+    state.dom.payrollEmployeeOverrideCardCollapse,
+    "payrollEmployeeOverrideReadOnlyBadge",
+    "Read Only",
+  );
+
+  if (state.dom.savePayrollMasterBtn) {
+    state.dom.savePayrollMasterBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="savePayrollMasterBtnText">Payroll Master Read Only</span>
+    `;
+    state.dom.savePayrollMasterBtnText =
+      document.getElementById("savePayrollMasterBtnText");
+  }
+
+  if (state.dom.savePayrollAllowanceBtn) {
+    state.dom.savePayrollAllowanceBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="savePayrollAllowanceBtnText">Allowances Read Only</span>
+    `;
+    state.dom.savePayrollAllowanceBtnText =
+      document.getElementById("savePayrollAllowanceBtnText");
+  }
+
+  if (state.dom.savePayrollStatutoryBtn) {
+    state.dom.savePayrollStatutoryBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="savePayrollStatutoryBtnText">Statutory Deductions Read Only</span>
+    `;
+    state.dom.savePayrollStatutoryBtnText =
+      document.getElementById("savePayrollStatutoryBtnText");
+  }
+
+  if (state.dom.savePayrollOtherDeductionBtn) {
+    state.dom.savePayrollOtherDeductionBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="savePayrollOtherDeductionBtnText">Other Deductions Read Only</span>
+    `;
+    state.dom.savePayrollOtherDeductionBtnText =
+      document.getElementById("savePayrollOtherDeductionBtnText");
+  }
+
+  if (state.dom.savePayrollEmployeeOverrideBtn) {
+    state.dom.savePayrollEmployeeOverrideBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="savePayrollEmployeeOverrideBtnText">Employee Overrides Read Only</span>
+    `;
+    state.dom.savePayrollEmployeeOverrideBtnText =
+      document.getElementById("savePayrollEmployeeOverrideBtnText");
+  }
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+// Payment Setup controls Bank Directory and Employee Bank Details.
+// HR and Payroll roles can maintain these records because they support payroll
+// payment readiness and CSV export. Auditor, QA, and unknown/custom roles
+// may review only.
+const HR_PAYMENT_SETUP_MAINTENANCE_ROLES = new Set([
+  "hr",
+  "hr_manager",
+  "payroll",
+  "payroll_manager",
+  "admin",
+  "system_admin",
+]);
+
+function canCurrentUserMaintainPaymentSetupData() {
+  return HR_PAYMENT_SETUP_MAINTENANCE_ROLES.has(getCurrentHrBusinessRole());
+}
+
+function showHrPaymentSetupAccessDeniedMessage(areaLabel = "Payment Setup") {
+  showPageAlert(
+    "warning",
+    `${areaLabel} is read-only for this role. Use an HR, HR Manager, Payroll, or Payroll Manager account to maintain payment setup records.`,
+  );
+
+  showDashboardToast(
+    "warning",
+    "Payment Setup is view-only",
+    `${areaLabel} can be reviewed, but not changed by this role.`,
+  );
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+// Lock Payment Setup for Auditor, QA, and custom HR-routed roles.
+// This is UI-level protection; guarded save/edit paths below enforce the
+// same rule if a disabled button is bypassed.
+function applyHrPaymentSetupAccessControls() {
+  if (canCurrentUserMaintainPaymentSetupData()) {
+    removeHrSetupCardReadOnlyBadge("bankDirectoryReadOnlyBadge");
+    removeHrSetupCardReadOnlyBadge("employeeBankDetailsReadOnlyBadge");
+    return;
+  }
+
+  setHrControlsDisabled(
+    [
+      state.dom.bankName,
+      state.dom.bankCode,
+      state.dom.bankStatus,
+      state.dom.saveBankDirectoryBtn,
+      state.dom.cancelBankDirectoryEditBtn,
+
+      state.dom.employeeBankEmployeeId,
+      state.dom.employeeBankBankId,
+      state.dom.employeeBankCode,
+      state.dom.employeeBankAccountNumber,
+      state.dom.employeeBankAccountName,
+      state.dom.employeeBankStatus,
+      state.dom.saveEmployeeBankDetailsBtn,
+      state.dom.cancelEmployeeBankDetailsEditBtn,
+    ],
+    true,
+  );
+
+  setHrSetupCardReadOnlyBadge(
+    state.dom.bankDirectoryCardCollapse,
+    "bankDirectoryReadOnlyBadge",
+    "Read Only",
+  );
+
+  setHrSetupCardReadOnlyBadge(
+    state.dom.employeeBankDetailsCardCollapse,
+    "employeeBankDetailsReadOnlyBadge",
+    "Read Only",
+  );
+
+  if (state.dom.saveBankDirectoryBtn) {
+    state.dom.saveBankDirectoryBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="bankDirectorySubmitLabel">Bank Directory Read Only</span>
+    `;
+    state.dom.bankDirectorySubmitLabel =
+      document.getElementById("bankDirectorySubmitLabel");
+  }
+
+  if (state.dom.saveEmployeeBankDetailsBtn) {
+    state.dom.saveEmployeeBankDetailsBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="employeeBankDetailsSubmitLabel">Employee Bank Details Read Only</span>
+    `;
+    state.dom.employeeBankDetailsSubmitLabel =
+      document.getElementById("employeeBankDetailsSubmitLabel");
+  }
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+// Payroll Operations controls payroll creation, batch payroll, CSV export,
+// payslip email delivery, and payroll record maintenance.
+// HR and Payroll roles can maintain operations. Auditor, QA, and unknown/custom
+// HR-routed roles may review only.
+const HR_PAYROLL_OPERATIONS_MAINTENANCE_ROLES = new Set([
+  "hr",
+  "hr_manager",
+  "payroll",
+  "payroll_manager",
+  "admin",
+  "system_admin",
+]);
+
+function canCurrentUserMaintainPayrollOperationsData() {
+  return HR_PAYROLL_OPERATIONS_MAINTENANCE_ROLES.has(getCurrentHrBusinessRole());
+}
+
+function showHrPayrollOperationsAccessDeniedMessage(areaLabel = "Payroll Operations") {
+  showPageAlert(
+    "warning",
+    `${areaLabel} is read-only for this role. Use an HR, HR Manager, Payroll, or Payroll Manager account to create, edit, export, or send payroll records.`,
+  );
+
+  showDashboardToast(
+    "warning",
+    "Payroll Operations is view-only",
+    `${areaLabel} can be reviewed, but not changed by this role.`,
+  );
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+// Lock Payroll Operations for Auditor, QA, and custom HR-routed roles.
+// Review/search/refresh/payslip preview remain available.
+function applyHrPayrollOperationsAccessControls() {
+  if (canCurrentUserMaintainPayrollOperationsData()) {
+    removeHrSetupCardReadOnlyBadge("payrollOperationsReadOnlyBadge");
+    return;
+  }
+
+  state.selectedEmployeesForPayroll.clear();
+  state.batchPayrollPreparedRows = [];
+  state.selectedPayrollRecordIdsForPayslipEmail.clear();
+
+  setHrControlsDisabled(
+    [
+      state.dom.runPayrollActionBtn,
+      state.dom.continueRunPayrollBtn,
+
+      state.dom.payrollEmployeeId,
+      state.dom.payrollPayCycle,
+      state.dom.payrollPayDate,
+      state.dom.payrollEmployeeGroup,
+      state.dom.payrollModel,
+      state.dom.regularIncrementPercent,
+      state.dom.regularIncrementAmount,
+      state.dom.regularMeritIncrement,
+      state.dom.regularNewBaseSalary,
+      state.dom.regularBasicPercent,
+      state.dom.regularHousingPercent,
+      state.dom.regularTransportPercent,
+      state.dom.regularUtilityPercent,
+      state.dom.regularOtherAllowancePercent,
+      state.dom.regularBht,
+      state.dom.regularNetSalary,
+      state.dom.regularMonthlySalaryPlusLogistics,
+      state.dom.payrollBaseSalary,
+      state.dom.payrollBasicPay,
+      state.dom.payrollHousingAllowance,
+      state.dom.payrollTransportAllowance,
+      state.dom.payrollUtilityAllowance,
+      state.dom.payrollMedicalAllowance,
+      state.dom.payrollOtherAllowance,
+      state.dom.payrollBonus,
+      state.dom.payrollOvertime,
+      state.dom.payrollLogisticsAllowance,
+      state.dom.payrollDataAirtimeAllowance,
+      state.dom.payrollGrossPay,
+      state.dom.payrollPayeTax,
+      state.dom.payrollWhtTax,
+      state.dom.payrollEmployeePension,
+      state.dom.payrollEmployerPension,
+      state.dom.payrollOtherDeductions,
+      state.dom.payrollTotalDeductions,
+      state.dom.payrollNetPay,
+      state.dom.payrollCurrency,
+      state.dom.payrollStatus,
+      state.dom.payrollIsFinalised,
+      state.dom.payrollNotes,
+      state.dom.savePayrollBtn,
+      state.dom.topSubmitPayrollBtn,
+      state.dom.resetPayrollFormBtn,
+      state.dom.cancelPayrollEditBtn,
+
+      state.dom.batchPayrollCsvFile,
+      state.dom.importBatchPayrollCsvBtn,
+      state.dom.clearBatchPayrollCsvBtn,
+      state.dom.downloadBatchPayrollCsvTemplateBtn,
+      state.dom.batchPayrollPayCycle,
+      state.dom.batchPayrollPayDate,
+      state.dom.submitBatchPayrollBtn,
+
+      state.dom.exportPayrollPayCycle,
+      state.dom.exportPayrollCsvBtn,
+      state.dom.sendPayslipsEmailBtn,
+      state.dom.selectAllEmployeesForPayroll,
+    ],
+    true,
+  );
+
+  if (state.dom.payrollFormModeBadge) {
+    state.dom.payrollFormModeBadge.textContent = "Read Only";
+    state.dom.payrollFormModeBadge.className =
+      "badge rounded-pill text-bg-warning border px-3 py-2";
+  }
+
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "This role can review payroll records and payslip email status, but cannot create, edit, export, or send payroll.";
+  }
+
+  if (state.dom.savePayrollBtn) {
+    state.dom.savePayrollBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="savePayrollBtnText">Payroll Operations Read Only</span>
+    `;
+    state.dom.savePayrollBtnText = document.getElementById("savePayrollBtnText");
+  }
+
+  if (state.dom.topSubmitPayrollBtn) {
+    state.dom.topSubmitPayrollBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      Submit Payroll Read Only
+    `;
+  }
+
+  if (state.dom.submitBatchPayrollBtn) {
+    state.dom.submitBatchPayrollBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      Submit Batch Read Only
+    `;
+  }
+
+  if (state.dom.exportPayrollCsvBtn) {
+    state.dom.exportPayrollCsvBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      Export CSV Read Only
+    `;
+  }
+
+  if (state.dom.sendPayslipsEmailBtn) {
+    state.dom.sendPayslipsEmailBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      Send Payslips Read Only
+    `;
+  }
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1 BADGE CLEANUP
+  // Create Payroll Record already has payrollFormModeBadge.
+  // Do not inject a second Read Only badge into the same card.
+  removeHrSetupCardReadOnlyBadge("payrollOperationsReadOnlyBadge");
+
+  syncSelectAllEmployeesForPayrollCheckbox();
+  updateSelectedPayslipRecordsSummary();
 }
 
 function setPayrollMasterMaintenanceFieldsDisabled(isDisabled) {
@@ -3059,9 +3576,27 @@ async function refreshHrp85EmailIntegrationWorkspace() {
 // Send is enabled from recipient + subject only because the validation
 // email body is fixed and controlled by the system.
 function updateHrp85SendTestEmailButtonState() {
-  const canSend = Boolean(
-    String(state.dom.hrp85TestRecipientSelect?.value || "").trim() &&
+  const select = state.dom.hrp85TestRecipientSelect;
+  const selectedOption = select?.selectedOptions?.[0];
+
+  // HR EMAIL INTEGRATION UX - STEP 1E
+  // The send button must stay grey when no approved recipient is selected.
+  // This also prevents a stale browser-restored value from making the action
+  // look available when the dropdown is effectively empty.
+  const hasApprovedRecipient = Boolean(
+    String(select?.value || "").trim() &&
+    selectedOption &&
+    String(selectedOption.value || "").trim(),
+  );
+
+  const hasSubject = Boolean(
     String(state.dom.hrp85TestSubject?.value || "").trim(),
+  );
+
+  const canSend = Boolean(
+    canCurrentUserMaintainCommunicationSetupData() &&
+    hasApprovedRecipient &&
+    hasSubject,
   );
 
   setPrimaryActionButtonReadyState(state.dom.hrp85SendTestEmailBtn, canSend);
@@ -3094,10 +3629,89 @@ function validateHrp85EmailIntegrationForm() {
 
   return true;
 }
+// HR EMAIL INTEGRATION UX - STEP 1E-1
+// After a validation email is sent successfully, reset only the recipient
+// selector so the form returns to a deliberate, safe state.
+// This prevents the Send Validation Email button from staying blue after
+// a completed send.
+function resetHrp85ValidationRecipientSelection() {
+  const select = state.dom.hrp85TestRecipientSelect;
 
+  if (select) {
+    select.value = "";
+    select.classList.remove("is-invalid");
+  }
+
+  updateHrp85SendTestEmailButtonState();
+}
+
+// HR EMAIL INTEGRATION UX - STEP 1E-1
+// After a successful validation email, take HR to the audit/history panel.
+// This is UI navigation only; it does not resend email or change delivery data.
+function redirectToHrp85ValidationHistoryAfterSend() {
+  const target =
+    state.dom.hrp85DeliveryLogsTableWrapper?.closest(".border") ||
+    state.dom.hrp85DeliveryLogsTableWrapper ||
+    state.dom.hrp85DeliveryLogsEmptyState;
+
+  if (!target) return;
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      if (typeof scrollToDashboardTarget === "function") {
+        scrollToDashboardTarget(target, 96);
+      } else {
+        target.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+
+      if (state.dom.hrp85DeliveryLogsTableWrapper) {
+        state.dom.hrp85DeliveryLogsTableWrapper.scrollTop = 0;
+      }
+    });
+  });
+}
 // HRP-85 - STEP 1E
 // Loading state for the Send Test Email button.
 function setHrp85SendTestEmailLoading(isLoading) {
+  // HR EMAIL INTEGRATION UX - STEP 1E
+  // After a validation email is sent, return the form to a clean state.
+  // This makes Send Validation Email grey again until HR deliberately selects
+  // another approved recipient.
+  function resetHrp85ValidationRecipientSelection() {
+    const select = state.dom.hrp85TestRecipientSelect;
+
+    if (select) {
+      select.value = "";
+      select.classList.remove("is-invalid");
+    }
+
+    updateHrp85SendTestEmailButtonState();
+  }
+
+  // HR EMAIL INTEGRATION UX - STEP 1E
+  // After sending, take HR directly to Validation History so the new audit row
+  // is visible without needing manual scrolling.
+  function redirectToHrp85ValidationHistoryAfterSend() {
+    const target =
+      state.dom.hrp85DeliveryLogsTableWrapper?.closest(".border") ||
+      state.dom.hrp85DeliveryLogsTableWrapper ||
+      state.dom.hrp85DeliveryLogsEmptyState;
+
+    if (!target) return;
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        scrollToDashboardTarget(target, 96);
+
+        if (state.dom.hrp85DeliveryLogsTableWrapper) {
+          state.dom.hrp85DeliveryLogsTableWrapper.scrollTop = 0;
+        }
+      });
+    });
+  }
   const button = state.dom.hrp85SendTestEmailBtn;
   if (!button) return;
 
@@ -3223,6 +3837,12 @@ async function handleHrp85EmailIntegrationSubmit() {
     );
 
     await refreshHrp85DeliveryLogs();
+
+    // HR EMAIL INTEGRATION UX - STEP 1E
+    // Successful validation should behave like a completed action:
+    // clear the recipient, grey the send button, and show the audit history.
+    resetHrp85ValidationRecipientSelection();
+    redirectToHrp85ValidationHistoryAfterSend();
   } catch (error) {
     console.error("Error sending HRP-85 test email:", error);
 
@@ -4019,6 +4639,13 @@ function getPayrollOtherDeductionById(otherDeductionId = "") {
 // Load an existing Other Deduction into the same form for maintenance.
 // This keeps HR in one standard setup flow instead of creating duplicates.
 function startPayrollOtherDeductionEdit(otherDeductionId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // View-only payroll setup roles cannot open Other Deduction edit mode.
+  if (!canCurrentUserMaintainPayrollSetupData()) {
+    showHrPayrollSetupAccessDeniedMessage("Other Deductions");
+    return;
+  }
+
   const record = getPayrollOtherDeductionById(otherDeductionId);
 
   if (!record) {
@@ -4199,6 +4826,13 @@ async function handlePayrollOtherDeductionRecordsRefresh() {
 
 async function handlePayrollOtherDeductionSave() {
   clearPageAlert();
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // Auditor, QA, and custom HR-routed roles may review Other Deductions only.
+  if (!canCurrentUserMaintainPayrollSetupData()) {
+    showHrPayrollSetupAccessDeniedMessage("Other Deductions");
+    return;
+  }
 
   if (!validatePayrollOtherDeductionForm()) {
     // DESCRIPTION ITEM 8 - STEP 8D
@@ -5123,6 +5757,13 @@ function getPayrollEmployeeOverrideById(overrideId = "") {
 // DESCRIPTION ITEM 5 - STEP 4
 // Load an existing employee override into the same form for maintenance.
 function startPayrollEmployeeOverrideEdit(overrideId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // View-only payroll setup roles cannot open Employee Override edit mode.
+  if (!canCurrentUserMaintainPayrollSetupData()) {
+    showHrPayrollSetupAccessDeniedMessage("Employee Payroll Overrides");
+    return;
+  }
+
   const record = getPayrollEmployeeOverrideById(overrideId);
 
   if (!record) {
@@ -5334,6 +5975,13 @@ async function handlePayrollEmployeeOverrideRecordsRefresh() {
 
 async function handlePayrollEmployeeOverrideSave() {
   clearPageAlert();
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // Auditor, QA, and custom HR-routed roles may review Employee Overrides only.
+  if (!canCurrentUserMaintainPayrollSetupData()) {
+    showHrPayrollSetupAccessDeniedMessage("Employee Payroll Overrides");
+    return;
+  }
 
   if (!validatePayrollEmployeeOverrideForm()) {
     // DESCRIPTION ITEM 8 - STEP 8E
@@ -5969,6 +6617,19 @@ function bindEvents() {
     // Remember Setup only after clearing active payroll-selection state.
     rememberHrWorkspace("setup");
     switchHrWorkspace("setup");
+
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+    // Re-apply Setup restrictions when HR opens the Setup workspace because
+    // refresh/search/update helpers may rebuild buttons after initial load.
+    applyHrOrganizationSetupAccessControls();
+    applyHrPayrollSetupAccessControls();
+
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+    // Re-apply Payment Setup restrictions when the Setup workspace opens because
+    // table refreshes and form reset helpers can rebuild buttons.
+    applyHrPaymentSetupAccessControls();
+
+    applyHrCommunicationSetupAccessControls();
   });
 
   state.dom.hrTabPayrollBtn?.addEventListener("click", () => {
@@ -5985,6 +6646,11 @@ function bindEvents() {
     // profile is available. Records may still be viewed, but setup actions are
     // locked for non-HR/payroll roles.
     applyPayrollMasterAccessControls();
+
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+    // Payroll Operations must remain read-only for Auditor, QA, and custom roles
+    // even after resetPayrollForm() rebuilds the Payroll action buttons.
+    applyHrPayrollOperationsAccessControls();
 
     // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
     // Remember Payroll for refresh, but do not store payroll form or salary data.
@@ -11863,6 +12529,13 @@ function getPayrollStatutoryDeductionById(statutoryDeductionId = "") {
 // Load an existing statutory deduction into the same form for maintenance.
 // This prevents HR from creating duplicate rows just to change method/value/status.
 function startPayrollStatutoryEdit(statutoryDeductionId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // View-only payroll setup roles cannot open Statutory Deduction edit mode.
+  if (!canCurrentUserMaintainPayrollSetupData()) {
+    showHrPayrollSetupAccessDeniedMessage("Statutory Deductions");
+    return;
+  }
+
   const record = getPayrollStatutoryDeductionById(statutoryDeductionId);
 
   if (!record) {
@@ -11965,6 +12638,13 @@ function startPayrollStatutoryEdit(statutoryDeductionId) {
 // Edit/update is deliberately not added in this step.
 async function handlePayrollStatutorySave() {
   clearPageAlert();
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // Auditor, QA, and custom HR-routed roles may review Statutory Deductions only.
+  if (!canCurrentUserMaintainPayrollSetupData()) {
+    showHrPayrollSetupAccessDeniedMessage("Statutory Deductions");
+    return;
+  }
 
   if (!validatePayrollStatutoryForm()) {
     // DESCRIPTION ITEM 8 - STEP 8C
@@ -12872,6 +13552,13 @@ function setPayrollAllowanceSaveLoading(isLoading, isEditMode = false) {
 async function handlePayrollAllowanceSave() {
   clearPageAlert();
 
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // Auditor, QA, and custom HR-routed roles may review Allowances only.
+  if (!canCurrentUserMaintainPayrollSetupData()) {
+    showHrPayrollSetupAccessDeniedMessage("Allowance Components");
+    return;
+  }
+
   if (!validatePayrollAllowanceForm()) {
     // DESCRIPTION ITEM 8 - STEP 8B
     // validatePayrollAllowanceForm now shows clear field-specific messages,
@@ -13234,6 +13921,13 @@ async function loadPayrollAllowanceComponents() {
 // Save/update behavior will be added in the next step.
 // =========================================================
 function startPayrollAllowanceEdit(allowanceId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
+  // View-only payroll setup roles cannot open Allowance edit mode.
+  if (!canCurrentUserMaintainPayrollSetupData()) {
+    showHrPayrollSetupAccessDeniedMessage("Allowance Components");
+    return;
+  }
+
   const record = state.payrollAllowanceComponents.find(
     (item) => String(item.id) === String(allowanceId),
   );
@@ -13356,6 +14050,13 @@ function applyPayrollAllowanceSearch() {
 // If the selected bank already exists, refresh and focus the table on the
 // existing matching row so HR can immediately see it.
 async function handleBankDirectorySave() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+  // Auditor, QA, and custom HR-routed roles may review Bank Directory only.
+  if (!canCurrentUserMaintainPaymentSetupData()) {
+    showHrPaymentSetupAccessDeniedMessage("Bank Directory");
+    return;
+  }
+
   const bankName = String(state.dom.bankName?.value || "").trim();
   const bankCode = String(state.dom.bankCode?.value || "").trim();
   const status = String(state.dom.bankStatus?.value || "Active").trim();
@@ -13563,6 +14264,14 @@ if (state.dom.bankCode) {
 // Bank Directory follows the same disabled/active button pattern
 // as the rest of the HR payroll setup forms.
 function updateBankDirectorySaveButtonState() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+  // Auditor, QA, and custom HR-routed roles must not have Bank Directory
+  // save re-enabled by input/change events.
+  if (!canCurrentUserMaintainPaymentSetupData()) {
+    setPrimaryActionButtonReadyState(state.dom.saveBankDirectoryBtn, false);
+    return;
+  }
+
   const hasBankName = Boolean(String(state.dom.bankName?.value || "").trim());
   const hasBankCode = Boolean(String(state.dom.bankCode?.value || "").trim());
 
@@ -13647,6 +14356,13 @@ function setBankDirectoryEditMode() {
 // BANK DIRECTORY - STEP 8F
 // Activate edit mode so Save Bank updates instead of creating duplicate.
 function startBankDirectoryEdit(bankId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+  // View-only payment setup roles cannot open Bank Directory edit mode.
+  if (!canCurrentUserMaintainPaymentSetupData()) {
+    showHrPaymentSetupAccessDeniedMessage("Bank Directory");
+    return;
+  }
+
   const record = state.bankDirectoryRecords.find(
     (bank) => String(bank.id) === String(bankId),
   );
@@ -13759,6 +14475,10 @@ function renderBankDirectoryTable() {
   // HR SAVE/EDIT BEHAVIOUR - BANK DIRECTORY STEP 3
   // Render newest/most recently updated banks first.
   const recordsToRender = sortBankDirectoryRecordsByLatestActivity(records);
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+  // Auditor, QA, and custom HR-routed roles can review Bank Directory rows,
+  // but cannot edit payment setup.
+  const canMaintainPaymentSetup = canCurrentUserMaintainPaymentSetupData();
 
   recordsToRender.forEach((bank) => {
     const row = document.createElement("tr");
@@ -13776,13 +14496,14 @@ function renderBankDirectoryTable() {
   <!-- BANK DIRECTORY - STEP 8A
        Keep Bank Directory actions visually consistent with Employee,
        Payroll Master, Allowance, and Payroll Records tables. -->
-  <button
-    type="button"
-    class="btn btn-sm btn-outline-primary"
-    title="Edit bank directory record"
-    aria-label="Edit bank directory record"
-    onclick="window.hrEditBankDirectoryRecord('${String(bank.id).replaceAll("'", "\\'")}')"
-  >
+<button
+  type="button"
+  class="btn btn-sm ${canMaintainPaymentSetup ? "btn-outline-primary" : "btn-outline-secondary"}"
+  title="${canMaintainPaymentSetup ? "Edit bank directory record" : "Bank Directory is read-only for this role"}"
+  aria-label="${canMaintainPaymentSetup ? "Edit bank directory record" : "Bank Directory is read-only"}"
+  ${canMaintainPaymentSetup ? "" : "disabled"}
+  onclick="window.hrEditBankDirectoryRecord('${String(bank.id).replaceAll("'", "\\'")}')"
+>
     <i class="bi bi-pencil-square"></i>
   </button>
 </td>
@@ -13797,6 +14518,13 @@ function renderBankDirectoryTable() {
 // Export CSV downloads a bank-ready spreadsheet.
 // Send Payslips only prepares payslip email audit records.
 function handlePayrollExportCsv() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Payroll CSV export contains payroll and bank-payment data.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Payroll CSV Export");
+    return;
+  }
+
   // PAYROLL CSV EXPORT FIX - STEP 3
   // Keep this helper inside Export CSV so the button does not depend on
   // any outside/global helper name. This only affects CSV export.
@@ -14029,6 +14757,13 @@ async function handlePayrollFormClear() {
 // This replaces the old behaviour where a single selected employee was pushed
 // into the individual payroll dropdown/form by default.
 function continueRunPayrollToPayrollWorkspace() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // View-only payroll roles cannot continue into payroll preparation.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Payroll Preparation");
+    return;
+  }
+
   const selectedEmployeeIds = Array.from(state.selectedEmployeesForPayroll || [])
     .map((employeeId) => String(employeeId || "").trim())
     .filter(Boolean);
@@ -14141,6 +14876,13 @@ function setBatchPayrollCsvImportLoading(isLoading) {
 // Keep the Import CSV button grey/disabled until HR selects a CSV file.
 // This only controls the UI shell. Actual parsing comes in the next step.
 function updateBatchPayrollCsvImportButtonState() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Do not let file-selection events re-enable import for view-only roles.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    setPrimaryActionButtonReadyState(state.dom.importBatchPayrollCsvBtn, false);
+    return;
+  }
+
   const hasCsvFile = Boolean(state.dom.batchPayrollCsvFile?.files?.[0]);
 
   setPrimaryActionButtonReadyState(
@@ -14428,6 +15170,14 @@ function buildBatchPayrollTemplateRow(employee = {}) {
 // This is not the bank payment export. It is the input file HR can edit
 // and re-upload through Batch Payroll CSV Import.
 function downloadBatchPayrollCsvImportTemplate() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Batch payroll templates expose payroll preparation data and are restricted
+  // to HR/Payroll maintenance roles.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Batch Payroll Template");
+    return;
+  }
+
   const headers = [
     "Employee Custom ID",
     "Employee Name",
@@ -15029,6 +15779,13 @@ ${preparedRow.employee_override_applied
 async function handleBatchPayrollCsvImport() {
   clearPageAlert();
 
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // CSV import prepares payroll rows and must not run for view-only roles.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Batch Payroll CSV Import");
+    return;
+  }
+
   const file = state.dom.batchPayrollCsvFile?.files?.[0] || null;
 
   if (!file) {
@@ -15415,6 +16172,13 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
 // This keeps employee selection tied to the HR employee source and avoids
 // creating a separate payroll-only employee list.
 function startRunPayrollSelectionFlow() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Auditor, QA, and custom HR-routed roles may review payroll only.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Run Payroll");
+    return;
+  }
+
   // BATCH PAYROLL DEFAULT - STEP 1
   // Run Payroll now starts in batch selection mode.
   // This keeps the user on the employee table first instead of pushing them
@@ -18795,6 +19559,15 @@ function updateSubmitBatchPayrollButtonState() {
   const button = state.dom.submitBatchPayrollBtn;
   if (!button) return;
 
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Do not let batch review recalculation re-enable Submit Batch Payroll
+  // for Auditor, QA, or custom read-only roles.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    button.disabled = true;
+    updateBatchPayrollSubmitSummary();
+    return;
+  }
+
   const hasPreparedRows = (state.batchPayrollPreparedRows || []).length > 0;
   const hasPayCycle = Boolean(
     String(state.dom.batchPayrollPayCycle?.value || "").trim(),
@@ -21999,6 +22772,14 @@ function renderPayrollSelectedEmployeeReference(employeeId = "") {
 // Employee Bank Details uses the same grey/blue action behaviour
 // as every other HR payroll form.
 function updateEmployeeBankDetailsSaveButtonState() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+  // Auditor, QA, and custom HR-routed roles must not have Employee Bank Details
+  // save re-enabled by input/change events.
+  if (!canCurrentUserMaintainPaymentSetupData()) {
+    setPrimaryActionButtonReadyState(state.dom.saveEmployeeBankDetailsBtn, false);
+    return;
+  }
+
   const hasEmployee = Boolean(String(state.dom.employeeBankEmployeeId?.value || "").trim());
   const hasBank = Boolean(String(state.dom.employeeBankBankId?.value || "").trim());
   const hasBankCode = Boolean(String(state.dom.employeeBankCode?.value || "").trim());
@@ -22083,6 +22864,14 @@ function updatePayrollAllowanceSaveButtonState() {
 // The previous check treated auto-calculated 0.00 values as complete,
 // which made the button turn blue too early.
 function updatePayrollSubmitButtonState() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Do not let payroll field changes re-enable Submit Payroll for view-only roles.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    setPrimaryActionButtonReadyState(state.dom.savePayrollBtn, false);
+    setPrimaryActionButtonReadyState(state.dom.topSubmitPayrollBtn, false);
+    return;
+  }
+
   const selectedBatchEmployeeIds = Array.from(
     state.selectedEmployeesForPayroll || [],
   ).filter(Boolean);
@@ -22219,6 +23008,13 @@ function setEmployeeBankDetailsSaveLoading(isLoading) {
 // Edit/update will be added separately after create has been tested.
 async function handleEmployeeBankDetailsSave() {
   clearPageAlert();
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+  // Auditor, QA, and custom HR-routed roles may review Employee Bank Details only.
+  if (!canCurrentUserMaintainPaymentSetupData()) {
+    showHrPaymentSetupAccessDeniedMessage("Employee Bank Details");
+    return;
+  }
 
   if (!validateEmployeeBankDetailsForm()) {
     showPageAlert(
@@ -22480,6 +23276,10 @@ function renderEmployeeBankDetailsTable(records) {
   // The Employee List payroll checkbox code must not live in this function
   // because this table has no Run Payroll selection behaviour.
   const recordsToRender = sortEmployeeBankDetailsRecordsByLatestActivity(records);
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+  // Auditor, QA, and custom HR-routed roles can review Employee Bank Details,
+  // but cannot edit payment setup.
+  const canMaintainPaymentSetup = canCurrentUserMaintainPaymentSetupData();
 
   recordsToRender.forEach((record) => {
     const row = document.createElement("tr");
@@ -22513,13 +23313,14 @@ function renderEmployeeBankDetailsTable(records) {
         <!-- EMPLOYEE BANK DETAILS RECOVERY - STEP 1B
              Keep the existing edit action for Employee Bank Details.
              No payroll selection checkbox belongs in this table. -->
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary"
-          title="Edit employee bank details"
-          aria-label="Edit employee bank details"
-          onclick="window.hrEditEmployeeBankDetailsRecord('${safeEmployeeBankDetailsId}')"
-        >
+<button
+  type="button"
+  class="btn btn-sm ${canMaintainPaymentSetup ? "btn-outline-primary" : "btn-outline-secondary"}"
+  title="${canMaintainPaymentSetup ? "Edit employee bank details" : "Employee Bank Details are read-only for this role"}"
+  aria-label="${canMaintainPaymentSetup ? "Edit employee bank details" : "Employee Bank Details are read-only"}"
+  ${canMaintainPaymentSetup ? "" : "disabled"}
+  onclick="window.hrEditEmployeeBankDetailsRecord('${safeEmployeeBankDetailsId}')"
+>
           <i class="bi bi-pencil-square"></i>
         </button>
       </td>
@@ -22582,6 +23383,13 @@ function resetEmployeeBankDetailsForm() {
 // Restore the safe Employee Bank Details edit flow.
 // This loads the selected bank details into the form and keeps the wider UI stable.
 function startEmployeeBankDetailsEdit(employeeBankDetailsId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-2
+  // View-only payment setup roles cannot open Employee Bank Details edit mode.
+  if (!canCurrentUserMaintainPaymentSetupData()) {
+    showHrPaymentSetupAccessDeniedMessage("Employee Bank Details");
+    return;
+  }
+
   const record = state.employeeBankDetailsRecords.find(
     (item) => String(item.id) === String(employeeBankDetailsId),
   );
@@ -23052,6 +23860,13 @@ function isPayslipEmailAlreadySentForPayrollRecord(payrollRecordId = "") {
 // A payroll record can be selected for payslip email only when it is finalised
 // and not already marked Sent in the loaded Payslip Email Status logs.
 function canSelectPayrollRecordForPayslipEmail(record = {}) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // View-only roles can review payroll records but cannot select records
+  // for payslip email delivery.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    return false;
+  }
+
   const payrollRecordId = String(record.id || "").trim();
 
   return Boolean(
@@ -23178,6 +23993,17 @@ function updateExportPayrollCsvButtonState() {
   const button = state.dom.exportPayrollCsvBtn;
   if (!button) return;
 
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // CSV export contains payroll/payment data and is restricted to HR/Payroll
+  // maintenance roles.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    button.disabled = true;
+    button.title = "CSV export is read-only for this role.";
+    button.classList.toggle("btn-outline-primary", false);
+    button.classList.toggle("btn-secondary", true);
+    return;
+  }
+
   const finalisedRecords = getFinalisedPayrollRecordsForSelectedActionCycle();
   const canExport = finalisedRecords.length > 0;
 
@@ -23197,6 +24023,19 @@ function updateExportPayrollCsvButtonState() {
 function updateSendPayslipsButtonState() {
   const button = state.dom.sendPayslipsEmailBtn;
   if (!button) return;
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Payslip sending is an operational action and is blocked for view-only roles.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    state.selectedPayrollRecordIdsForPayslipEmail.clear();
+    button.disabled = true;
+    button.title = "Payslip sending is read-only for this role.";
+    button.classList.toggle("btn-outline-success", false);
+    button.classList.toggle("btn-secondary", true);
+    updateSelectedPayslipRecordsSummary();
+    updateExportPayrollCsvButtonState();
+    return;
+  }
 
   syncSelectedPayslipEmailPayrollRecords();
 
@@ -23690,6 +24529,13 @@ async function getPayslipEmailFunctionErrorMessage(error, fallbackMessage) {
 async function handleSendPayslipsEmailRequest() {
   clearPageAlert();
 
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Payslip email delivery is an operational payroll action.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Send Payslips");
+    return;
+  }
+
   const finalisedRecords = getSelectedPayrollRecordsForPayslipEmail();
   const selectedPayCycle = String(state.dom.exportPayrollPayCycle?.value || "").trim();
 
@@ -24065,6 +24911,11 @@ function renderPayrollRecords(records) {
   const salarySnapshotCountByEmployee =
     buildPayrollRecordSalarySnapshotCountByEmployee(recordsToRender);
 
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Payroll Records remain visible for review, but operational row actions
+  // such as edit and payslip selection are disabled for Auditor/QA/custom roles.
+  const canMaintainPayrollOperations = canCurrentUserMaintainPayrollOperationsData();
+
   recordsToRender.forEach((record) => {
     const fullName =
       `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
@@ -24093,20 +24944,27 @@ function renderPayrollRecords(records) {
     const isSelectedForPayslipEmail =
       state.selectedPayrollRecordIdsForPayslipEmail.has(String(record.id || "").trim());
 
-    const payslipSelectionCell = canSelectForPayslipEmail
+    const payslipSelectionCell = !canMaintainPayrollOperations
       ? `
-        <input type="checkbox"
-          class="form-check-input"
-          title="Select this payroll record for payslip email delivery"
-          ${isSelectedForPayslipEmail ? "checked" : ""}
-          onchange="window.hrTogglePayslipEmailPayrollRecordSelection('${safePayrollRecordId}', this.checked)" />
-      `
-      : `
-        <span class="badge text-bg-light border text-secondary"
-          title="${record.is_finalised ? "Resend protected" : "Finalise payroll before sending"}">
-          ${record.is_finalised ? "Sent" : "Locked"}
-        </span>
-      `;
+    <span class="badge text-bg-light border text-secondary"
+      title="Payslip sending is read-only for this role">
+      View Only
+    </span>
+  `
+      : canSelectForPayslipEmail
+        ? `
+      <input type="checkbox"
+        class="form-check-input"
+        title="Select this payroll record for payslip email delivery"
+        ${isSelectedForPayslipEmail ? "checked" : ""}
+        onchange="window.hrTogglePayslipEmailPayrollRecordSelection('${safePayrollRecordId}', this.checked)" />
+    `
+        : `
+      <span class="badge text-bg-light border text-secondary"
+        title="${record.is_finalised ? "Resend protected" : "Finalise payroll before sending"}">
+        ${record.is_finalised ? "Sent" : "Locked"}
+      </span>
+    `;
 
     const employeeOverrideAuditSummary =
       getPayrollRecordEmployeeOverrideAuditSummary(record);
@@ -24235,13 +25093,14 @@ function renderPayrollRecords(records) {
             <i class="bi bi-receipt"></i>
           </button>
 
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-primary"
-            title="Edit payroll record"
-            aria-label="Edit payroll record"
-            onclick="window.hrEditPayrollRecord('${safePayrollRecordId}')"
-          >
+<button
+  type="button"
+  class="btn btn-sm ${canMaintainPayrollOperations ? "btn-outline-primary" : "btn-outline-secondary"}"
+  title="${canMaintainPayrollOperations ? "Edit payroll record" : "Payroll record editing is read-only for this role"}"
+  aria-label="${canMaintainPayrollOperations ? "Edit payroll record" : "Payroll record editing is read-only"}"
+  ${canMaintainPayrollOperations ? "" : "disabled"}
+  onclick="window.hrEditPayrollRecord('${safePayrollRecordId}')"
+>
             <i class="bi bi-pencil-square"></i>
           </button>
         </div>
@@ -25002,6 +25861,13 @@ async function openPayslipPreview(payrollId) {
 }
 
 async function startPayrollEdit(payrollId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Auditor, QA, and custom read-only roles may review Payroll Records but
+  // cannot open them for edit.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Payroll Record Edit");
+    return;
+  }
   const selectedRow = state.payrollRecords.find(
     (item) => String(item.id) === String(payrollId),
   );
@@ -27012,6 +27878,13 @@ function scrollToPayrollRecordsAfterSubmit() {
 async function handleBatchPayrollSubmit() {
   clearPageAlert();
 
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Batch payroll creates payroll_records and is restricted to HR/Payroll.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Batch Payroll");
+    return;
+  }
+
   const preparedRows = state.batchPayrollPreparedRows || [];
   const payCycle = String(state.dom.batchPayrollPayCycle?.value || "").trim();
   const payDate = String(state.dom.batchPayrollPayDate?.value || "").trim();
@@ -27225,6 +28098,14 @@ async function handleBatchPayrollSubmit() {
 }
 async function handlePayrollSave() {
   clearPageAlert();
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
+  // Manual payroll create/update is restricted to HR/Payroll maintenance roles.
+  if (!canCurrentUserMaintainPayrollOperationsData()) {
+    showHrPayrollOperationsAccessDeniedMessage("Submit Payroll");
+    return;
+  }
+
   recalculatePayrollFormTotals();
 
   if (!validatePayrollForm()) {
