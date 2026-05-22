@@ -1,3 +1,14 @@
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Browser refresh can restore the old scroll position before the selected
+// workspace finishes loading. Keep restoration manual so refresh always lands
+// at the top of the restored Manager workspace.
+try {
+  if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+  }
+} catch (error) {
+  console.warn("Manager dashboard scroll restoration could not be set to manual.", error);
+}
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
@@ -12,7 +23,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await loadLatestManagerProfile();
     renderManagerProfile(state.currentProfile, access.session.user);
-    switchManagerWorkspace("profile");
+
+    // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Fresh login opens Profile because logout clears memory.
+    // Browser refresh restores the last Manager workspace and lands at the top.
+    restoreManagerWorkspaceAfterRefresh();
+
     initialiseDecisionModal();
 
     window.managerHandleLeaveAction = function (leaveId, action, button) {
@@ -31,6 +47,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 const PROFILE_IMAGES_BUCKET = "profile-images";
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Stores only the active Manager workspace tab for refresh recovery.
+// No employee, leave, decision, comment, or team data is stored.
+const MANAGER_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastManagerWorkspace";
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Lightweight boot key used by manager-dashboard.html to avoid first-paint
+// Profile flash before manager-dashboard.js completes authentication startup.
+const MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY = "hrPayroll:lastManagerWorkspace:last";
 
 const state = {
   currentUser: null,
@@ -59,6 +84,121 @@ const state = {
 
   dom: {},
 };
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Only these top-level Manager workspaces are safe to restore after refresh.
+function isValidManagerWorkspaceKey(workspace = "") {
+  return ["profile", "team"].includes(String(workspace || "").trim());
+}
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Resolve a tenant/company scope where available so one company/user context
+// does not bleed into another. Manager pages do not need to store operational data.
+function getManagerWorkspaceTenantScope() {
+  try {
+    const rawContext = localStorage.getItem("hrPayrollTenantContext");
+    const tenantContext = rawContext ? JSON.parse(rawContext) : null;
+
+    return String(
+      tenantContext?.tenantId ||
+      state.currentProfile?.tenant_id ||
+      "no-tenant",
+    ).trim();
+  } catch (error) {
+    console.warn("Manager tenant context could not be read for workspace memory.", error);
+
+    return String(state.currentProfile?.tenant_id || "no-tenant").trim();
+  }
+}
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Scope the stored workspace to the signed-in manager and company context.
+function getManagerWorkspaceMemoryKey() {
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  const tenantScope = getManagerWorkspaceTenantScope();
+
+  return `${MANAGER_DASHBOARD_WORKSPACE_MEMORY_PREFIX}:${userId}:${tenantScope}`;
+}
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Save only the active workspace key. Do not store leave, employee, team,
+// decision, comment, or manager-sensitive data in browser storage.
+function rememberManagerWorkspace(workspace = "") {
+  if (!isValidManagerWorkspaceKey(workspace)) return;
+
+  try {
+    sessionStorage.setItem(getManagerWorkspaceMemoryKey(), workspace);
+
+    // Used only for first-paint HTML restore before currentUser/currentProfile
+    // is available to manager-dashboard.js.
+    sessionStorage.setItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY, workspace);
+  } catch (error) {
+    console.warn("Manager workspace memory could not be saved.", error);
+  }
+}
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Read the remembered workspace for this manager session.
+// Fresh login naturally falls back to Profile after logout clears the keys.
+function getRememberedManagerWorkspace() {
+  try {
+    const scopedWorkspace = sessionStorage.getItem(getManagerWorkspaceMemoryKey());
+    const bootWorkspace = sessionStorage.getItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY);
+    const workspace = scopedWorkspace || bootWorkspace || "profile";
+
+    return isValidManagerWorkspaceKey(workspace) ? workspace : "profile";
+  } catch (error) {
+    console.warn("Manager workspace memory could not be read.", error);
+    return "profile";
+  }
+}
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Logout must reset the next Manager session to Profile.
+function clearRememberedManagerWorkspace() {
+  try {
+    sessionStorage.removeItem(getManagerWorkspaceMemoryKey());
+    sessionStorage.removeItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY);
+  } catch (error) {
+    console.warn("Manager workspace memory could not be cleared.", error);
+  }
+}
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Force refresh restore to the top without smooth scrolling.
+function forceManagerDashboardToTopAfterRefresh() {
+  window.scrollTo({
+    top: 0,
+    left: 0,
+    behavior: "auto",
+  });
+
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+
+  updateManagerBackToTopButtonVisibility();
+}
+
+// MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Restore the remembered Manager workspace and force the page to the top.
+// Multiple calls protect against browser scroll restoration on long pages.
+function restoreManagerWorkspaceAfterRefresh() {
+  const workspace = getRememberedManagerWorkspace();
+
+  switchManagerWorkspace(workspace);
+  forceManagerDashboardToTopAfterRefresh();
+
+  window.requestAnimationFrame(() => {
+    forceManagerDashboardToTopAfterRefresh();
+
+    window.requestAnimationFrame(() => {
+      forceManagerDashboardToTopAfterRefresh();
+    });
+  });
+
+  window.setTimeout(forceManagerDashboardToTopAfterRefresh, 0);
+  window.setTimeout(forceManagerDashboardToTopAfterRefresh, 150);
+}
 
 function getSupabaseClient() {
   if (!window.supabaseClient) {
@@ -437,17 +577,27 @@ function getLeaveDecisionToastTitle(status = "") {
 }
 
 function bindEvents() {
-  state.dom.logoutBtn?.addEventListener("click", async () => {
-    await window.SessionManager.logoutUser("logout");
-  });
+state.dom.logoutBtn?.addEventListener("click", async () => {
+  // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+  // Logout must reset the next Manager session to Profile.
+  clearRememberedManagerWorkspace();
 
-  state.dom.managerTabProfileBtn?.addEventListener("click", () => {
-    switchManagerWorkspace("profile");
-  });
+  await window.SessionManager.logoutUser("logout");
+});
 
-  state.dom.managerTabTeamBtn?.addEventListener("click", () => {
-    switchManagerWorkspace("team");
-  });
+state.dom.managerTabProfileBtn?.addEventListener("click", () => {
+  // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+  // Remember Profile only for refresh in the current browser session.
+  rememberManagerWorkspace("profile");
+  switchManagerWorkspace("profile");
+});
+
+state.dom.managerTabTeamBtn?.addEventListener("click", () => {
+  // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+  // Remember Team Management only for refresh. No team or leave data is stored.
+  rememberManagerWorkspace("team");
+  switchManagerWorkspace("team");
+});
 
   state.dom.managerProfileForm?.addEventListener("submit", async (event) => {
     event.preventDefault();

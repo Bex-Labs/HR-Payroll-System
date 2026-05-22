@@ -799,11 +799,72 @@
     </button>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/app.js"></script>
-  <script src="js/session.js"></script>
-  <script src="js/employee-dashboard.js"></script>
+<!-- EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+     First-paint restore for Employee workspace.
+     This prevents a visible Profile flash when refreshing from Leave or Payroll.
+     It reads only the lightweight workspace key written by employee-dashboard.js. -->
+<script>
+  (function () {
+    try {
+      if ("scrollRestoration" in window.history) {
+        window.history.scrollRestoration = "manual";
+      }
+
+      var workspace = sessionStorage.getItem("hrPayroll:lastEmployeeWorkspace:last") || "profile";
+
+      var profileSection = document.getElementById("profileSection");
+      var leaveSection = document.getElementById("leaveSection");
+      var payrollSection = document.getElementById("payrollSection");
+
+      var profileBtn = document.getElementById("navProfileBtn");
+      var leaveBtn = document.getElementById("navLeaveBtn");
+      var payrollBtn = document.getElementById("navPayrollBtn");
+      var moduleValue = document.getElementById("heroModuleValue");
+
+      function setInactive(button) {
+        if (!button) return;
+        button.classList.remove("btn-primary");
+        button.classList.add("btn-outline-primary");
+      }
+
+      function setActive(button) {
+        if (!button) return;
+        button.classList.remove("btn-outline-primary");
+        button.classList.add("btn-primary");
+      }
+
+      if (workspace === "leave" || workspace === "payroll") {
+        if (profileSection) profileSection.classList.add("d-none");
+        if (leaveSection) leaveSection.classList.toggle("d-none", workspace !== "leave");
+        if (payrollSection) payrollSection.classList.toggle("d-none", workspace !== "payroll");
+
+        setInactive(profileBtn);
+        setInactive(leaveBtn);
+        setInactive(payrollBtn);
+
+        if (workspace === "leave") {
+          setActive(leaveBtn);
+          if (moduleValue) moduleValue.textContent = "Leave Management";
+        }
+
+        if (workspace === "payroll") {
+          setActive(payrollBtn);
+          if (moduleValue) moduleValue.textContent = "Payroll";
+        }
+      }
+
+      window.scrollTo(0, 0);
+    } catch (error) {
+      // If sessionStorage is blocked, the HTML default Profile workspace remains safe.
+    }
+  })();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/app.js"></script>
+<script src="js/session.js"></script>
+<script src="js/employee-dashboard.js"></script>
 
   <script>
     /* EMPLOYEE DASHBOARD FINAL QA - STEP 1R-C

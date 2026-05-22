@@ -1,3 +1,13 @@
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Browser refresh can restore the previous scroll position on long Leave/Payroll pages.
+// Keep restoration manual so refresh always lands at the top of the restored workspace.
+try {
+  if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+  }
+} catch (error) {
+  console.warn("Employee dashboard scroll restoration could not be set to manual.", error);
+}
 /* =========================================================
    employee-dashboard.js
 ========================================================= */
@@ -18,6 +28,16 @@ const SINGLE_APPLICATION_LEAVE_TYPE_KEYWORDS = [
   "paternity",
   "adoption",
 ];
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Stores only the active Employee workspace tab for refresh recovery.
+// No payroll, payslip, leave request, salary, or employee data is stored.
+const EMPLOYEE_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastEmployeeWorkspace";
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Lightweight boot key used by employee-dashboard.html to avoid first-paint
+// Profile flash before employee-dashboard.js completes authentication startup.
+const EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY = "hrPayroll:lastEmployeeWorkspace:last";
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
@@ -69,13 +89,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         "No email";
     }
 
-    if (state.dom.heroRoleValue) {
-      state.dom.heroRoleValue.textContent = String(
-        state.currentProfile?.role || authResult.profile?.role || "employee",
-      ).toLowerCase();
-    }
+if (state.dom.heroRoleValue) {
+  state.dom.heroRoleValue.textContent = String(
+    state.currentProfile?.role || authResult.profile?.role || "employee",
+  ).toLowerCase();
+}
 
-    await loadEmployeeRecord(
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Restore the intended workspace before long leave/payroll data loading starts.
+// Safe URL links such as ?section=payroll still take priority inside
+// showInitialEmployeeDashboardSection().
+showInitialEmployeeDashboardSection();
+
+await loadEmployeeRecord(
       authResult.session.user.id,
       authResult.session.user.email,
     );
@@ -86,13 +112,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadEmployeeLeaveRequests();
     await loadEmployeePayroll();
 
-    // PAYROLL SECURE DELIVERY - STEP 2F-3B-1
-    // Allow safe notification links to open the employee Payroll section
-    // after authentication, without putting payroll IDs, salary values,
-    // bank details, or tokens in the URL.
-    showInitialEmployeeDashboardSection();
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Workspace restore already happened early after authentication.
+// Keep the final startup step focused on leave auto-refresh only.
+forceEmployeeDashboardToTopAfterRefresh();
 
-    startLeaveAutoRefresh();
+startLeaveAutoRefresh();
   } catch (error) {
     console.error("Error initialising employee dashboard:", error);
     showPageAlert(
@@ -136,6 +161,121 @@ const state = {
   },
   dom: {},
 };
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Only these Employee top-level workspaces are safe to restore after refresh.
+function isValidEmployeeWorkspaceKey(workspace = "") {
+  return ["profile", "leave", "payroll"].includes(String(workspace || "").trim());
+}
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Resolve tenant/company context where available so one company session
+// does not bleed remembered workspace state into another.
+function getEmployeeWorkspaceTenantScope() {
+  try {
+    const rawContext = localStorage.getItem("hrPayrollTenantContext");
+    const tenantContext = rawContext ? JSON.parse(rawContext) : null;
+
+    return String(
+      tenantContext?.tenantId ||
+      state.currentProfile?.tenant_id ||
+      "no-tenant",
+    ).trim();
+  } catch (error) {
+    console.warn("Employee tenant context could not be read for workspace memory.", error);
+
+    return String(state.currentProfile?.tenant_id || "no-tenant").trim();
+  }
+}
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Scope the stored workspace to the signed-in employee and company context.
+function getEmployeeWorkspaceMemoryKey() {
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  const tenantScope = getEmployeeWorkspaceTenantScope();
+
+  return `${EMPLOYEE_DASHBOARD_WORKSPACE_MEMORY_PREFIX}:${userId}:${tenantScope}`;
+}
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Save only the active workspace key. Do not store payroll, payslip, leave,
+// salary, PDF, employee, or form data in browser storage.
+function rememberEmployeeWorkspace(workspace = "") {
+  if (!isValidEmployeeWorkspaceKey(workspace)) return;
+
+  try {
+    sessionStorage.setItem(getEmployeeWorkspaceMemoryKey(), workspace);
+
+    // Used only for first-paint HTML restore before currentUser/currentProfile
+    // is available to employee-dashboard.js.
+    sessionStorage.setItem(EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY, workspace);
+  } catch (error) {
+    console.warn("Employee workspace memory could not be saved.", error);
+  }
+}
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Read the remembered workspace for this employee session.
+// Fresh login naturally falls back to Profile after logout clears the keys.
+function getRememberedEmployeeWorkspace() {
+  try {
+    const scopedWorkspace = sessionStorage.getItem(getEmployeeWorkspaceMemoryKey());
+    const bootWorkspace = sessionStorage.getItem(EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY);
+    const workspace = scopedWorkspace || bootWorkspace || "profile";
+
+    return isValidEmployeeWorkspaceKey(workspace) ? workspace : "profile";
+  } catch (error) {
+    console.warn("Employee workspace memory could not be read.", error);
+    return "profile";
+  }
+}
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Logout must reset the next Employee session to Profile.
+function clearRememberedEmployeeWorkspace() {
+  try {
+    sessionStorage.removeItem(getEmployeeWorkspaceMemoryKey());
+    sessionStorage.removeItem(EMPLOYEE_DASHBOARD_WORKSPACE_BOOT_KEY);
+  } catch (error) {
+    console.warn("Employee workspace memory could not be cleared.", error);
+  }
+}
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Force refresh restore to the top without smooth scrolling.
+function forceEmployeeDashboardToTopAfterRefresh() {
+  window.scrollTo({
+    top: 0,
+    left: 0,
+    behavior: "auto",
+  });
+
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+
+  updateScrollToTopButtonVisibility();
+}
+
+// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+// Restore the remembered Employee workspace and force the page to the top.
+// Multiple calls protect against browser scroll restoration on long pages.
+function restoreEmployeeWorkspaceAfterRefresh() {
+  const workspace = getRememberedEmployeeWorkspace();
+
+  showSection(workspace);
+  forceEmployeeDashboardToTopAfterRefresh();
+
+  window.requestAnimationFrame(() => {
+    forceEmployeeDashboardToTopAfterRefresh();
+
+    window.requestAnimationFrame(() => {
+      forceEmployeeDashboardToTopAfterRefresh();
+    });
+  });
+
+  window.setTimeout(forceEmployeeDashboardToTopAfterRefresh, 0);
+  window.setTimeout(forceEmployeeDashboardToTopAfterRefresh, 150);
+}
 
 function getSupabaseClient() {
   if (!window.supabaseClient) {
@@ -485,19 +625,36 @@ function cacheDomElements() {
 }
 
 function bindNavigationEvents() {
-  state.dom.navProfileBtn?.addEventListener("click", () =>
-    showSection("profile"),
-  );
-  state.dom.navLeaveBtn?.addEventListener("click", () => showSection("leave"));
-  state.dom.navPayrollBtn?.addEventListener("click", () =>
-    showSection("payroll"),
-  );
+  state.dom.navProfileBtn?.addEventListener("click", () => {
+    // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Remember Profile only for refresh in the current browser session.
+    rememberEmployeeWorkspace("profile");
+    showSection("profile");
+  });
+
+  state.dom.navLeaveBtn?.addEventListener("click", () => {
+    // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Remember Leave Management only for refresh. No leave request data is stored.
+    rememberEmployeeWorkspace("leave");
+    showSection("leave");
+  });
+
+  state.dom.navPayrollBtn?.addEventListener("click", () => {
+    // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Remember Payroll only for refresh. No payslip, salary, or payroll data is stored.
+    rememberEmployeeWorkspace("payroll");
+    showSection("payroll");
+  });
 }
 
 function bindUtilityEvents() {
-  state.dom.logoutBtn?.addEventListener("click", async () => {
-    await window.SessionManager.logoutUser("logout");
-  });
+state.dom.logoutBtn?.addEventListener("click", async () => {
+  // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+  // Logout must reset the next Employee session to Profile.
+  clearRememberedEmployeeWorkspace();
+
+  await window.SessionManager.logoutUser("logout");
+});
 
   state.dom.refreshLeaveBalancesBtn?.addEventListener("click", async () => {
     await refreshEmployeeLeaveBalancesManually();
@@ -1053,14 +1210,25 @@ function getInitialEmployeeDashboardSectionFromUrl() {
     console.warn("Unable to resolve initial employee dashboard section:", error);
   }
 
-  return "profile";
+  // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+  // No URL section was requested, so let workspace memory decide.
+  return null;
 }
 
 // PAYROLL SECURE DELIVERY - STEP 2F-3B-1
 // Open the requested safe section after all employee data has loaded.
 // This keeps payslip access behind the normal authenticated employee dashboard.
 function showInitialEmployeeDashboardSection() {
-  showSection(getInitialEmployeeDashboardSectionFromUrl());
+  // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+  // URL section wins for secure notification links, for example:
+  // employee-dashboard.html?section=payroll
+  // Otherwise, browser refresh restores the remembered workspace.
+  const requestedSection = getInitialEmployeeDashboardSectionFromUrl();
+  const sectionToShow = requestedSection || getRememberedEmployeeWorkspace();
+
+  rememberEmployeeWorkspace(sectionToShow);
+  showSection(sectionToShow);
+  restoreEmployeeWorkspaceAfterRefresh();
 }
 
 function showSection(sectionName) {

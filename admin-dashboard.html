@@ -80,9 +80,11 @@
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
           <div>
             <h2 class="section-heading h4 mb-1">Admin Workspace</h2>
+            <!-- ADMIN AUDIT CENTRE REMOVAL
+     Admin is platform-level across multiple companies, so the central audit centre
+     has been removed to avoid overload and cross-company operational noise. -->
             <p class="section-subtext mb-0">
-              Switch between your profile, platform overview, notification/audit centre, company setup, and
-              user-to-company access.
+              Switch between your profile, platform overview, company setup, and user-to-company access.
             </p>
           </div>
 
@@ -94,14 +96,6 @@
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
               id="adminTabOverviewBtn">
               <i class="bi bi-grid me-2"></i>Overview
-            </button>
-
-            <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
-     Add a dedicated Admin workspace tab for audit visibility and active notifications.
-     This only opens the shell; individual HR/payroll/leave modules are not wired yet. -->
-            <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
-              id="adminTabAuditBtn">
-              <i class="bi bi-bell me-2"></i>Audit Centre
             </button>
 
             <button type="button" class="btn btn-outline-primary dashboard-action-btn text-nowrap"
@@ -345,185 +339,6 @@
                 <div class="info-tile-value" id="adminDepartment">--</div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-    </section>
-
-    <!-- =========================================================
-           ADMIN / HR NOTIFICATION & AUDIT CENTRE
-           ========================================================= -->
-    <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B
-         Admin gets one controlled place to review routine audit evidence
-         and active/action-required notifications. This is a read-only shell
-         for now; module-level event writing will be wired later. -->
-    <section id="adminAuditSection" class="workspace-section d-none">
-      <section class="card dashboard-section-card mb-4 shadow-sm">
-        <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-            <div>
-              <h2 class="section-heading h4 mb-1">Notification & Audit Centre</h2>
-              <p class="section-subtext mb-0">
-                Review system activity, active exceptions, and audit evidence without interrupting HR/Admin for routine
-                events.
-              </p>
-            </div>
-
-            <span class="badge rounded-pill text-bg-light border px-3 py-2">
-              Controlled HR/Admin Visibility
-            </span>
-          </div>
-
-          <div class="row g-4">
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Active Notifications</div>
-                <div class="summary-tile-value" id="adminAuditActiveNotificationCount">0</div>
-              </div>
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Critical Events</div>
-                <div class="summary-tile-value" id="adminAuditCriticalCount">0</div>
-              </div>
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Warnings</div>
-                <div class="summary-tile-value" id="adminAuditWarningCount">0</div>
-              </div>
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <div class="summary-tile">
-                <div class="summary-tile-label">Routine Audit Events</div>
-                <div class="summary-tile-value" id="adminAuditRoutineCount">0</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
-     Removed the large explanatory HR behaviour panel.
-     The Audit Centre should stay exception-first and compact for Admin review. -->
-        </div>
-      </section>
-
-      <section class="card dashboard-section-card mb-4 shadow-sm">
-        <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-            <div>
-              <h3 class="section-heading h5 mb-1">Audit Filters</h3>
-              <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
-     Keep the filter description aligned with the lean visible filter set.
-     Role and employee/target are covered through the keyword search. -->
-              <p class="section-subtext mb-0">
-                Search and filter audit activity by keyword, event type, severity, status, and date range.
-              </p>
-            </div>
-
-            <div class="d-flex flex-wrap gap-2">
-              <button type="button" id="adminAuditRefreshBtn" class="btn btn-outline-primary dashboard-action-btn">
-                <i class="bi bi-arrow-clockwise me-2"></i>Refresh Audit
-              </button>
-
-              <button type="button" id="adminAuditClearFiltersBtn"
-                class="btn btn-outline-secondary dashboard-action-btn">
-                <i class="bi bi-x-circle me-2"></i>Clear Filters
-              </button>
-            </div>
-          </div>
-
-          <!-- ADMIN / HR NOTIFICATION & AUDIT CENTRE - STEP 1B CLEANUP
-     Keep filters professional and investigation-focused.
-     Employee/target and actor role are handled through keyword search instead
-     of separate visible controls, reducing noise for Admin/HR. -->
-          <div class="row g-3 align-items-end">
-            <div class="col-md-12 col-xl-4">
-              <label for="adminAuditSearchInput" class="form-label fw-semibold">Search</label>
-              <input type="text" id="adminAuditSearchInput" class="form-control"
-                placeholder="Search employee, email, event, source, reference, or actor" />
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <label for="adminAuditEventTypeFilter" class="form-label fw-semibold">Event Type</label>
-              <select id="adminAuditEventTypeFilter" class="form-select">
-                <option value="">All event types</option>
-              </select>
-            </div>
-
-            <div class="col-md-6 col-xl-2">
-              <label for="adminAuditSeverityFilter" class="form-label fw-semibold">Severity</label>
-              <select id="adminAuditSeverityFilter" class="form-select">
-                <option value="">All severities</option>
-                <option value="Critical">Critical</option>
-                <option value="Warning">Warning</option>
-                <option value="Success">Success</option>
-                <option value="Info">Info</option>
-              </select>
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <label for="adminAuditStatusFilter" class="form-label fw-semibold">Status</label>
-              <select id="adminAuditStatusFilter" class="form-select">
-                <option value="">All statuses</option>
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Resolved">Resolved</option>
-                <option value="Dismissed">Dismissed</option>
-                <option value="Logged">Logged</option>
-              </select>
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <label for="adminAuditDateFrom" class="form-label fw-semibold">Date From</label>
-              <input type="date" id="adminAuditDateFrom" class="form-control" />
-            </div>
-
-            <div class="col-md-6 col-xl-3">
-              <label for="adminAuditDateTo" class="form-label fw-semibold">Date To</label>
-              <input type="date" id="adminAuditDateTo" class="form-control" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card dashboard-section-card mb-4 shadow-sm">
-        <div class="card-body p-4 p-lg-5">
-          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
-            <div>
-              <h3 class="section-heading h5 mb-1" id="adminAuditRecordsHeader">Activity & Notification Records</h3>
-              <p class="section-subtext mb-0">
-                Displays the latest controlled system events from the audit ledger.
-              </p>
-            </div>
-
-            <span class="badge rounded-pill text-bg-light border px-3 py-2">
-              <span id="adminAuditVisibleCount">0</span> visible
-            </span>
-          </div>
-
-          <div id="adminAuditRecordsEmptyState" class="alert alert-light border mb-0">
-            No audit or notification records are available yet.
-          </div>
-
-          <div id="adminAuditRecordsTableWrapper" class="table-responsive d-none">
-            <table class="table align-middle dashboard-table mb-0">
-              <thead>
-                <tr>
-                  <th>Created</th>
-                  <th>Event</th>
-                  <th>Employee / Target</th>
-                  <th>Role</th>
-                  <th>Severity</th>
-                  <th>Status</th>
-                  <th>Notification</th>
-                  <th>Source</th>
-                </tr>
-              </thead>
-              <tbody id="adminAuditRecordsTableBody"></tbody>
-            </table>
           </div>
         </div>
       </section>
@@ -955,8 +770,15 @@
               Temporary Password <span class="text-danger">*</span>
             </label>
             <div class="input-group">
-              <input type="password" id="resetPasswordTempInput" class="form-control"
-                placeholder="At least 8 characters" autocomplete="new-password" />
+              <!-- ADMIN PASSWORD RESET VISIBILITY - STEP 1H
+     Use a text input with visual masking instead of type="password".
+     This prevents browser password-manager dropdowns from covering the
+     Admin temporary password modal while keeping the value masked by default.
+     This is UI-only and does not change the reset-password backend flow. -->
+              <input type="text" id="resetPasswordTempInput" name="admin_temp_credential_input" class="form-control"
+                placeholder="At least 8 characters" autocomplete="off" autocorrect="off" autocapitalize="off"
+                spellcheck="false" inputmode="text" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+                style="-webkit-text-security: disc; text-security: disc;" />
               <button type="button" id="resetPasswordToggleBtn" class="btn btn-outline-secondary"
                 title="Show / hide password">
                 <i class="bi bi-eye" id="resetPasswordToggleIcon"></i>
@@ -980,6 +802,67 @@
       </div>
     </div>
   </div>
+
+  <!-- ADMIN DASHBOARD WORKSPACE MEMORY - STEP 1A
+     First-paint restore for Admin workspace.
+     This prevents a visible Profile flash when refreshing from Overview or Companies.
+     It reads only the lightweight workspace key written by admin-dashboard.js. -->
+  <script>
+    (function () {
+      try {
+        if ("scrollRestoration" in window.history) {
+          window.history.scrollRestoration = "manual";
+        }
+
+        var workspace = sessionStorage.getItem("hrPayroll:lastAdminWorkspace:last") || "profile";
+
+        var profileSection = document.getElementById("adminProfileSection");
+        var overviewSection = document.getElementById("adminOverviewSection");
+        var tenantsSection = document.getElementById("adminTenantsSection");
+
+        var profileBtn = document.getElementById("adminTabProfileBtn");
+        var overviewBtn = document.getElementById("adminTabOverviewBtn");
+        var tenantsBtn = document.getElementById("adminTabTenantsBtn");
+        var moduleValue = document.getElementById("adminModuleValue");
+
+        function setInactive(button) {
+          if (!button) return;
+          button.classList.remove("btn-primary");
+          button.classList.add("btn-outline-primary");
+        }
+
+        function setActive(button) {
+          if (!button) return;
+          button.classList.remove("btn-outline-primary");
+          button.classList.add("btn-primary");
+        }
+
+        if (workspace === "overview" || workspace === "tenants") {
+          if (profileSection) profileSection.classList.add("d-none");
+          if (overviewSection) overviewSection.classList.toggle("d-none", workspace !== "overview");
+          if (tenantsSection) tenantsSection.classList.toggle("d-none", workspace !== "tenants");
+
+          setInactive(profileBtn);
+          setInactive(overviewBtn);
+          setInactive(tenantsBtn);
+
+          if (workspace === "overview") {
+            setActive(overviewBtn);
+            if (moduleValue) moduleValue.textContent = "Overview";
+          }
+
+          if (workspace === "tenants") {
+            setActive(tenantsBtn);
+            if (moduleValue) moduleValue.textContent = "Company Setup";
+          }
+        }
+
+        window.scrollTo(0, 0);
+      } catch (error) {
+        // If sessionStorage is blocked, the HTML default Profile workspace remains safe.
+      }
+    })();
+  </script>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

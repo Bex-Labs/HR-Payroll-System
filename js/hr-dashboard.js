@@ -1,6 +1,18 @@
+// DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
+// Browser refresh can restore the previous scroll position before the dashboard
+// finishes restoring the active workspace. Keep browser restoration manual so
+// refresh always lands at the top of the restored HR workspace.
+try {
+  if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+  }
+} catch (error) {
+  console.warn("Browser scroll restoration could not be set to manual.", error);
+}
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     cacheDomElements();
+
     bindEvents();
 
     // PAYROLL WORKSPACE LAYOUT - HR/PAYROLL STANDARD STEP 2A
@@ -145,7 +157,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const access = await window.SessionManager.protectPage("hr");
 
-    if (!access) return;
+    if (!access) {
+      return;
+    }
 
     state.currentUser = access.session.user;
     state.currentProfile = access.profile;
@@ -153,8 +167,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadLatestHrProfile();
 
     renderHrProfile(state.currentProfile, access.session.user);
-    switchHrWorkspace("profile");
     resetEmployeeForm();
+
+    // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
+    // Restore the remembered workspace early and force the page to the top.
+    // Do this before the long async HR/payroll data refreshes continue.
+    restoreHrWorkspaceAfterRefresh();
 
     // SUBMIT PAYROLL - DESCRIPTION ITEM 1 - STEP 5
     // Build the Pay Cycle dropdown dynamically before resetting the payroll form.
@@ -183,14 +201,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     // so long school/course suggestion lists do not show a heavy scrollbar.
     bindEducationSuggestionPanels();
 
-    // MANAGE ORGANIZATION CARD - STEP 3
-    // Load the single organization settings record after HR access is confirmed.
-    await refreshOrganizationSettingsWorkspace();
+// MANAGE ORGANIZATION CARD - STEP 3
+// Load the single organization settings record after HR access is confirmed.
+await refreshOrganizationSettingsWorkspace();
 
-    // ORGANIZATION HR SETUP VALUES - STEP 3
-    // Load HR-managed Departments and Job Titles before employee/payroll forms
-    // need dropdown values. This is read-only for now.
-    await refreshOrganizationHrSetupValues();
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+// Organization Settings are now loaded, so apply read-only controls for
+// Payroll, Auditor, QA, and custom HR-routed roles.
+applyHrOrganizationSetupAccessControls();
+
+// ORGANIZATION HR SETUP VALUES - STEP 3
+// Load HR-managed Departments and Job Titles before employee/payroll forms
+// need dropdown values. This is read-only for now.
+await refreshOrganizationHrSetupValues();
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+// Department and Job Title records are now loaded/rendered, so re-apply
+// Organization Setup restrictions after the setup tables are rebuilt.
+applyHrOrganizationSetupAccessControls();
 
     // DESCRIPTION ITEM 3 - STEP 2A-4
     // Load controlled Payroll Grade / Level values before Payroll Master Data,
@@ -239,8 +267,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Email / Communication Setup card. This does not send payslips and
     // does not load salary, deduction, or bank data.
     await refreshHrp85EmailIntegrationWorkspace();
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+    // Email / Communication Setup is review-only for non-HR maintenance roles.
+    applyHrCommunicationSetupAccessControls();
 
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+    // Keep employee editing blocked for Payroll, Auditor, QA, and custom
+    // HR-routed roles. These roles may review People records but not maintain them.
     window.hrEditEmployee = (employeeId) => {
+      if (!canCurrentUserMaintainPeopleData()) {
+        showHrPeopleAccessDeniedMessage();
+        return;
+      }
+
       startEmployeeEdit(employeeId);
     };
 
@@ -359,6 +398,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   } catch (error) {
     console.error("Error initialising HR dashboard:", error);
+
     showPageAlert(
       "danger",
       error.message ||
@@ -380,10 +420,20 @@ const HRP85_STANDARD_VALIDATION_MESSAGE =
 // Tenant context is written by the login flow after Tenant ID validation.
 // HR-created employee records must inherit this tenant automatically.
 const TENANT_CONTEXT_STORAGE_KEY = "hrPayrollTenantContext";
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+// Remembers only the active HR workspace tab during browser refresh.
+// This must stay sessionStorage-based so logout/new sessions return to Profile.
+const HR_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastHrWorkspace";
 
 const state = {
   currentUser: null,
   currentProfile: null,
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+  // profiles.role controls which dashboard opens at login.
+  // employees.system_role controls the user's business access inside HR Dashboard.
+  currentHrEmployeeRecord: null,
+  currentHrBusinessRole: "",
 
   // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
   // Stores the loaded profile values so Save Profile Changes only turns blue
@@ -637,6 +687,289 @@ function canCurrentUserMaintainPayrollMasterData() {
   return PAYROLL_MASTER_MAINTENANCE_ROLES.has(getCurrentUserRoleValue());
 }
 
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+// People maintenance is restricted by the signed-in user's business role,
+// not by profiles.role alone. profiles.role may be "hr" for Auditor/Payroll/QA
+// because HR Dashboard is the temporary shared route until dedicated dashboards exist.
+const HR_PEOPLE_MAINTENANCE_ROLES = new Set([
+  "hr",
+  "hr_manager",
+  "admin",
+  "system_admin",
+]);
+
+const HR_PEOPLE_VIEW_ONLY_ROLES = new Set([
+  "payroll",
+  "payroll_manager",
+  "auditor",
+  "qa_analyst",
+]);
+
+function normaliseHrBusinessRole(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+// Resolve the logged-in HR Dashboard user's employee record when one exists.
+// Match linked user_id first, then work_email. This supports old, recent,
+// new, and future users without targeting one employee.
+function getCurrentHrEmployeeRecord() {
+  const userId = String(state.currentUser?.id || "").trim();
+  const profileEmail = normaliseHrBusinessRole(state.currentProfile?.email || "");
+
+  const employee =
+    (state.employees || []).find((record) => {
+      const employeeUserId = String(record.user_id || record.auth_user_id || "").trim();
+      return Boolean(userId && employeeUserId && employeeUserId === userId);
+    }) ||
+    (state.employees || []).find((record) => {
+      const workEmail = normaliseHrBusinessRole(record.work_email || "");
+      return Boolean(profileEmail && workEmail && workEmail === profileEmail);
+    }) ||
+    null;
+
+  state.currentHrEmployeeRecord = employee;
+
+  return employee;
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+// Business role source of truth:
+// 1. employees.system_role when the signed-in user has an employee record.
+// 2. profiles.role fallback for company bootstrap HR users who may not yet
+//    have employee records.
+function getCurrentHrBusinessRole() {
+  const employee = getCurrentHrEmployeeRecord();
+
+  const role =
+    normaliseHrBusinessRole(employee?.system_role || "") ||
+    normaliseHrBusinessRole(state.currentProfile?.system_role || "") ||
+    normaliseHrBusinessRole(state.currentProfile?.role || "");
+
+  state.currentHrBusinessRole = role;
+
+  return role;
+}
+
+function canCurrentUserMaintainPeopleData() {
+  const businessRole = getCurrentHrBusinessRole();
+
+  if (HR_PEOPLE_MAINTENANCE_ROLES.has(businessRole)) {
+    return true;
+  }
+
+  if (HR_PEOPLE_VIEW_ONLY_ROLES.has(businessRole)) {
+    return false;
+  }
+
+  // Unknown/custom roles should not get HR maintenance rights by accident.
+  return false;
+}
+
+function showHrPeopleAccessDeniedMessage() {
+  const businessRole = getCurrentHrBusinessRole() || "this role";
+
+  showPageAlert(
+    "warning",
+    `People maintenance is restricted for ${formatEmployeeSystemRoleLabel(businessRole)}. This role can review employee records but cannot create, edit, or change employee dashboard roles.`,
+  );
+
+  showDashboardToast(
+    "warning",
+    "People access is view-only",
+    "Use an HR or HR Manager account to maintain employee records and role assignments.",
+  );
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+// Disable People maintenance controls for read-only People users.
+// Search, refresh, collapse, document viewing, and table browsing remain available.
+function applyHrPeopleAccessControls() {
+  if (canCurrentUserMaintainPeopleData()) return;
+
+  const controlsToDisable = [
+    state.dom.saveEmployeeBtn,
+    state.dom.resetEmployeeFormBtn,
+    state.dom.cancelEditBtn,
+    state.dom.batchEmployeeCsvFile,
+    state.dom.importBatchEmployeesCsvBtn,
+    state.dom.clearBatchEmployeesCsvBtn,
+    state.dom.submitBatchEmployeesBtn,
+    state.dom.employeeDocumentsInput,
+    state.dom.employeeDocumentType,
+    state.dom.clearPendingDocumentsBtn,
+    state.dom.addEmployeeReportingLineBtn,
+    state.dom.addEmployeeEducationRecordBtn,
+    state.dom.addEmployeeDependantRecordBtn,
+  ].filter(Boolean);
+
+  const employeeFormControls = state.dom.employeeCreateForm
+    ? Array.from(
+      state.dom.employeeCreateForm.querySelectorAll(
+        "input, select, textarea, button",
+      ),
+    )
+    : [];
+
+  [...employeeFormControls, ...controlsToDisable].forEach((control) => {
+    control.disabled = true;
+    control.setAttribute("aria-disabled", "true");
+  });
+
+  if (state.dom.employeeFormModeBadge) {
+    state.dom.employeeFormModeBadge.textContent = "View Only";
+    state.dom.employeeFormModeBadge.className =
+      "badge rounded-pill text-bg-warning border px-3 py-2";
+  }
+
+  if (state.dom.employeeFormSubtext) {
+    state.dom.employeeFormSubtext.textContent =
+      "This role can review employee records but cannot create, edit, or change employee dashboard roles.";
+  }
+
+  if (state.dom.saveEmployeeBtn) {
+    state.dom.saveEmployeeBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="saveEmployeeBtnText">People Records Read Only</span>
+    `;
+    state.dom.saveEmployeeBtnText = document.getElementById("saveEmployeeBtnText");
+  }
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+// Organization Setup covers company contact details, Departments, and Job Titles.
+// Payroll, Auditor, QA, and custom HR-routed roles may view these records,
+// but only HR/HR Manager/Admin should maintain them.
+const HR_ORGANIZATION_SETUP_MAINTENANCE_ROLES = new Set([
+  "hr",
+  "hr_manager",
+  "admin",
+  "system_admin",
+]);
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+// Email / Communication Setup controls validation recipients and email test actions.
+// Keep this restricted to HR-style roles for now.
+const HR_COMMUNICATION_SETUP_MAINTENANCE_ROLES = new Set([
+  "hr",
+  "hr_manager",
+  "admin",
+  "system_admin",
+]);
+
+function canCurrentUserMaintainOrganizationSetupData() {
+  return HR_ORGANIZATION_SETUP_MAINTENANCE_ROLES.has(
+    getCurrentHrBusinessRole(),
+  );
+}
+
+function canCurrentUserMaintainCommunicationSetupData() {
+  return HR_COMMUNICATION_SETUP_MAINTENANCE_ROLES.has(
+    getCurrentHrBusinessRole(),
+  );
+}
+
+function showHrSetupAccessDeniedMessage(areaLabel = "this setup area") {
+  showPageAlert(
+    "warning",
+    `${areaLabel} is read-only for this role. Use an HR or HR Manager account to maintain setup records.`,
+  );
+
+  showDashboardToast(
+    "warning",
+    "Setup access is view-only",
+    `${areaLabel} can be reviewed, but not changed by this role.`,
+  );
+}
+
+function setHrControlsDisabled(controls = [], isDisabled = true) {
+  controls.filter(Boolean).forEach((control) => {
+    control.disabled = isDisabled;
+    control.setAttribute("aria-disabled", String(isDisabled));
+  });
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+// Lock Organization Setup maintenance for Payroll, Auditor, QA, and custom roles.
+// This is UI-level protection; backend/RLS still remains the authority.
+function applyHrOrganizationSetupAccessControls() {
+  if (canCurrentUserMaintainOrganizationSetupData()) return;
+
+  setHrControlsDisabled(
+    [
+      state.dom.organizationEmail,
+      state.dom.organizationPhoneNumber,
+      state.dom.organizationPayrollContactEmail,
+      state.dom.organizationAddressLine,
+      state.dom.organizationCity,
+      state.dom.organizationTin,
+      state.dom.organizationRegistrationNumber,
+      state.dom.saveOrganizationSettingsBtn,
+
+      state.dom.organizationDepartmentName,
+      state.dom.organizationDepartmentStatus,
+      state.dom.saveOrganizationDepartmentBtn,
+      state.dom.cancelOrganizationDepartmentEditBtn,
+
+      state.dom.organizationJobTitleDepartmentId,
+      state.dom.organizationJobTitleName,
+      state.dom.organizationJobTitleStatus,
+      state.dom.saveOrganizationJobTitleBtn,
+      state.dom.cancelOrganizationJobTitleEditBtn,
+    ],
+    true,
+  );
+
+  if (state.dom.saveOrganizationSettingsBtn) {
+    state.dom.saveOrganizationSettingsBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      <span id="organizationSettingsSubmitLabel">Organization Setup Read Only</span>
+    `;
+    state.dom.organizationSettingsSubmitLabel =
+      document.getElementById("organizationSettingsSubmitLabel");
+  }
+
+  if (state.dom.organizationDepartmentSubmitLabel) {
+    state.dom.organizationDepartmentSubmitLabel.textContent = "Departments Read Only";
+  }
+
+  if (state.dom.organizationJobTitleSubmitLabel) {
+    state.dom.organizationJobTitleSubmitLabel.textContent = "Job Titles Read Only";
+  }
+}
+
+// HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+// Lock Email / Communication test-send actions for non-HR maintenance roles.
+// Refresh and review remain allowed.
+function applyHrCommunicationSetupAccessControls() {
+  if (canCurrentUserMaintainCommunicationSetupData()) return;
+
+  setHrControlsDisabled(
+    [
+      state.dom.hrp85TestRecipientSelect,
+      state.dom.hrp85TestSubject,
+      state.dom.hrp85TestMessage,
+      state.dom.hrp85SendTestEmailBtn,
+    ],
+    true,
+  );
+
+  if (state.dom.hrp85SendTestEmailBtn) {
+    state.dom.hrp85SendTestEmailBtn.innerHTML = `
+      <i class="bi bi-lock me-2"></i>
+      Send Test Email Read Only
+    `;
+  }
+
+  setHrp85EmailIntegrationStatus(
+    "warning",
+    "Email / Communication Setup is read-only for this role. Refresh and review are allowed, but sending validation emails is restricted.",
+  );
+}
+
 function showPayrollMasterAccessDeniedMessage() {
   showPageAlert(
     "warning",
@@ -741,6 +1074,152 @@ function getCurrentTenantContext() {
     console.error("Invalid tenant context cache:", error);
     return null;
   }
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+// Only these top-level HR workspaces are safe to restore after browser refresh.
+function isValidHrWorkspaceKey(workspace = "") {
+  return ["profile", "employees", "setup", "payroll"].includes(
+    String(workspace || "").trim(),
+  );
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+// Build a scoped memory key so one HR user's Pinehearst workspace state
+// cannot bleed into another user or company workspace.
+function getHrWorkspaceMemoryKey() {
+  const tenantContext = getCurrentTenantContext();
+
+  const userId = String(state.currentUser?.id || "anonymous").trim();
+  const tenantId = String(
+    tenantContext?.tenantId ||
+    state.currentProfile?.tenant_id ||
+    "no-tenant",
+  ).trim();
+
+  return `${HR_DASHBOARD_WORKSPACE_MEMORY_PREFIX}:${userId}:${tenantId}`;
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+// Save only the active workspace key. Do not store employee, payroll,
+// bank, salary, payslip, or form data in browser storage.
+function rememberHrWorkspace(workspace = "") {
+  if (!isValidHrWorkspaceKey(workspace)) return;
+
+  try {
+    sessionStorage.setItem(getHrWorkspaceMemoryKey(), workspace);
+  } catch (error) {
+    console.warn("HR workspace memory could not be saved.", error);
+  }
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+// Read the last workspace for this signed-in HR user and company only.
+function getRememberedHrWorkspace() {
+  try {
+    const workspace = sessionStorage.getItem(getHrWorkspaceMemoryKey());
+
+    return isValidHrWorkspaceKey(workspace)
+      ? workspace
+      : "profile";
+  } catch (error) {
+    console.warn("HR workspace memory could not be read.", error);
+    return "profile";
+  }
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+// Clear remembered workspace on logout so the next login starts from Profile.
+function clearRememberedHrWorkspace() {
+  try {
+    sessionStorage.removeItem(getHrWorkspaceMemoryKey());
+  } catch (error) {
+    console.warn("HR workspace memory could not be cleared.", error);
+  }
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1B
+// Hide workspace sections during startup so the browser does not briefly show
+// Profile before the remembered workspace is restored after refresh.
+function suppressHrWorkspaceFlashDuringStartup() {
+  // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1C
+  // The HTML body now starts with hr-workspace-booting before first paint.
+  // Keep this as a defensive fallback in case the body class is missing.
+  document.body?.classList.add("hr-workspace-booting");
+
+  [
+    state.dom.hrProfileSection,
+    state.dom.hrEmployeesSection,
+    state.dom.hrSetupSection,
+    state.dom.hrPayrollSection,
+  ].forEach((section) => {
+    section?.classList.add("d-none");
+  });
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1D
+// Set the remembered workspace while the restore overlay is still active.
+// This prevents HR seeing the Profile tab or another tab flash during refresh.
+function prepareRestoredHrWorkspaceDuringStartup() {
+  restoreHrWorkspaceAfterRefresh();
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1D
+// Reveal the dashboard only after startup work has had a chance to complete.
+// HR sees one controlled restore state instead of tab/content flicker.
+function revealRestoredHrWorkspace() {
+  // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1D CORRECTION
+  // Release the first-paint gate immediately after the remembered workspace
+  // has been selected. Do not wait for employee/payroll/setup data loads.
+  document.body?.classList.remove("hr-workspace-booting");
+
+  window.scrollTo({
+    top: 0,
+    behavior: "auto",
+  });
+
+  updateBackToTopButtonVisibility();
+}
+
+// DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
+// Force the dashboard to the true page top without smooth scrolling.
+// This is used only for refresh restore, not normal in-page navigation.
+function forceHrDashboardToTopAfterRefresh() {
+  window.scrollTo({
+    top: 0,
+    left: 0,
+    behavior: "auto",
+  });
+
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+
+  updateBackToTopButtonVisibility();
+}
+
+// DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+// Browser refresh should reopen the last workspace, then place HR at the top.
+// Fresh login has no remembered key, so it naturally opens Profile.
+function restoreHrWorkspaceAfterRefresh() {
+  const workspace = getRememberedHrWorkspace();
+
+  switchHrWorkspace(workspace);
+
+  // DASHBOARD REFRESH TOP POSITION FIX - HR STEP 1
+  // Run immediately and across the next paints because browsers can restore
+  // scroll position after initial DOM work, especially on long HR/payroll pages.
+  forceHrDashboardToTopAfterRefresh();
+
+  window.requestAnimationFrame(() => {
+    forceHrDashboardToTopAfterRefresh();
+
+    window.requestAnimationFrame(() => {
+      forceHrDashboardToTopAfterRefresh();
+    });
+  });
+
+  window.setTimeout(forceHrDashboardToTopAfterRefresh, 0);
+  window.setTimeout(forceHrDashboardToTopAfterRefresh, 150);
 }
 
 // HRP-80 - TENANT DATA SEGMENTATION - STEP 7C
@@ -2648,6 +3127,13 @@ function setHrp85SendTestEmailLoading(isLoading) {
 // Send a controlled validation email through the secure Supabase Edge Function.
 // This does not touch real payslip sending and does not pass payroll data.
 async function handleHrp85EmailIntegrationSubmit() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+  // Email validation sending is a controlled setup action.
+  // Payroll, Auditor, QA, and custom HR-routed roles may review logs only.
+  if (!canCurrentUserMaintainCommunicationSetupData()) {
+    showHrSetupAccessDeniedMessage("Email / Communication Setup");
+    return;
+  }
   if (!validateHrp85EmailIntegrationForm()) return;
 
   const select = state.dom.hrp85TestRecipientSelect;
@@ -5389,6 +5875,10 @@ function alignEmployeeWorkspaceCardOrder() {
 
 function bindEvents() {
   state.dom.logoutBtn?.addEventListener("click", async () => {
+    // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+    // Logout must reset the next session to Profile.
+    clearRememberedHrWorkspace();
+
     await window.SessionManager.logoutUser("logout");
   });
 
@@ -5445,6 +5935,9 @@ function bindEvents() {
   updateBackToTopButtonVisibility();
 
   state.dom.hrTabProfileBtn?.addEventListener("click", () => {
+    // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+    // Remember Profile only for refresh in the current browser session.
+    rememberHrWorkspace("profile");
     switchHrWorkspace("profile");
   });
 
@@ -5456,6 +5949,9 @@ function bindEvents() {
     state.selectedEmployeesForPayroll.clear();
     state.dom.runPayrollSelectionNotice?.classList.add("d-none");
 
+    // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+    // Remember People only after clearing payroll-selection mode.
+    rememberHrWorkspace("employees");
     switchHrWorkspace("employees");
     applyEmployeeSearch();
     syncSelectAllEmployeesForPayrollCheckbox();
@@ -5469,6 +5965,9 @@ function bindEvents() {
     state.selectedEmployeesForPayroll.clear();
     state.dom.runPayrollSelectionNotice?.classList.add("d-none");
 
+    // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+    // Remember Setup only after clearing active payroll-selection state.
+    rememberHrWorkspace("setup");
     switchHrWorkspace("setup");
   });
 
@@ -5486,6 +5985,10 @@ function bindEvents() {
     // profile is available. Records may still be viewed, but setup actions are
     // locked for non-HR/payroll roles.
     applyPayrollMasterAccessControls();
+
+    // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+    // Remember Payroll for refresh, but do not store payroll form or salary data.
+    rememberHrWorkspace("payroll");
     switchHrWorkspace("payroll");
   });
 
@@ -6691,6 +7194,10 @@ async function handleBatchEmployeeSubmit() {
       );
 
       await refreshEmployeeWorkspace();
+      // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+      // Employee records are now loaded, so resolve the signed-in user's
+      // employees.system_role and apply People maintenance restrictions.
+      applyHrPeopleAccessControls();
       return;
     }
 
@@ -14926,6 +15433,9 @@ function startRunPayrollSelectionFlow() {
     state.dom.employeeSearchInput.value = "";
   }
 
+  // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
+  // Run Payroll starts from People because HR selects employees there.
+  rememberHrWorkspace("employees");
   switchHrWorkspace("employees");
 
   if (state.dom.employeeListCardCollapse) {
@@ -16178,6 +16688,12 @@ function resetOrganizationDepartmentForm() {
 // ORGANIZATION HR SETUP VALUES - STEP 4A
 // Save or update one Department record.
 async function handleOrganizationDepartmentSave() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+  // Departments are controlled HR setup values.
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Department Setup");
+    return;
+  }
   clearPageAlert();
 
   if (!validateOrganizationDepartmentForm()) {
@@ -16344,6 +16860,12 @@ function renderOrganizationDepartmentsTable() {
 // ORGANIZATION HR SETUP VALUES - STEP 4A
 // Load a Department into the form for editing.
 function startOrganizationDepartmentEdit(departmentId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+  // View-only setup roles cannot load Department records into edit mode.
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Department Setup");
+    return;
+  }
   const record = (state.organizationDepartments || []).find(
     (department) => String(department.id) === String(departmentId),
   );
@@ -16687,6 +17209,12 @@ function setOrganizationJobTitleSaveLoading(isLoading, isEditMode = false) {
 // Save or update one Job Title record.
 // Duplicate protection is scoped to Department + Job Title.
 async function handleOrganizationJobTitleSave() {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+  // Job Titles are controlled HR setup values.
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Job Title Setup");
+    return;
+  }
   clearPageAlert();
 
   if (!validateOrganizationJobTitleForm()) {
@@ -16800,6 +17328,12 @@ async function handleOrganizationJobTitleSave() {
 // ORGANIZATION HR SETUP VALUES - STEP 4B-4
 // Load a Job Title into the form for editing.
 function startOrganizationJobTitleEdit(jobTitleId) {
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+  // View-only setup roles cannot load Job Title records into edit mode.
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Job Title Setup");
+    return;
+  }
   const record = (state.organizationJobTitles || []).find(
     (jobTitle) => String(jobTitle.id) === String(jobTitleId),
   );
@@ -17199,6 +17733,14 @@ function setOrganizationSettingsSaveLoading(isLoading, isEditMode = false) {
 async function handleOrganizationSettingsSave() {
   clearPageAlert();
 
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2C
+  // Only HR/HR Manager/Admin can maintain organization setup.
+  // Payroll, Auditor, QA, and custom HR-routed roles can review only.
+  if (!canCurrentUserMaintainOrganizationSetupData()) {
+    showHrSetupAccessDeniedMessage("Organization Setup");
+    return;
+  }
+
   if (!validateOrganizationSettingsForm()) {
     showPageAlert(
       "warning",
@@ -17468,6 +18010,60 @@ function getEmployeeProfileRole(employee) {
     : state.authProfiles.find((p) => normalizeText(p.email || "") === workEmail);
 
   return profile?.role || null;
+}
+
+// MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F
+// The HR form is the master role-control path.
+// The row button is only a safe shortcut for Employee <-> Manager.
+// For HR, Payroll, Auditor, QA, Leadership, and custom roles, HR must use
+// the form so the selected business role and dashboard route remain deliberate.
+function getEmployeeSystemRoleKey(employee = {}) {
+  return String(employee.system_role || "employee")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+// MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F
+// Decide how the quick manager button should behave from employees.system_role,
+// not profiles.role only. This prevents stale profile routes from making a
+// saved Manager still show "Assign as manager".
+function getManagerQuickActionState(employee = {}) {
+  const systemRole = getEmployeeSystemRoleKey(employee);
+
+  if (!systemRole || systemRole === "employee") {
+    return {
+      canUseQuickAction: true,
+      isQuickManager: false,
+      nextRole: "manager",
+      buttonClass: "btn-outline-primary",
+      iconClass: "bi-person-plus",
+      title: "Assign as manager",
+      ariaLabel: "Assign as manager",
+    };
+  }
+
+  if (systemRole === "manager") {
+    return {
+      canUseQuickAction: true,
+      isQuickManager: true,
+      nextRole: "employee",
+      buttonClass: "btn-warning",
+      iconClass: "bi-person-dash",
+      title: "Revert to employee",
+      ariaLabel: "Revert manager to employee",
+    };
+  }
+
+  return {
+    canUseQuickAction: false,
+    isQuickManager: false,
+    nextRole: "",
+    buttonClass: "btn-outline-secondary",
+    iconClass: "bi-person-gear",
+    title: "Use the employee form to change this role",
+    ariaLabel: "Use employee form to change role",
+  };
 }
 
 // DESCRIPTION ITEM 9 - STEP 1
@@ -19069,11 +19665,13 @@ function renderEmployeeRecords(employees) {
     const accountLinkage = getEmployeeAccountLinkage(employee);
     const safeEmployeeId = String(employee.id || "").replaceAll("'", "\\'");
 
-    // MANAGER ROLE ASSIGNMENT
-    // Determine current profile role so the toggle button shows the right state.
-    const profileRole = getEmployeeProfileRole(employee);
-    const canToggleRole = ["linked", "matched"].includes(accountLinkage.code);
-    const isManager = profileRole === "manager";
+    // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+    // Read-only People roles can view employee rows but cannot edit employees
+    // or change dashboard role assignment from the quick action.
+    const canMaintainPeople = canCurrentUserMaintainPeopleData();
+    const quickRoleAction = getManagerQuickActionState(employee);
+    const canToggleRole = canMaintainPeople && quickRoleAction.canUseQuickAction;
+    const isManager = quickRoleAction.isQuickManager;
 
     const row = document.createElement("tr");
 
@@ -19158,13 +19756,14 @@ function renderEmployeeRecords(employees) {
         <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
              Keep existing compact icon actions centred. -->
         <div class="d-inline-flex align-items-center gap-2 flex-nowrap">
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-primary"
-            title="Edit employee"
-            aria-label="Edit employee"
-            onclick="window.hrEditEmployee('${safeEmployeeId}')"
-          >
+<button
+  type="button"
+  class="btn btn-sm ${canMaintainPeople ? "btn-outline-primary" : "btn-outline-secondary"}"
+  title="${canMaintainPeople ? "Edit employee" : "People records are read-only for this role"}"
+  aria-label="${canMaintainPeople ? "Edit employee" : "People records are read-only"}"
+  ${canMaintainPeople ? "" : "disabled"}
+  onclick="window.hrEditEmployee('${safeEmployeeId}')"
+>
             <i class="bi bi-pencil-square"></i>
           </button>
 
@@ -19178,19 +19777,25 @@ function renderEmployeeRecords(employees) {
             <i class="bi bi-paperclip"></i>
           </button>
 
-          <!-- MANAGER ROLE ASSIGNMENT
-               Toggle between Employee and Manager role.
-               Disabled if the employee has no login account yet. -->
-          <button
-            type="button"
-            class="btn btn-sm ${isManager ? "btn-warning" : "btn-outline-primary"}"
-            title="${canToggleRole ? (isManager ? "Remove manager role" : "Assign as manager") : "No login account — invite employee first"}"
-            aria-label="${isManager ? "Remove manager role" : "Assign as manager"}"
-            ${canToggleRole ? "" : "disabled"}
-            onclick="window.hrToggleManagerRole('${safeEmployeeId}')"
-          >
-            <i class="bi ${isManager ? "bi-person-dash" : "bi-person-up"}"></i>
-          </button>
+<!-- MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F
+     Quick action is only for Employee <-> Manager.
+     Other roles must be changed from the employee form because the form
+     is now the master control for full role assignment. -->
+<button
+  type="button"
+  class="btn btn-sm ${quickRoleAction.buttonClass}"
+title="${canToggleRole
+        ? quickRoleAction.title
+        : canMaintainPeople
+          ? "Use the employee form to change this role"
+          : "People role changes are restricted for this role"
+      }"
+  aria-label="${quickRoleAction.ariaLabel}"
+  ${canToggleRole ? "" : "disabled"}
+  onclick="window.hrToggleManagerRole('${safeEmployeeId}')"
+>
+  <i class="bi ${quickRoleAction.iconClass}"></i>
+</button>
         </div>
       </td>
     `;
@@ -19356,10 +19961,16 @@ function resetEmployeeForm() {
   }
 
   if (state.dom.saveEmployeeBtn) {
+    // EMPLOYEE CREATE/EDIT BUTTON STATE FIX - STEP 1
+    // Reset mode must always discard any stale loading HTML captured from edit mode.
+    // Without this, a previous "Update Employee Profile" loading state can be restored
+    // after the form has already returned to create mode.
+    delete state.dom.saveEmployeeBtn.dataset.originalHtml;
+
     state.dom.saveEmployeeBtn.innerHTML = `
-      <i class="bi bi-person-plus me-2"></i>
-      <span id="saveEmployeeBtnText">Create Employee Profile</span>
-    `;
+    <i class="bi bi-person-plus me-2"></i>
+    <span id="saveEmployeeBtnText">Create Employee Profile</span>
+  `;
     state.dom.saveEmployeeBtnText = document.getElementById("saveEmployeeBtnText");
   }
 
@@ -20433,10 +21044,62 @@ async function uploadPendingFilesForEmployee(employeeId) {
   renderAttachedDocuments();
 }
 
-// MANAGER ROLE ASSIGNMENT
-// Toggle an employee's system role between 'employee' and 'manager'.
-// Updates profiles.role (controls login routing) and employees.system_role
-// (keeps the employee list badge in sync). Refreshes both lists after save.
+// MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1E
+// Sync the HR employee form System Role with the login dashboard route.
+// The HR form is now the master role-control path.
+//
+// Business rule:
+// - employees.system_role stores the HR-selected business/system role.
+// - profiles.role stores the actual dashboard route used at login.
+// - The secure RPC maps form roles to supported dashboards.
+// - This does not touch payroll, payslips, salary, leave, bank details,
+//   allowances, deductions, or reporting-line records.
+async function syncEmployeeFormRoleToDashboardRoute(employeeId, selectedSystemRole) {
+  const cleanEmployeeId = String(employeeId || "").trim();
+  const cleanRole = String(selectedSystemRole || "employee").trim() || "employee";
+
+  if (!cleanEmployeeId) {
+    return {
+      success: false,
+      profile_found: false,
+      message: "Employee role routing was skipped because no employee ID was available.",
+    };
+  }
+
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase.rpc(
+    "hr_sync_employee_manager_role",
+    {
+      input_employee_id: cleanEmployeeId,
+      input_role: cleanRole,
+    },
+  );
+
+  if (error) throw error;
+
+  const roleSyncResult = Array.isArray(data) ? data[0] : data;
+
+  if (!roleSyncResult?.success) {
+    throw new Error(
+      roleSyncResult?.message ||
+      "Employee dashboard routing could not be updated.",
+    );
+  }
+
+  return roleSyncResult;
+}
+
+// MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F FIX
+// Quick action uses employees.system_role, not profiles.role.
+// This prevents stale login route values from making a Manager still show
+// "Assign as manager" instead of "Revert to employee".
+//
+// HR rule:
+// - Row button only supports Employee <-> Manager.
+// - Full role assignment stays in the employee form.
+// - Payroll, payslips, salary, bank details, leave, allowances,
+//   deductions, and reporting lines are not touched.
 async function toggleEmployeeManagerRole(employeeId) {
   const employee = (state.employees || []).find(
     (e) => String(e.id || "") === String(employeeId || ""),
@@ -20447,22 +21110,50 @@ async function toggleEmployeeManagerRole(employeeId) {
     return;
   }
 
-  const currentRole = getEmployeeProfileRole(employee);
-  const newRole = currentRole === "manager" ? "employee" : "manager";
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+  // Only HR/HR Manager style roles can change employee dashboard access roles.
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
 
-  const fullName = [employee.first_name, employee.last_name]
-    .map((n) => String(n || "").trim())
-    .filter(Boolean)
-    .join(" ") || "this employee";
+  const quickRoleAction = getManagerQuickActionState(employee);
 
-  const confirmMessage = newRole === "manager"
-    ? `Assign ${fullName} as a Manager? They will be routed to the Manager Dashboard on their next login.`
-    : `Remove the Manager role from ${fullName}? They will be routed to the Employee Dashboard on their next login.`;
+  if (!quickRoleAction.canUseQuickAction || !quickRoleAction.nextRole) {
+    showPageAlert(
+      "warning",
+      "Use the employee form to change this role. The quick action only supports Employee and Manager.",
+    );
+
+    showDashboardToast(
+      "warning",
+      "Use employee form",
+      "This role must be changed from the employee form so the business role and dashboard route stay in sync.",
+    );
+
+    return;
+  }
+
+  const newRole = quickRoleAction.nextRole;
+
+  const fullName =
+    [employee.first_name, employee.last_name]
+      .map((namePart) => String(namePart || "").trim())
+      .filter(Boolean)
+      .join(" ") || "this employee";
+
+  const confirmMessage =
+    newRole === "manager"
+      ? `Assign ${fullName} as a Manager? If a login account already exists, they will be routed to the Manager Dashboard on their next login. If no login account exists yet, HR can still send the login invite afterwards.`
+      : `Revert ${fullName} to Employee? If a login account already exists, they will be routed to the Employee Dashboard on their next login.`;
 
   if (!window.confirm(confirmMessage)) return;
 
   try {
-    const supabase = getSupabaseClient();
+    const roleSyncResult = await syncEmployeeFormRoleToDashboardRoute(
+      employee.id,
+      newRole,
+    );
 
     // Find the matching auth profile.
     // Try the in-memory cache first; if it misses (e.g. the employee activated
@@ -20533,62 +21224,52 @@ async function toggleEmployeeManagerRole(employeeId) {
     await loadAuthProfilesForLinkage();
     await loadEmployees();
 
-    showPageAlert(
-      "success",
+    const alertType = roleSyncResult.profile_found ? "success" : "warning";
+
+    const roleSyncMessage =
+      roleSyncResult.message ||
+      (newRole === "manager"
+        ? `${fullName} has been marked as Manager.`
+        : `${fullName} has been reverted to Employee.`);
+
+    const roleSyncTitle =
       newRole === "manager"
-        ? `${fullName} has been assigned the Manager role successfully.`
-        : `Manager role has been removed from ${fullName}. They are now an Employee.`,
+        ? "Manager access updated"
+        : "Manager access removed";
+
+    showPageAlert(alertType, roleSyncMessage);
+
+    showDashboardToast(
+      alertType,
+      roleSyncTitle,
+      roleSyncMessage,
     );
   } catch (error) {
     console.error("toggleEmployeeManagerRole error:", error);
-    showPageAlert("danger", error.message || "Role could not be updated. Please try again.");
-  }
-}
 
-// EMPLOYEE LOGIN PROVISIONING
-// Send a Supabase invite to the employee's work email via the secure
-// invite-employee-login Edge Function. Returns { success, error }.
-// This is fire-and-report: a failed invite does not roll back the employee record.
-async function provisionEmployeeLogin({ workEmail = "", fullName = "", tenantId = "", companyName = "" } = {}) {
-  try {
-    const supabase = getSupabaseClient();
-    const tenantContext = getCurrentTenantContext();
-
-    const { data, error } = await supabase.functions.invoke(
-      "invite-employee-login",
-      {
-        body: {
-          workEmail: String(workEmail || "").trim().toLowerCase(),
-          fullName: String(fullName || "").trim(),
-          tenantId: String(tenantId || tenantContext?.tenantId || "").trim(),
-          companyName: String(companyName || tenantContext?.companyName || "").trim(),
-        },
-      },
+    showPageAlert(
+      "danger",
+      error.message || "Employee dashboard role could not be updated. Please try again.",
     );
 
-    if (error) {
-      console.error("provisionEmployeeLogin edge function error:", error);
-      return { success: false, error: error.message || "Login invite could not be sent." };
-    }
-
-    if (!data?.success) {
-      return { success: false, error: data?.error || "Login invite could not be sent." };
-    }
-
-    return { success: true };
-  } catch (unexpectedError) {
-    console.error("provisionEmployeeLogin unexpected error:", unexpectedError);
-    return {
-      success: false,
-      // PAYROLL EMAIL STATUS - STEP 2F-3B-6A RECOVERY
-      // Browser JavaScript must not contain TypeScript-only casts such as "as Error".
-      error: unexpectedError?.message || "Login invite could not be sent.",
-    };
+    showDashboardToast(
+      "danger",
+      "Role update failed",
+      error.message || "Employee dashboard role could not be updated.",
+    );
   }
 }
 
 async function handleEmployeeSave() {
   clearPageAlert();
+
+  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2B
+  // Payroll, Auditor, QA, and unknown/custom HR-routed roles must not create
+  // or update employee records from the shared HR Dashboard.
+  if (!canCurrentUserMaintainPeopleData()) {
+    showHrPeopleAccessDeniedMessage();
+    return;
+  }
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3G
   // Keep the existing employee line_manager / approver_email snapshot aligned
@@ -20755,6 +21436,19 @@ async function handleEmployeeSave() {
       loginInviteError = loginResult.error || "";
     }
 
+    // MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1E
+    // The employee form System Role is the master role-control path.
+    // After the employee row is saved, sync the selected form role into the
+    // secure dashboard-routing role. This fixes cases where HR changes
+    // Manager back to Employee, but the user still lands on Manager Dashboard.
+    //
+    // This supports old, recent, new, and future employees because it runs
+    // every time HR creates or updates an employee through the form.
+    const roleSyncResult = await syncEmployeeFormRoleToDashboardRoute(
+      savedEmployeeId,
+      employeePayload.system_role || "employee",
+    );
+
     // EMPLOYEE BIODATA COMPLETION - STEP 3G
     // Save multiple reporting lines after the employee record exists.
     // Create mode needs the newly returned employee id before child rows can be inserted.
@@ -20827,39 +21521,59 @@ async function handleEmployeeSave() {
         inviteNote;
     }
 
-showPageAlert(loginInviteSent || isEditMode ? "success" : "warning", employeeSaveSuccessMessage);
+    // MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1E
+    // Show the employee save result together with the dashboard routing result.
+    // If no login profile exists yet, HR gets a warning but the employee record
+    // and selected system role still save successfully.
+    const roleSyncMessage = roleSyncResult?.message || "";
+    const employeeSaveAlertType =
+      roleSyncResult?.profile_found === false
+        ? "warning"
+        : (loginInviteSent || isEditMode ? "success" : "warning");
 
-// ADMIN COMPANY / HR USER BOOTSTRAP - STEP 1G
-// HR-facing confirmation after employee create/update.
-// The page alert already contains the full save result; this floating toast
-// makes the key outcome visible even after the page scrolls back to the
-// Full Employee List.
-//
-// HR behaviour:
-// - New employee + invite sent = success notification.
-// - New employee saved but invite failed = warning notification.
-// - Edit mode = update notification only; no invite is expected on edit.
-if (isEditMode) {
-  showDashboardToast(
-    "success",
-    "Employee updated",
-    `Employee profile updated for ${savedEmployeeName}.`,
-  );
-} else if (loginInviteSent) {
-  showDashboardToast(
-    "success",
-    "Employee created",
-    `Login invite sent to ${employeePayload.work_email}.`,
-  );
-} else {
-  showDashboardToast(
-    "warning",
-    "Employee created, invite failed",
-    loginInviteError
-      ? `Employee saved, but login invite was not sent: ${loginInviteError}`
-      : "Employee saved, but login invite was not sent.",
-  );
-}
+    if (roleSyncMessage) {
+      employeeSaveSuccessMessage += `
+    <div class="mt-2 small">
+      <strong>Dashboard routing:</strong> ${escapeHtml(roleSyncMessage)}
+    </div>
+  `;
+    }
+
+    showPageAlert(employeeSaveAlertType, employeeSaveSuccessMessage);
+
+    // ADMIN COMPANY / HR USER BOOTSTRAP - STEP 1G
+    // HR-facing confirmation after employee create/update.
+    // The page alert already contains the full save result; this floating toast
+    // makes the key outcome visible even after the page scrolls back to the
+    // Full Employee List.
+    //
+    // HR behaviour:
+    // - New employee + invite sent = success notification.
+    // - New employee saved but invite failed = warning notification.
+    // - Edit mode = update notification only; no invite is expected on edit.
+    if (isEditMode) {
+      showDashboardToast(
+        roleSyncResult?.profile_found === false ? "warning" : "success",
+        "Employee updated",
+        roleSyncResult?.profile_found === false
+          ? `Employee updated for ${savedEmployeeName}. Login dashboard routing will apply after a login profile exists.`
+          : `Employee updated for ${savedEmployeeName}. Dashboard routing has been synced.`,
+      );
+    } else if (loginInviteSent) {
+      showDashboardToast(
+        "success",
+        "Employee created",
+        `Login invite sent to ${employeePayload.work_email}.`,
+      );
+    } else {
+      showDashboardToast(
+        "warning",
+        "Employee created, invite failed",
+        loginInviteError
+          ? `Employee saved, but login invite was not sent: ${loginInviteError}`
+          : "Employee saved, but login invite was not sent.",
+      );
+    }
 
     // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
     // After create/update, clear the form and return HR to the employee list.
