@@ -605,10 +605,10 @@ state.dom.managerTabTeamBtn?.addEventListener("click", () => {
   });
 
   // MANAGER PROFILE UI CLEANUP - STEP 1A
-  // Keep Save Profile Changes grey until Full Name or Department is actually changed.
+  // Keep Save Profile Changes grey until Full Name is actually changed.
+  // Department is read-only (sourced from the employee record) and excluded.
   [
     state.dom.managerProfileFullName,
-    state.dom.managerProfileDepartment,
   ].forEach((field) => {
     field?.addEventListener("input", updateManagerProfileSaveButtonState);
     field?.addEventListener("change", updateManagerProfileSaveButtonState);
@@ -1075,6 +1075,96 @@ function getInitials(fullName, fallback = "MG") {
   return parts.map((part) => part.charAt(0).toUpperCase()).join("");
 }
 
+// MANAGER PROFILE DEPARTMENT SEEDING
+// Resolves the manager's department from their employees record (set by HR
+// from the controlled organization_departments list). Ensures the department
+// exists in organization_departments, then syncs it into profiles.department
+// if the profile department is blank or out of date.
+async function ensureManagerProfileDepartment(supabase, profileData) {
+  if (!profileData) return profileData;
+
+  try {
+    const userId = String(state.currentUser?.id || "").trim();
+    const email = normalizeText(
+      profileData.email || state.currentUser?.email,
+    );
+
+    // Look up the manager's employee record to get their HR-assigned department.
+    let employeeDept = "";
+
+    if (userId) {
+      const { data: empByUser } = await supabase
+        .from("employees")
+        .select("department")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+
+      employeeDept = String(empByUser?.department || "").trim();
+    }
+
+    if (!employeeDept && email) {
+      const { data: empByEmail } = await supabase
+        .from("employees")
+        .select("department")
+        .ilike("work_email", email)
+        .limit(1)
+        .maybeSingle();
+
+      employeeDept = String(empByEmail?.department || "").trim();
+    }
+
+    // Nothing to sync if no employee record department was found.
+    if (!employeeDept) return profileData;
+
+    // Ensure the department exists in the controlled organization_departments list.
+    const { data: existingDepts, error: fetchError } = await supabase
+      .from("organization_departments")
+      .select("id, department_name")
+      .ilike("department_name", employeeDept)
+      .limit(1);
+
+    if (fetchError) {
+      console.warn("Manager department seed: could not query organization_departments:", fetchError);
+    } else if (!existingDepts || existingDepts.length === 0) {
+      // The HR-assigned department isn't in the list yet — add it as Active.
+      const { error: insertError } = await supabase
+        .from("organization_departments")
+        .insert([{
+          department_name: employeeDept,
+          status: "Active",
+          created_by: state.currentUser?.id || null,
+          updated_by: state.currentUser?.id || null,
+        }]);
+
+      if (insertError) {
+        console.warn("Manager department seed: insert failed:", insertError);
+      }
+    }
+
+    // Sync into profiles.department if blank or different from employee record.
+    const profileDept = String(profileData.department || "").trim();
+    if (profileDept !== employeeDept) {
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from("profiles")
+        .update({ department: employeeDept })
+        .eq("id", profileData.id)
+        .select("*")
+        .maybeSingle();
+
+      if (updateError) {
+        console.warn("Manager department seed: profile update failed:", updateError);
+      } else if (updatedProfile) {
+        return updatedProfile;
+      }
+    }
+  } catch (err) {
+    console.error("ensureManagerProfileDepartment unexpected error:", err);
+  }
+
+  return profileData;
+}
+
 async function loadLatestManagerProfile() {
   if (!state.currentUser?.id) return state.currentProfile;
 
@@ -1087,7 +1177,12 @@ async function loadLatestManagerProfile() {
       .maybeSingle();
 
     if (error) throw error;
-    if (data) state.currentProfile = data;
+
+    // MANAGER PROFILE DEPARTMENT SEEDING
+    // Sync department from the manager's employee record (HR-assigned, controlled list).
+    const profile = await ensureManagerProfileDepartment(supabase, data);
+
+    if (profile) state.currentProfile = profile;
     return state.currentProfile;
   } catch (error) {
     console.error("Error loading latest manager profile:", error);
@@ -1208,10 +1303,10 @@ function setPrimaryActionButtonReadyState(button, canSubmit) {
 
 // MANAGER PROFILE UI CLEANUP - STEP 1A
 // Capture only fields the manager can edit from My Profile.
+// Department is read-only (sourced from the employee record) and excluded.
 function getManagerProfileEditableSnapshot() {
   return {
     full_name: String(state.dom.managerProfileFullName?.value || "").trim(),
-    department: String(state.dom.managerProfileDepartment?.value || "").trim(),
   };
 }
 
@@ -1247,9 +1342,6 @@ function updateManagerProfileSaveButtonState() {
 
 async function saveManagerOwnProfile() {
   const fullName = String(state.dom.managerProfileFullName?.value || "").trim();
-  const department = String(
-    state.dom.managerProfileDepartment?.value || "",
-  ).trim();
 
   if (!fullName) {
     showPageAlert("warning", "Full name is required before saving your profile.");
@@ -1273,7 +1365,6 @@ async function saveManagerOwnProfile() {
       .from("profiles")
       .update({
         full_name: fullName,
-        department: department || null,
       })
       .eq("id", state.currentUser.id)
       .select("*")
@@ -1285,7 +1376,6 @@ async function saveManagerOwnProfile() {
       ...state.currentProfile,
       ...(data || {}),
       full_name: fullName,
-      department,
     };
 
     renderManagerProfile(state.currentProfile, state.currentUser);

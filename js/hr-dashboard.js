@@ -6677,10 +6677,10 @@ function bindEvents() {
   });
 
   // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
-  // Profile save button should stay grey until Full Name or Department changes.
+  // Profile save button should stay grey until Full Name changes.
+  // Department is read-only (set from the employee record) so it is excluded.
   [
     state.dom.hrProfileFullName,
-    state.dom.hrProfileDepartment,
   ].forEach((field) => {
     field?.addEventListener("input", updateHrProfileSaveButtonState);
     field?.addEventListener("change", updateHrProfileSaveButtonState);
@@ -16803,6 +16803,72 @@ function setEmployeeAccountPanel(accountLinkage = null) {
   }
 }
 
+// HR PROFILE DEPARTMENT SEEDING
+// Ensures "Human Resources" exists in organization_departments (active, from
+// the controlled list). If the HR user's profile has no department assigned,
+// updates profiles.department to "Human Resources" so it is always sourced
+// from the list rather than being a blank or freehand string.
+async function ensureHrProfileDepartment(supabase, profileData) {
+  if (!profileData) return profileData;
+
+  const HR_DEPT_NAME = "Human Resources";
+
+  try {
+    // Check whether "Human Resources" already exists in the controlled list.
+    const { data: existingDepts, error: fetchError } = await supabase
+      .from("organization_departments")
+      .select("id, department_name, status")
+      .ilike("department_name", HR_DEPT_NAME)
+      .limit(1);
+
+    if (fetchError) {
+      console.warn("HR department seed: could not query organization_departments:", fetchError);
+      return profileData;
+    }
+
+    const alreadyExists = Array.isArray(existingDepts) && existingDepts.length > 0;
+
+    if (!alreadyExists) {
+      // Seed "Human Resources" as an active, controlled department.
+      const { error: insertError } = await supabase
+        .from("organization_departments")
+        .insert([{
+          department_name: HR_DEPT_NAME,
+          status: "Active",
+          notes: "Default department for HR staff.",
+          created_by: state.currentUser?.id || null,
+          updated_by: state.currentUser?.id || null,
+        }]);
+
+      if (insertError) {
+        console.warn("HR department seed: insert failed:", insertError);
+      }
+    }
+
+    // If the profile has no department assigned, set it to "Human Resources"
+    // and persist that back to the profiles row.
+    const currentDept = String(profileData.department || "").trim();
+    if (!currentDept) {
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from("profiles")
+        .update({ department: HR_DEPT_NAME })
+        .eq("id", profileData.id)
+        .select("*")
+        .maybeSingle();
+
+      if (updateError) {
+        console.warn("HR department seed: profile update failed:", updateError);
+      } else if (updatedProfile) {
+        return updatedProfile;
+      }
+    }
+  } catch (err) {
+    console.error("ensureHrProfileDepartment unexpected error:", err);
+  }
+
+  return profileData;
+}
+
 async function loadLatestHrProfile() {
   if (!state.currentUser?.id) return state.currentProfile;
 
@@ -16815,7 +16881,12 @@ async function loadLatestHrProfile() {
       .maybeSingle();
 
     if (error) throw error;
-    if (data) state.currentProfile = data;
+
+    // HR PROFILE DEPARTMENT SEEDING
+    // Ensure the department is from the controlled list, seeding it if needed.
+    const profile = await ensureHrProfileDepartment(supabase, data);
+
+    if (profile) state.currentProfile = profile;
     return state.currentProfile;
   } catch (error) {
     console.error("Error loading latest HR profile:", error);
@@ -16946,10 +17017,10 @@ async function loadHrProfileImages(profileImagePath, initials) {
 
 // DESCRIPTION ITEM 3 - STEP 2D CLOSEOUT
 // Capture only editable My Profile fields.
+// Department is read-only (sourced from the employee record) and excluded.
 function getHrProfileEditableSnapshot() {
   return {
     full_name: String(state.dom.hrProfileFullName?.value || "").trim(),
-    department: String(state.dom.hrProfileDepartment?.value || "").trim(),
   };
 }
 
@@ -16983,7 +17054,6 @@ function updateHrProfileSaveButtonState() {
 
 async function saveHrOwnProfile() {
   const fullName = String(state.dom.hrProfileFullName?.value || "").trim();
-  const department = String(state.dom.hrProfileDepartment?.value || "").trim();
 
   if (!fullName) {
     showPageAlert("warning", "Full name is required before saving your profile.");
@@ -16999,7 +17069,6 @@ async function saveHrOwnProfile() {
       .from("profiles")
       .update({
         full_name: fullName,
-        department: department || null,
       })
       .eq("id", state.currentUser.id)
       .select("*")
@@ -17011,7 +17080,6 @@ async function saveHrOwnProfile() {
       ...state.currentProfile,
       ...(data || {}),
       full_name: fullName,
-      department,
     };
 
     renderHrProfile(state.currentProfile, state.currentUser);

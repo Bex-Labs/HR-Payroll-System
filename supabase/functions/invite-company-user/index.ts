@@ -130,6 +130,12 @@ serve(async (req: Request) => {
         const tenantId = cleanText(payload.tenantId);
         const companyName = cleanText(payload.companyName) || "Your Company";
         const role = normaliseRole(payload.role || "hr");
+        // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+        // Department is now selected from the company's controlled department list
+        // by the Admin invite form. Kept optional with a sensible role-based fallback
+        // so existing integrations that do not send department are not broken.
+        const department = cleanText(payload.department) ||
+            (role.includes("payroll") ? "Payroll" : "Human Resources");
 
         if (!fullName) {
             return jsonResponse(400, { error: "Full name is required." });
@@ -231,7 +237,7 @@ serve(async (req: Request) => {
                     tenant_id: tenant.id,
                     is_active: true,
                     must_change_password: false,
-                    department: role.includes("payroll") ? "Payroll" : "Human Resources",
+                    department,
                 },
                 { onConflict: "id" },
             );

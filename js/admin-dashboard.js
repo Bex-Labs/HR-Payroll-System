@@ -383,6 +383,7 @@ function cacheDomElements() {
     companyUserEmail: document.getElementById("companyUserEmail"),
     companyUserRole: document.getElementById("companyUserRole"),
     companyUserTenantId: document.getElementById("companyUserTenantId"),
+    companyUserDepartment: document.getElementById("companyUserDepartment"),
     companyUserInviteAlert: document.getElementById("companyUserInviteAlert"),
     inviteCompanyUserBtn: document.getElementById("inviteCompanyUserBtn"),
     inviteCompanyUserBtnText: document.getElementById("inviteCompanyUserBtnText"),
@@ -926,9 +927,17 @@ function bindEvents() {
     state.dom.companyUserEmail,
     state.dom.companyUserRole,
     state.dom.companyUserTenantId,
+    state.dom.companyUserDepartment,
   ].forEach((field) => {
     field?.addEventListener("input", updateCompanyUserInviteButtonState);
     field?.addEventListener("change", updateCompanyUserInviteButtonState);
+  });
+
+  // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+  // When the company selection changes, reload the department dropdown
+  // from that company's controlled organization_departments list.
+  state.dom.companyUserTenantId?.addEventListener("change", () => {
+    populateCompanyUserDepartmentOptions();
   });
 
   state.dom.clearCompanyUserInviteBtn?.addEventListener("click", () => {
@@ -980,9 +989,9 @@ function bindEvents() {
 
   // ADMIN UI CLEANUP - STEP 1D RECOVERY
   // Keep Save Profile Changes grey until Admin edits the editable profile fields.
+  // Department is read-only (set at account creation) and excluded.
   [
     state.dom.adminProfileFullName,
-    state.dom.adminProfileDepartment,
   ].forEach((field) => {
     field?.addEventListener("input", updateAdminProfileSaveButtonState);
     field?.addEventListener("change", updateAdminProfileSaveButtonState);
@@ -1735,6 +1744,60 @@ function populateCompanyUserTenantOptions() {
 
   updateCompanyUserInviteButtonState();
 }
+// ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+// Fetch active departments for the selected company and populate the Department
+// dropdown. Disabled with a placeholder when no company is selected.
+async function populateCompanyUserDepartmentOptions() {
+  const select = state.dom.companyUserDepartment;
+  if (!select) return;
+
+  const tenantId = String(state.dom.companyUserTenantId?.value || "").trim();
+
+  // Reset to disabled state when no company is chosen.
+  select.innerHTML = `<option value="">Select a company first</option>`;
+  select.disabled = true;
+
+  if (!tenantId) {
+    updateCompanyUserInviteButtonState();
+    return;
+  }
+
+  select.innerHTML = `<option value="">Loading departments…</option>`;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("organization_departments")
+      .select("id, department_name, status")
+      .eq("tenant_id", tenantId)
+      .eq("status", "Active")
+      .order("department_name", { ascending: true });
+
+    if (error) throw error;
+
+    const departments = Array.isArray(data) ? data : [];
+
+    select.innerHTML = departments.length
+      ? `<option value="">Select department</option>`
+      : `<option value="">No departments set up yet</option>`;
+
+    departments.forEach((dept) => {
+      const option = document.createElement("option");
+      option.value = dept.department_name;
+      option.textContent = dept.department_name;
+      select.appendChild(option);
+    });
+
+    select.disabled = departments.length === 0;
+  } catch (err) {
+    console.error("populateCompanyUserDepartmentOptions error:", err);
+    select.innerHTML = `<option value="">Could not load departments</option>`;
+    select.disabled = true;
+  }
+
+  updateCompanyUserInviteButtonState();
+}
+
 // ADMIN EMAIL SETUP - STEP 1D
 // Populate the company dropdown used by Admin Email Setup.
 function populateAdminEmailSetupCompanyOptions() {
@@ -2415,6 +2478,7 @@ function clearCompanyUserInviteValidationState() {
     state.dom.companyUserEmail,
     state.dom.companyUserRole,
     state.dom.companyUserTenantId,
+    state.dom.companyUserDepartment,
   ].forEach((field) => {
     field?.classList.remove("is-invalid");
   });
@@ -2428,12 +2492,14 @@ function updateCompanyUserInviteButtonState() {
   const email = String(state.dom.companyUserEmail?.value || "").trim();
   const role = String(state.dom.companyUserRole?.value || "").trim();
   const tenantId = String(state.dom.companyUserTenantId?.value || "").trim();
+  const department = String(state.dom.companyUserDepartment?.value || "").trim();
 
   const canSubmit = Boolean(
     fullName &&
     isCompanyUserEmailValid(email) &&
     role &&
-    tenantId,
+    tenantId &&
+    department,
   );
 
   button.disabled = !canSubmit;
@@ -2479,6 +2545,15 @@ function validateCompanyUserInviteForm() {
     return false;
   }
 
+  const department = String(state.dom.companyUserDepartment?.value || "").trim();
+
+  if (!department) {
+    state.dom.companyUserDepartment?.classList.add("is-invalid");
+    showCompanyUserInviteAlert("warning", "Select a department from the list.");
+    state.dom.companyUserDepartment?.focus();
+    return false;
+  }
+
   return true;
 }
 
@@ -2499,6 +2574,7 @@ function buildCompanyUserInvitePayload() {
     role: String(state.dom.companyUserRole?.value || "hr").trim().toLowerCase(),
     tenantId: String(tenant?.id || state.dom.companyUserTenantId?.value || "").trim(),
     companyName: String(tenant?.company_name || "").trim(),
+    department: String(state.dom.companyUserDepartment?.value || "").trim(),
   };
 }
 
@@ -3349,10 +3425,10 @@ async function saveAdminProfileImage() {
   }
 }
 
+// Department is read-only (set at account creation) and excluded from the snapshot.
 function getAdminProfileEditableSnapshot() {
   return {
     fullName: String(state.dom.adminProfileFullName?.value || "").trim(),
-    department: String(state.dom.adminProfileDepartment?.value || "").trim(),
   };
 }
 
@@ -3367,8 +3443,7 @@ function updateAdminProfileSaveButtonState() {
   const hasValidName = Boolean(currentValues.fullName);
 
   const hasChanged = hasBaseline && (
-    currentValues.fullName !== baseline.fullName ||
-    currentValues.department !== baseline.department
+    currentValues.fullName !== baseline.fullName
   );
 
   const canSave = hasValidName && hasChanged;
@@ -3381,9 +3456,6 @@ function updateAdminProfileSaveButtonState() {
 
 async function saveAdminOwnProfile() {
   const fullName = String(state.dom.adminProfileFullName?.value || "").trim();
-  const department = String(
-    state.dom.adminProfileDepartment?.value || "",
-  ).trim();
 
   if (!fullName) {
     showPageAlert(
@@ -3403,7 +3475,6 @@ async function saveAdminOwnProfile() {
       .from("profiles")
       .update({
         full_name: fullName,
-        department: department || null,
       })
       .eq("id", state.currentUser.id)
       .select("*")
@@ -3415,7 +3486,6 @@ async function saveAdminOwnProfile() {
       ...state.currentProfile,
       ...(data || {}),
       full_name: fullName,
-      department,
     };
 
     renderAdminProfile(state.currentProfile, state.currentUser);

@@ -53,9 +53,7 @@
       <div class="hero-meta-grid">
         <div class="hero-meta-card">
           <div class="hero-meta-label">Signed in as</div>
-          <div class="hero-meta-value text-break" id="adminEmail">
-            Loading.
-          </div>
+          <div class="hero-meta-value text-break" id="adminEmail"><span class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
         </div>
 
         <div class="hero-meta-card">
@@ -197,8 +195,7 @@
                     <label for="adminProfileDepartment" class="form-label fw-semibold">
                       Department
                     </label>
-                    <input type="text" id="adminProfileDepartment" class="form-control"
-                      placeholder="Enter department" />
+                    <input type="text" id="adminProfileDepartment" class="form-control bg-light" readonly />
                   </div>
 
                   <div class="col-12">
@@ -314,25 +311,21 @@
             <div class="col-md-6 col-xl-3">
               <div class="info-tile">
                 <div class="info-tile-label">Full Name</div>
-                <div class="info-tile-value text-break" id="adminFullName">
-                  Loading.
-                </div>
+                <div class="info-tile-value text-break" id="adminFullName"><span class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="info-tile">
                 <div class="info-tile-label">Email</div>
-                <div class="info-tile-value text-break" id="adminEmailTile">
-                  Loading.
-                </div>
+                <div class="info-tile-value text-break" id="adminEmailTile"><span class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="info-tile">
                 <div class="info-tile-label">Role</div>
-                <div class="info-tile-value" id="adminRoleTile">Loading.</div>
+                <div class="info-tile-value" id="adminRoleTile"><span class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
@@ -800,6 +793,19 @@
                       User will sign in using this company’s Company ID.
                     </div>
                     <div class="invalid-feedback">Select the company workspace.</div>
+                  </div>
+
+                  <div class="col-lg-6">
+                    <label for="companyUserDepartment" class="form-label fw-semibold">
+                      Department <span class="text-danger">*</span>
+                    </label>
+                    <select id="companyUserDepartment" class="form-select" required disabled>
+                      <option value="">Select a company first</option>
+                    </select>
+                    <div class="form-text">
+                      Loaded from the selected company’s department list.
+                    </div>
+                    <div class="invalid-feedback">Select a department.</div>
                   </div>
 
                   <div class="col-12">
