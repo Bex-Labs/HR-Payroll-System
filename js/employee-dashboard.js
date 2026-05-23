@@ -4191,7 +4191,7 @@ async function downloadPayslipPdf(payrollId, buttonElement) {
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text("HR & Payroll System", 14, 14);
+    doc.text("BexHR", 14, 14);
 
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
@@ -4250,7 +4250,7 @@ async function downloadPayslipPdf(payrollId, buttonElement) {
     doc.setFontSize(9);
     doc.setTextColor(107, 114, 128);
     doc.text(
-      "This payslip was generated from an authorised payroll record in the HR & Payroll System.",
+      "This payslip was generated from an authorised payroll record in BexHR.",
       14,
       y,
     );

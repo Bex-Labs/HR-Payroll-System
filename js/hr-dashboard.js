@@ -431,7 +431,7 @@ const PROFILE_IMAGES_BUCKET = "profile-images";
 // The validation email body is fixed so users cannot accidentally enter
 // payroll, salary, deduction, or bank information into a test email.
 const HRP85_STANDARD_VALIDATION_MESSAGE =
-  "This is a controlled email integration validation from the HR & Payroll System. No payslip, salary, deduction, or bank data is included.";
+  "This is a controlled email integration validation from BexHR. No payslip, salary, deduction, or bank data is included.";
 
 // HRP-80 - TENANT DATA SEGMENTATION - STEP 7C
 // Tenant context is written by the login flow after Tenant ID validation.
@@ -22222,14 +22222,10 @@ async function handleEmployeeSave() {
       employeePayload.system_role || "employee",
     );
 
-    // EMPLOYEE BIODATA COMPLETION - STEP 3G
+    // EMPLOYEE BIODATA COMPLETION - STEP 3G / 3K
     // Save multiple reporting lines after the employee record exists.
     // Create mode needs the newly returned employee id before child rows can be inserted.
-    await saveEmployeeReportingLinesForEmployee(savedEmployeeId);
-
-    // EMPLOYEE BIODATA COMPLETION - STEP 3K
-    // Persist primary/secondary reporting lines before the form is reset.
-    // If this is not called here, secondary managers disappear after edit.
+    // Called once — the delete-then-insert pattern handles both create and edit correctly.
     await saveEmployeeReportingLinesForEmployee(savedEmployeeId);
 
     // EMPLOYEE BIODATA COMPLETION - STEP 4G
