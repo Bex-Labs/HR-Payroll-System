@@ -26316,8 +26316,10 @@ function validatePayrollForm() {
   const totalDeductionsValue = Number(state.dom.payrollTotalDeductions?.value || 0);
   const netPayValue = Number(state.dom.payrollNetPay?.value || 0);
 
+  // DEF-002 FIX - Allow gross pay of zero to support leave-without-pay and
+  // zero-hour adjustment periods. Negative gross pay remains invalid.
   const grossPayIsInvalid =
-    !Number.isFinite(grossPayValue) || grossPayValue <= 0;
+    !Number.isFinite(grossPayValue) || grossPayValue < 0;
 
   const totalDeductionsIsInvalid =
     !Number.isFinite(totalDeductionsValue) || totalDeductionsValue < 0;
@@ -26327,9 +26329,11 @@ function validatePayrollForm() {
     Number.isFinite(totalDeductionsValue) &&
     totalDeductionsValue > grossPayValue;
 
+  // DEF-002 FIX - Net pay of zero is valid when gross pay is also zero
+  // (e.g. leave-without-pay). Negative net pay remains invalid.
   const netPayIsInvalid =
     !Number.isFinite(netPayValue) ||
-    netPayValue <= 0 ||
+    netPayValue < 0 ||
     deductionsExceedGross;
 
   if (grossPayIsInvalid) {
