@@ -11162,6 +11162,39 @@ function updateEmployeeSaveButtonState() {
     state.dom.saveEmployeeBtn,
     isEmployeeFormReadyForSubmit(),
   );
+  updateEmployeeFormSteps();
+}
+
+// BEXHR FORM PROGRESS STEPPER
+// Marks each form section step as done when the user has entered data.
+// Step 1 (Core Details) is always marked done — it contains the required fields.
+// All other sections are optional and light up as the user fills them in.
+function updateEmployeeFormSteps() {
+  const hasVal = (el) => Boolean(String(el?.value || "").trim());
+
+  const stepDone = [
+    // Step 1: Core Details — always active once form is open
+    true,
+    // Step 2: Reporting Lines — primary line manager selected
+    hasVal(state.dom.assignedLineManagerEmployeeId),
+    // Step 3: Dependants — at least one dependant full name entered
+    hasVal(state.dom.employeeDependantFullName) ||
+      Boolean(state.dom.employeeDependantsRecordsList?.querySelector("[data-dependant-id]")),
+    // Step 4: Address — current address line 1 entered
+    hasVal(state.dom.employeeCurrentAddressLine1) || hasVal(state.dom.employeePermanentAddressLine1),
+    // Step 5: Next of Kin — full name entered
+    hasVal(state.dom.employeeNextOfKinFullName),
+    // Step 6: Education — institution name entered
+    hasVal(state.dom.employeeEducationInstitutionName),
+    // Step 7: Documents — pending file queued or attached doc exists
+    state.pendingFiles?.length > 0 ||
+      Boolean(state.dom.attachedDocumentsList?.querySelector("[data-document-id]")),
+  ];
+
+  stepDone.forEach((done, i) => {
+    const step = document.querySelector(`#employeeFormSteps [data-step="${i + 1}"]`);
+    if (step) step.classList.toggle("form-step-done", done);
+  });
 }
 
 async function handleEmployeeRecordsRefresh() {
@@ -16286,6 +16319,18 @@ function switchHrWorkspace(workspace) {
           ? "Setup & Master Data"
           : "Payroll Processing";
   }
+
+  // BEXHR SIDEBAR — sync active state to match the selected workspace tab.
+  const sidebarMap = [
+    { id: "sidebarProfileBtn",  active: isProfile },
+    { id: "sidebarPeopleBtn",   active: isEmployees },
+    { id: "sidebarSetupBtn",    active: isSetup },
+    { id: "sidebarPayrollBtn",  active: isPayroll },
+  ];
+  sidebarMap.forEach(({ id, active }) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("active", active);
+  });
 }
 
 function normalizeText(value) {
@@ -21815,6 +21860,54 @@ async function uploadPendingFilesForEmployee(employeeId) {
   await loadEmployeeDocuments(employeeId);
   await loadAllEmployeeDocuments();
   renderAttachedDocuments();
+}
+
+// EMPLOYEE LOGIN PROVISIONING
+// Send a login invite to the new employee's work email via the
+// invite-employee-login Supabase edge function.
+//
+// Returns { success: boolean, error: string } regardless of outcome so the
+// caller can surface a soft warning without aborting the employee save.
+async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
+  try {
+    const supabase = getSupabaseClient();
+    const tenantContext = getCurrentTenantContext();
+
+    const payload = {
+      workEmail: String(workEmail || "").trim().toLowerCase(),
+      fullName: String(fullName || "").trim(),
+      companyName: String(companyName || tenantContext?.companyName || "").trim(),
+      tenantId: tenantContext?.tenantId || null,
+    };
+
+    if (!payload.workEmail) {
+      return { success: false, error: "No work email address to send an invite to." };
+    }
+
+    const { data, error } = await supabase.functions.invoke(
+      "invite-employee-login",
+      { body: payload },
+    );
+
+    if (error) {
+      const message = String(error?.message || "").trim() ||
+        "Login invite could not be sent.";
+      console.error("provisionEmployeeLogin edge function error:", error);
+      return { success: false, error: message };
+    }
+
+    if (data?.success === false || data?.error) {
+      const message = String(data.error || "Login invite could not be sent.").trim();
+      return { success: false, error: message };
+    }
+
+    return { success: true, error: "" };
+  } catch (err) {
+    const message = String(err?.message || "").trim() ||
+      "Login invite could not be sent due to an unexpected error.";
+    console.error("provisionEmployeeLogin unexpected error:", err);
+    return { success: false, error: message };
+  }
 }
 
 // MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1E

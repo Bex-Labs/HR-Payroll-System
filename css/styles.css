@@ -14,7 +14,7 @@
 body {
   background-color: var(--hr-background);
   color: var(--hr-text);
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
 /* Smooth scroll for navbar anchor links */
@@ -591,7 +591,7 @@ body:not(.dashboard-page) #roles {
 }
 
 .dashboard-navbar .nav-link.active {
-  color: #0d6efd;
+  color: var(--hr-primary);
   font-weight: 600;
 }
 
@@ -1343,6 +1343,444 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
   }
 }
 
+/* =========================================================
+   BEXHR EMPLOYEE FORM PROGRESS STEPPER
+   Informational step indicator for the long employee enrolment
+   form. Steps turn amber with a checkmark when the section has
+   data (class added by JS via updateEmployeeFormSteps()).
+   ========================================================= */
+
+.bexhr-form-steps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 0.75rem 1rem;
+  background: #fafbfc;
+  border: 1px solid #edf1f5;
+  border-radius: 16px;
+}
+
+.bexhr-form-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 56px;
+}
+
+.bexhr-step-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #d1d8e0;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #94a3b8;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  position: relative;
+}
+
+/* Show number by default, hide checkmark */
+.bexhr-step-dot .bi-check-lg { display: none; }
+.bexhr-step-dot .bexhr-step-num { display: block; }
+
+/* When step is done: amber dot, checkmark visible */
+.bexhr-form-step.form-step-done .bexhr-step-dot {
+  border-color: var(--hr-primary);
+  background: var(--hr-primary);
+  color: #ffffff;
+}
+.bexhr-form-step.form-step-done .bexhr-step-dot .bi-check-lg { display: block; }
+.bexhr-form-step.form-step-done .bexhr-step-dot .bexhr-step-num { display: none; }
+.bexhr-form-step.form-step-done .bexhr-step-label { color: var(--hr-primary); font-weight: 600; }
+
+.bexhr-step-label {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.bexhr-form-step-connector {
+  flex: 1;
+  height: 2px;
+  background: #e2e8f0;
+  min-width: 12px;
+  margin-bottom: 1.15rem; /* align with dot centre */
+  transition: background 0.2s ease;
+}
+
+/* Connector goes amber when the step before it is done */
+.bexhr-form-step.form-step-done + .bexhr-form-step-connector {
+  background: var(--hr-primary-soft);
+}
+
+@media (max-width: 575.98px) {
+  .bexhr-form-steps {
+    gap: 0.25rem;
+  }
+  .bexhr-step-label {
+    display: none; /* just show dots on very small screens */
+  }
+  .bexhr-form-step-connector {
+    min-width: 8px;
+  }
+}
+
+/* =========================================================
+   BEXHR STICKY SIDEBAR
+   Desktop-only left sidebar. Hidden on mobile — the existing
+   workspace-switcher card handles navigation on small screens.
+   Proxies to existing hrTab* buttons so all JS stays unchanged.
+   ========================================================= */
+
+:root {
+  --sidebar-width: 200px;
+}
+
+/* Shift page body to make room for the sidebar on large screens */
+@media (min-width: 992px) {
+  body.bexhr-has-sidebar {
+    padding-left: var(--sidebar-width);
+  }
+}
+
+.bexhr-sidebar {
+  display: none; /* hidden on mobile */
+}
+
+@media (min-width: 992px) {
+  .bexhr-sidebar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: #ffffff;
+    border-right: 1px solid rgba(234, 217, 201, 0.8);
+    box-shadow: 2px 0 16px rgba(18, 28, 42, 0.05);
+    z-index: 1040;
+    padding: 1.25rem 0.75rem;
+    gap: 0.5rem;
+  }
+}
+
+.bexhr-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.25rem 0.5rem 1rem;
+  border-bottom: 1px solid rgba(234, 217, 201, 0.6);
+  margin-bottom: 0.5rem;
+}
+
+.bexhr-sidebar-brand::after {
+  content: "BexHR";
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--hr-primary-dark);
+  letter-spacing: -0.02em;
+}
+
+.bexhr-sidebar-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.bexhr-sidebar-footer {
+  border-top: 1px solid rgba(234, 217, 201, 0.6);
+  padding-top: 0.75rem;
+}
+
+.bexhr-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--hr-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.bexhr-sidebar-item i {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.bexhr-sidebar-item:hover {
+  background: var(--hr-soft-surface);
+  color: var(--hr-primary);
+}
+
+.bexhr-sidebar-item.active {
+  background: #fff2e5;
+  color: var(--hr-primary);
+  font-weight: 600;
+}
+
+/* Hide the workspace-switcher tab card on desktop when sidebar is present */
+@media (min-width: 992px) {
+  body.bexhr-has-sidebar .workspace-switcher-card {
+    display: none !important;
+  }
+}
+
+/* =========================================================
+   SKELETON LOADING SHIMMER
+   Applied to stat tiles and hero meta values while data loads.
+   JS removes the class and sets real text once data arrives.
+   ========================================================= */
+
+@keyframes skeletonShimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  display: inline-block;
+  min-width: 48px;
+  min-height: 1em;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #e8edf3 25%,
+    #f4f6f9 50%,
+    #e8edf3 75%
+  );
+  background-size: 800px 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+  color: transparent !important;
+  user-select: none;
+  vertical-align: middle;
+}
+
+/* Wider skeleton for text values like email */
+.skeleton-wide {
+  min-width: 120px;
+}
+
+/*
+  =====================================================================
+  PRINT — payslip only
+  When the user clicks "Print" on a payslip we want a clean A4 output
+  showing only the payslip content. Everything else (navbar, sidebar,
+  modals chrome, buttons) is hidden.
+  =====================================================================
+*/
+@media print {
+
+  /* Hide the entire page … */
+  body * {
+    visibility: hidden;
+  }
+
+  /* … then reveal only the payslip content and its descendants */
+  #payslipPreviewContent,
+  #payslipPreviewContent * {
+    visibility: visible;
+  }
+
+  /* Position the payslip block so it fills the printed page */
+  #payslipPreviewContent {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+
+  /* Remove Bootstrap modal backdrop and any overflow clipping */
+  .modal,
+  .modal-dialog,
+  .modal-content {
+    overflow: visible !important;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE UI CLEANUP - STEP 1I
+   Floating Back-to-Top arrow button.
+   ========================================================= */
+
+.dashboard-scroll-top-btn {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 1080;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--hr-primary);
+  border-radius: 999px;
+  background-color: var(--hr-primary);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 14px 30px rgba(144, 77, 0, 0.28);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.dashboard-scroll-top-btn:hover,
+.dashboard-scroll-top-btn:focus {
+  border-color: var(--hr-primary-dark);
+  background-color: var(--hr-primary-dark);
+  color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(144, 77, 0, 0.36);
+}
+
+.dashboard-scroll-top-btn i {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+@media (max-width: 575.98px) {
+  .dashboard-scroll-top-btn {
+    right: 0.9rem;
+    bottom: 0.9rem;
+    width: 42px;
+    height: 42px;
+  }
+}
+
+/* =========================================================
+   EMPLOYEE UI CLEANUP - STEP 1J
+   Read-only Employee Profile field styling.
+   ========================================================= */
+
+#profileSection input.form-control[readonly] {
+  background-color: #f1f3f5;
+  border-color: #d9dee7;
+  color: #6c757d;
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 1;
+}
+
+#profileSection input.form-control[readonly]:focus {
+  background-color: #f1f3f5;
+  border-color: #d9dee7;
+  color: #6c757d;
+  box-shadow: none;
+}
+
+#profileSection input.form-control[readonly]::placeholder {
+  color: #9aa3af;
+}
+
+/* =========================================================
+   EMPLOYEE UI CLEANUP - STEP 1J
+   Profile image upload empty-state button.
+   ========================================================= */
+
+#profileSection #saveProfileImageBtn:disabled,
+#profileSection #saveProfileImageBtn.profile-upload-empty {
+  background-color: #adb5bd;
+  border-color: #adb5bd;
+  color: #ffffff;
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+#profileSection #saveProfileImageBtn:disabled:hover,
+#profileSection #saveProfileImageBtn:disabled:focus,
+#profileSection #saveProfileImageBtn.profile-upload-empty:hover,
+#profileSection #saveProfileImageBtn.profile-upload-empty:focus {
+  background-color: #adb5bd;
+  border-color: #adb5bd;
+  color: #ffffff;
+  transform: none;
+  box-shadow: none;
+}
+
+#profileSection #saveProfileImageBtn:not(:disabled):not(.profile-upload-empty) {
+  cursor: pointer;
+}
+
+.bexhr-sidebar-item i {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.bexhr-sidebar-item:hover {
+  background: var(--hr-soft-surface);
+  color: var(--hr-primary);
+}
+
+.bexhr-sidebar-item.active {
+  background: #fff2e5;
+  color: var(--hr-primary);
+  font-weight: 600;
+}
+
+/* Hide the workspace-switcher tab card on desktop when sidebar is present */
+@media (min-width: 992px) {
+  body.bexhr-has-sidebar .workspace-switcher-card {
+    display: none !important;
+  }
+}
+
+/* =========================================================
+   SKELETON LOADING SHIMMER
+   Applied to stat tiles and hero meta values while data loads.
+   JS removes the class and sets real text once data arrives.
+   ========================================================= */
+
+@keyframes skeletonShimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  display: inline-block;
+  min-width: 48px;
+  min-height: 1em;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #e8edf3 25%,
+    #f4f6f9 50%,
+    #e8edf3 75%
+  );
+  background-size: 800px 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+  color: transparent !important;
+  user-select: none;
+  vertical-align: middle;
+}
+
+/* Wider skeleton for text values like email */
+.skeleton-wide {
+  min-width: 120px;
+}
+
 /*
   =====================================================================
   PRINT — payslip only
@@ -1399,14 +1837,14 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
   z-index: 1080;
   width: 44px;
   height: 44px;
-  border: 1px solid #0d6efd;
+  border: 1px solid var(--hr-primary);
   border-radius: 999px;
-  background-color: #0d6efd;
+  background-color: var(--hr-primary);
   color: #ffffff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 14px 30px rgba(13, 110, 253, 0.28);
+  box-shadow: 0 14px 30px rgba(144, 77, 0, 0.28);
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease,
@@ -1416,11 +1854,11 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
 
 .dashboard-scroll-top-btn:hover,
 .dashboard-scroll-top-btn:focus {
-  border-color: #0a58ca;
-  background-color: #0b5ed7;
+  border-color: var(--hr-primary-dark);
+  background-color: var(--hr-primary-dark);
   color: #ffffff;
   transform: translateY(-2px);
-  box-shadow: 0 18px 36px rgba(13, 110, 253, 0.34);
+  box-shadow: 0 18px 36px rgba(144, 77, 0, 0.36);
 }
 
 .dashboard-scroll-top-btn i {

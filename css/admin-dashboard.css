@@ -1,19 +1,11 @@
 
-    :root {
-      --brand-primary: #904d00;
-      --brand-primary-soft: #ffa04b;
-      --brand-primary-dark: #6f3900;
-      --brand-bg: #f8f9ff;
-      --brand-text: #121c2a;
-      --brand-muted: #5f6977;
-      --brand-border: #ead9c9;
-      --brand-soft: #fff7ef;
-    }
+    /* Variables are defined in styles.css using --hr-* naming.
+       This file references those shared tokens directly. */
 
     body {
       background: linear-gradient(135deg, #f8f9ff 0%, #fff7ef 100%);
-      color: var(--brand-text);
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--hr-text);
+      font-family: "Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       min-height: 100vh;
     }
 
@@ -32,12 +24,12 @@
       justify-content: center;
       color: #ffffff;
       font-weight: 700;
-      background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-soft) 100%);
+      background: linear-gradient(135deg, var(--hr-primary) 0%, var(--hr-primary-soft) 100%);
       box-shadow: 0 12px 28px rgba(144, 77, 0, 0.18);
     }
 
     .brand-text {
-      color: var(--brand-primary-dark);
+      color: var(--hr-primary-dark);
       font-weight: 700;
       letter-spacing: -0.02em;
     }
@@ -53,7 +45,7 @@
     }
 
     .hero-card {
-      background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-soft) 100%);
+      background: linear-gradient(135deg, var(--hr-primary) 0%, var(--hr-primary-soft) 100%);
       color: #fff;
       position: relative;
     }
@@ -76,7 +68,7 @@
     }
 
     .metric-label {
-      color: var(--brand-muted);
+      color: var(--hr-muted);
       font-size: 0.85rem;
       margin-bottom: 0.25rem;
     }
@@ -94,13 +86,13 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      background: var(--brand-soft);
-      color: var(--brand-primary);
+      background: var(--hr-soft-surface);
+      color: var(--hr-primary);
       font-size: 1.25rem;
     }
 
     .btn-brand {
-      background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-soft) 100%);
+      background: linear-gradient(135deg, var(--hr-primary) 0%, var(--hr-primary-soft) 100%);
       color: #fff;
       border: none;
       border-radius: 999px;
@@ -115,7 +107,7 @@
     }
 
     .muted-note {
-      background: var(--brand-soft);
-      border-left: 4px solid var(--brand-primary-soft);
+      background: var(--hr-soft-surface);
+      border-left: 4px solid var(--hr-primary-soft);
       border-radius: 1rem;
     }

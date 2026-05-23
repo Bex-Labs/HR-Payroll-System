@@ -6,6 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>HR Dashboard | BexHR</title>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
   <link rel="stylesheet" href="css/styles.css" />
@@ -14,7 +17,62 @@
   <link rel="icon" type="image/x-icon" href="assets/favicon.png" />
 </head>
 
-<body class="dashboard-page">
+<body class="dashboard-page bexhr-has-sidebar">
+
+  <!-- =========================================================
+       BEXHR SIDEBAR NAV
+       Sticky left sidebar for desktop. Proxies clicks to the
+       existing workspace tab buttons so all JS stays unchanged.
+       Hidden on mobile — the workspace-switcher card handles mobile.
+       ========================================================= -->
+  <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="Workspace navigation">
+    <div class="bexhr-sidebar-brand">
+      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">HR</span>
+    </div>
+
+    <ul class="bexhr-sidebar-nav">
+      <li>
+        <button class="bexhr-sidebar-item active" id="sidebarProfileBtn"
+          onclick="document.getElementById('hrTabProfileBtn').click()"
+          title="Profile">
+          <i class="bi bi-person-circle"></i>
+          <span>Profile</span>
+        </button>
+      </li>
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarPeopleBtn"
+          onclick="document.getElementById('hrTabEmployeesBtn').click()"
+          title="People">
+          <i class="bi bi-people"></i>
+          <span>People</span>
+        </button>
+      </li>
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarSetupBtn"
+          onclick="document.getElementById('hrTabSetupBtn').click()"
+          title="Setup">
+          <i class="bi bi-sliders"></i>
+          <span>Setup</span>
+        </button>
+      </li>
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarPayrollBtn"
+          onclick="document.getElementById('hrTabPayrollBtn').click()"
+          title="Payroll">
+          <i class="bi bi-cash-coin"></i>
+          <span>Payroll</span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="bexhr-sidebar-footer">
+      <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
+        <i class="bi bi-box-arrow-left"></i>
+        <span>Sign out</span>
+      </button>
+    </div>
+  </nav>
+
   <main class="container py-4 py-lg-5">
     <section class="dashboard-hero mb-4">
       <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-4">
@@ -45,12 +103,12 @@
       <div class="hero-meta-grid">
         <div class="hero-meta-card">
           <div class="hero-meta-label">Signed in as</div>
-          <div class="hero-meta-value text-break" id="hrEmail">Loading.</div>
+          <div class="hero-meta-value text-break" id="hrEmail"><span class="skeleton skeleton-wide">&nbsp;</span></div>
         </div>
 
         <div class="hero-meta-card">
           <div class="hero-meta-label">Role</div>
-          <div class="hero-meta-value" id="hrRole">hr</div>
+          <div class="hero-meta-value" id="hrRole"><span class="skeleton">&nbsp;</span></div>
         </div>
 
         <div class="hero-meta-card">
@@ -227,28 +285,28 @@
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
                 <div class="summary-tile-label">Total Employees</div>
-                <div class="summary-tile-value" id="totalEmployeesValue">0</div>
+                <div class="summary-tile-value" id="totalEmployeesValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
                 <div class="summary-tile-label">Active Employees</div>
-                <div class="summary-tile-value" id="activeEmployeesValue">0</div>
+                <div class="summary-tile-value" id="activeEmployeesValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
                 <div class="summary-tile-label">Departments</div>
-                <div class="summary-tile-value" id="departmentsValue">0</div>
+                <div class="summary-tile-value" id="departmentsValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
                 <div class="summary-tile-label">Without Employee Number</div>
-                <div class="summary-tile-value" id="missingEmployeeNumberValue">0</div>
+                <div class="summary-tile-value" id="missingEmployeeNumberValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
           </div>
@@ -815,6 +873,47 @@
                 <i class="bi bi-chevron-up me-2"></i>
                 <span>Collapse</span>
               </button>
+            </div>
+          </div>
+
+          <!-- BEXHR FORM PROGRESS INDICATOR
+               Shows which sections of the employee form are present.
+               Sections are always visible — the stepper is informational only.
+               JS adds .form-step-done when a section has user-entered data. -->
+          <div class="bexhr-form-steps mb-4" id="employeeFormSteps">
+            <div class="bexhr-form-step form-step-done" data-step="1" title="Core Details">
+              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">1</span></div>
+              <span class="bexhr-step-label">Core Details</span>
+            </div>
+            <div class="bexhr-form-step-connector"></div>
+            <div class="bexhr-form-step" data-step="2" title="Reporting Lines">
+              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">2</span></div>
+              <span class="bexhr-step-label">Reporting</span>
+            </div>
+            <div class="bexhr-form-step-connector"></div>
+            <div class="bexhr-form-step" data-step="3" title="Dependants / Beneficiaries">
+              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">3</span></div>
+              <span class="bexhr-step-label">Dependants</span>
+            </div>
+            <div class="bexhr-form-step-connector"></div>
+            <div class="bexhr-form-step" data-step="4" title="Address Details">
+              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">4</span></div>
+              <span class="bexhr-step-label">Address</span>
+            </div>
+            <div class="bexhr-form-step-connector"></div>
+            <div class="bexhr-form-step" data-step="5" title="Next of Kin">
+              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">5</span></div>
+              <span class="bexhr-step-label">Next of Kin</span>
+            </div>
+            <div class="bexhr-form-step-connector"></div>
+            <div class="bexhr-form-step" data-step="6" title="Education">
+              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">6</span></div>
+              <span class="bexhr-step-label">Education</span>
+            </div>
+            <div class="bexhr-form-step-connector"></div>
+            <div class="bexhr-form-step" data-step="7" title="Documents">
+              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">7</span></div>
+              <span class="bexhr-step-label">Documents</span>
             </div>
           </div>
 
