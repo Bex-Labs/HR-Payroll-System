@@ -1,0 +1,14 @@
+{
+  "name": "hr-payroll-system",
+  "version": "1.0.0",
+  "description": "BexHR – HR & Payroll System unit tests",
+  "scripts": {
+    "test": "jest --coverage",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "jsdom": "^29.1.1"
+  }
+}
