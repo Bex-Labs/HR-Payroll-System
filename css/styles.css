@@ -1386,8 +1386,13 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
 }
 
 /* Show number by default, hide checkmark */
-.bexhr-step-dot .bi-check-lg { display: none; }
-.bexhr-step-dot .bexhr-step-num { display: block; }
+.bexhr-step-dot .bi-check-lg {
+  display: none;
+}
+
+.bexhr-step-dot .bexhr-step-num {
+  display: block;
+}
 
 /* When step is done: amber dot, checkmark visible */
 .bexhr-form-step.form-step-done .bexhr-step-dot {
@@ -1395,9 +1400,19 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
   background: var(--hr-primary);
   color: #ffffff;
 }
-.bexhr-form-step.form-step-done .bexhr-step-dot .bi-check-lg { display: block; }
-.bexhr-form-step.form-step-done .bexhr-step-dot .bexhr-step-num { display: none; }
-.bexhr-form-step.form-step-done .bexhr-step-label { color: var(--hr-primary); font-weight: 600; }
+
+.bexhr-form-step.form-step-done .bexhr-step-dot .bi-check-lg {
+  display: block;
+}
+
+.bexhr-form-step.form-step-done .bexhr-step-dot .bexhr-step-num {
+  display: none;
+}
+
+.bexhr-form-step.form-step-done .bexhr-step-label {
+  color: var(--hr-primary);
+  font-weight: 600;
+}
 
 .bexhr-step-label {
   font-size: 0.72rem;
@@ -1412,12 +1427,13 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
   height: 2px;
   background: #e2e8f0;
   min-width: 12px;
-  margin-bottom: 1.15rem; /* align with dot centre */
+  margin-bottom: 1.15rem;
+  /* align with dot centre */
   transition: background 0.2s ease;
 }
 
 /* Connector goes amber when the step before it is done */
-.bexhr-form-step.form-step-done + .bexhr-form-step-connector {
+.bexhr-form-step.form-step-done+.bexhr-form-step-connector {
   background: var(--hr-primary-soft);
 }
 
@@ -1425,9 +1441,12 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
   .bexhr-form-steps {
     gap: 0.25rem;
   }
+
   .bexhr-step-label {
-    display: none; /* just show dots on very small screens */
+    display: none;
+    /* just show dots on very small screens */
   }
+
   .bexhr-form-step-connector {
     min-width: 8px;
   }
@@ -1452,7 +1471,8 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
 }
 
 .bexhr-sidebar {
-  display: none; /* hidden on mobile */
+  display: none;
+  /* hidden on mobile */
 }
 
 @media (min-width: 992px) {
@@ -1523,16 +1543,6 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-.bexhr-sidebar-item i {
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
-.bexhr-sidebar-item:hover {
-  background: var(--hr-soft-surface);
-  color: var(--hr-primary);
-}
-
 .bexhr-sidebar-item.active {
   background: #fff2e5;
   color: var(--hr-primary);
@@ -1553,8 +1563,13 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
    ========================================================= */
 
 @keyframes skeletonShimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
+  0% {
+    background-position: -400px 0;
+  }
+
+  100% {
+    background-position: 400px 0;
+  }
 }
 
 .skeleton {
@@ -1562,12 +1577,10 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
   min-width: 48px;
   min-height: 1em;
   border-radius: 6px;
-  background: linear-gradient(
-    90deg,
-    #e8edf3 25%,
-    #f4f6f9 50%,
-    #e8edf3 75%
-  );
+  background: linear-gradient(90deg,
+      #e8edf3 25%,
+      #f4f6f9 50%,
+      #e8edf3 75%);
   background-size: 800px 100%;
   animation: skeletonShimmer 1.4s ease-in-out infinite;
   color: transparent !important;
@@ -1724,219 +1737,782 @@ body:not(.dashboard-page)>section.py-5.landing-animate-in .container.py-4 {
   cursor: pointer;
 }
 
-.bexhr-sidebar-item i {
-  font-size: 1.1rem;
-  flex-shrink: 0;
+/* =========================================================
+   CROSS-DASHBOARD UI CLEANUP - STEP 1A
+   Global brown Back-to-Top controls + HR Payslip Email Status scroll.
+
+   Purpose:
+   - Make all floating up-arrow buttons use the BexHR brown brand colour.
+   - Avoid page stretching when HR Payslip Email Status has many records.
+   - CSS-only where possible so Admin/HR/Manager/Employee JS stays untouched.
+   ========================================================= */
+
+/* HR Payslip Email Status inner scroll. */
+#payslipEmailLogsTableWrapper {
+  max-height: 320px;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  overscroll-behavior: contain;
+  border-radius: 20px;
 }
 
-.bexhr-sidebar-item:hover {
-  background: var(--hr-soft-surface);
-  color: var(--hr-primary);
+/* Keep the HR payslip email table readable inside the inner scroll area. */
+#payslipEmailLogsTableWrapper table {
+  min-width: 860px;
 }
 
-.bexhr-sidebar-item.active {
-  background: #fff2e5;
-  color: var(--hr-primary);
-  font-weight: 600;
+/* =========================================================
+   CROSS-DASHBOARD UI CLEANUP - STEP 1A-2
+   Respect hidden state + lighter Back-to-Top arrow.
+
+   Purpose:
+   - Keep the button hidden while the dashboard is near the top.
+   - Show it only when JS removes d-none after scrolling.
+   - Use a lighter native arrow glyph so the control looks professional.
+   - CSS-only; no dashboard JS changes.
+   ========================================================= */
+
+/* Keep Bootstrap/JS hiding behaviour authoritative. */
+body.dashboard-page #backToTopBtn.d-none,
+body.dashboard-page #scrollToTopBtn.d-none,
+body.dashboard-page .bexhr-back-to-top-btn.d-none,
+body.dashboard-page .dashboard-scroll-top-btn.d-none {
+  display: none !important;
 }
 
-/* Hide the workspace-switcher tab card on desktop when sidebar is present */
+/* Style the floating button only when it is actually visible. */
+body.dashboard-page #backToTopBtn:not(.d-none),
+body.dashboard-page #scrollToTopBtn:not(.d-none),
+body.dashboard-page .bexhr-back-to-top-btn:not(.d-none),
+body.dashboard-page .dashboard-scroll-top-btn:not(.d-none) {
+  position: fixed !important;
+  right: 1.5rem !important;
+  bottom: 1.5rem !important;
+  z-index: 1080 !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  background-color: var(--hr-primary) !important;
+  border: 1px solid var(--hr-primary) !important;
+  color: #ffffff !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  font-size: 0 !important;
+  box-shadow: 0 14px 30px rgba(144, 77, 0, 0.28) !important;
+}
+
+/* Hide the icon-font version only while the CSS glyph is used. */
+body.dashboard-page #backToTopBtn:not(.d-none)>i,
+body.dashboard-page #scrollToTopBtn:not(.d-none)>i,
+body.dashboard-page .bexhr-back-to-top-btn:not(.d-none)>i,
+body.dashboard-page .dashboard-scroll-top-btn:not(.d-none)>i {
+  display: none !important;
+}
+
+/* Lighter native arrow glyph. */
+body.dashboard-page #backToTopBtn:not(.d-none)::before,
+body.dashboard-page #scrollToTopBtn:not(.d-none)::before,
+body.dashboard-page .bexhr-back-to-top-btn:not(.d-none)::before,
+body.dashboard-page .dashboard-scroll-top-btn:not(.d-none)::before {
+  content: "↑";
+  display: block;
+  color: #ffffff !important;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1.18rem;
+  font-weight: 500;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+body.dashboard-page #backToTopBtn:not(.d-none):hover,
+body.dashboard-page #backToTopBtn:not(.d-none):focus,
+body.dashboard-page #scrollToTopBtn:not(.d-none):hover,
+body.dashboard-page #scrollToTopBtn:not(.d-none):focus,
+body.dashboard-page .bexhr-back-to-top-btn:not(.d-none):hover,
+body.dashboard-page .bexhr-back-to-top-btn:not(.d-none):focus,
+body.dashboard-page .dashboard-scroll-top-btn:not(.d-none):hover,
+body.dashboard-page .dashboard-scroll-top-btn:not(.d-none):focus {
+  background-color: var(--hr-primary-dark) !important;
+  border-color: var(--hr-primary-dark) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(144, 77, 0, 0.36) !important;
+}
+
+/* =========================================================
+   CROSS-DASHBOARD UI CLEANUP - STEP 1B
+   Summary card polish across dashboards.
+
+   Purpose:
+   - Make dashboard summary metrics look like proper product tiles.
+   - Improve Payroll Overview, Employee Management Summary, Setup & Master Data,
+     Admin/Manager summary tiles, and Employee Current Payslip Summary.
+   - CSS-only: no HTML IDs, JS events, sidebar behaviour, payroll logic,
+     employee data, or manager approval workflow are changed.
+   ========================================================= */
+
+/* Shared summary tiles used by HR, Admin, Manager, Payroll, and Setup summary sections. */
+body.dashboard-page .summary-tile {
+  position: relative;
+  height: 100%;
+  min-height: 92px;
+  padding: 1rem 1.1rem !important;
+  border: 1px solid rgba(234, 217, 201, 0.95) !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(circle at top right, rgba(255, 160, 75, 0.16), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #fffaf4 100%) !important;
+  box-shadow:
+    0 12px 26px rgba(18, 28, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+}
+
+/* Small brand accent strip so summary cards do not look like plain text on white. */
+body.dashboard-page .summary-tile::before {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  top: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--hr-primary) 0%, var(--hr-primary-soft) 100%);
+  opacity: 0.9;
+}
+
+/* Soft circular watermark on the right side of summary tiles. */
+body.dashboard-page .summary-tile::after {
+  content: "";
+  position: absolute;
+  right: -22px;
+  bottom: -26px;
+  width: 76px;
+  height: 76px;
+  border-radius: 999px;
+  background: rgba(144, 77, 0, 0.055);
+  pointer-events: none;
+}
+
+body.dashboard-page .summary-tile-label {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 0.45rem;
+  color: #6b7280 !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
+}
+
+body.dashboard-page .summary-tile-value {
+  position: relative;
+  z-index: 1;
+  color: #16233b !important;
+  font-size: clamp(1rem, 1.4vw, 1.25rem) !important;
+  font-weight: 800 !important;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+/* Keep smaller h6 summary values professional but not oversized. */
+body.dashboard-page .summary-tile-value.h6,
+body.dashboard-page .summary-tile .summary-tile-value.h6 {
+  font-size: 0.98rem !important;
+  font-weight: 750 !important;
+}
+
+/* Manager summary tiles already have Bootstrap utility classes; normalise them gently. */
+body.dashboard-page .manager-summary-tile {
+  background:
+    radial-gradient(circle at top right, rgba(255, 160, 75, 0.16), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #fffaf4 100%) !important;
+}
+
+/* Employee Current Payslip Summary uses info-tile, so target only that payroll grid. */
+body.dashboard-page #currentPayrollSummaryGrid .info-tile {
+  position: relative;
+  min-height: 92px;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(234, 217, 201, 0.95);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 160, 75, 0.14), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #fffaf4 100%);
+  box-shadow:
+    0 12px 26px rgba(18, 28, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+}
+
+body.dashboard-page #currentPayrollSummaryGrid .info-tile::before {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  top: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--hr-primary) 0%, var(--hr-primary-soft) 100%);
+  opacity: 0.9;
+}
+
+body.dashboard-page #currentPayrollSummaryGrid .info-tile-label {
+  color: #6b7280;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+body.dashboard-page #currentPayrollSummaryGrid .info-tile-value {
+  color: #16233b;
+  font-size: clamp(1rem, 1.4vw, 1.25rem);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+body.dashboard-page #currentPayrollSummaryGrid .info-tile i {
+  color: var(--hr-primary) !important;
+  opacity: 0.72;
+}
+
+/* Slightly tighter spacing on summary rows so cards feel intentional, not loose. */
+body.dashboard-page .dashboard-section-card .row.g-4:has(.summary-tile),
+body.dashboard-page .dashboard-section-card .row.g-3:has(.summary-tile),
+body.dashboard-page #currentPayrollSummaryGrid {
+  row-gap: 1rem !important;
+}
+
+/* Mobile: keep the same polish but reduce height pressure. */
+@media (max-width: 575.98px) {
+
+  body.dashboard-page .summary-tile,
+  body.dashboard-page #currentPayrollSummaryGrid .info-tile {
+    min-height: 84px;
+    padding: 0.9rem 1rem !important;
+  }
+
+  body.dashboard-page .summary-tile-value,
+  body.dashboard-page #currentPayrollSummaryGrid .info-tile-value {
+    font-size: 1.05rem !important;
+  }
+}
+
+/* =========================================================
+   CROSS-DASHBOARD UI CLEANUP - STEP 1B-1
+   HR Setup & Master Data 5-card layout.
+
+   Purpose:
+   - The Setup summary has five valid HR/payroll setup groups.
+   - Avoid the awkward 4 + 1 orphan tile layout on desktop.
+   - Scope only to #hrSetupLandingCard so Payroll Overview, People Summary,
+     Admin, Employee, and Manager summary grids remain unchanged.
+   ========================================================= */
+
+@media (min-width: 1200px) {
+  body.dashboard-page #hrSetupLandingCard .row:has(.summary-tile) {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1rem !important;
+  }
+
+  body.dashboard-page #hrSetupLandingCard .row:has(.summary-tile)>[class*="col-"] {
+    width: auto !important;
+    max-width: none !important;
+    flex: 0 0 auto !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  body.dashboard-page #hrSetupLandingCard .summary-tile {
+    min-height: 86px;
+  }
+
+  body.dashboard-page #hrSetupLandingCard .summary-tile-label {
+    font-size: 0.74rem !important;
+  }
+
+  body.dashboard-page #hrSetupLandingCard .summary-tile-value {
+    font-size: 0.95rem !important;
+  }
+}
+
+/* Tablet layout: avoid 4 + 1; show a cleaner 3 + 2 pattern. */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  body.dashboard-page #hrSetupLandingCard .row:has(.summary-tile) {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem !important;
+  }
+
+  body.dashboard-page #hrSetupLandingCard .row:has(.summary-tile)>[class*="col-"] {
+    width: auto !important;
+    max-width: none !important;
+    flex: 0 0 auto !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
+
+/* Mobile: keep the natural one-column stacked behaviour. */
+@media (max-width: 767.98px) {
+  body.dashboard-page #hrSetupLandingCard .row:has(.summary-tile) {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 0.9rem !important;
+  }
+
+  body.dashboard-page #hrSetupLandingCard .row:has(.summary-tile)>[class*="col-"] {
+    width: auto !important;
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
+
+/* =========================================================
+   CROSS-DASHBOARD UI CLEANUP - STEP 1C
+   HR left sidebar visual polish.
+
+   Purpose:
+   - Make the HR sidebar feel like part of the BexHR product UI.
+   - Improve active/hover states, brand area, spacing, and sign-out area.
+   - CSS-only: existing sidebar buttons still proxy to the existing HR tab
+     buttons, so workspace switching logic remains unchanged.
+   ========================================================= */
+
 @media (min-width: 992px) {
-  body.bexhr-has-sidebar .workspace-switcher-card {
+  body.bexhr-has-sidebar {
+    --sidebar-width: 188px;
+    padding-left: var(--sidebar-width);
+  }
+
+  .bexhr-sidebar {
+    width: var(--sidebar-width);
+    padding: 1rem 0.75rem;
+    background:
+      radial-gradient(circle at top left, rgba(255, 160, 75, 0.12), transparent 34%),
+      linear-gradient(180deg, #ffffff 0%, #fffaf4 100%);
+    border-right: 1px solid rgba(234, 217, 201, 0.95);
+    box-shadow: 8px 0 28px rgba(18, 28, 42, 0.055);
+  }
+
+  .bexhr-sidebar-brand {
+    min-height: 54px;
+    padding: 0.25rem 0.5rem 0.9rem;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(234, 217, 201, 0.75);
+  }
+
+  .bexhr-sidebar-brand .hr-brand-mark {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 0.72rem !important;
+    box-shadow: 0 10px 22px rgba(144, 77, 0, 0.18);
+  }
+
+  .bexhr-sidebar-brand::after {
+    content: "BexHR";
+    color: var(--hr-primary-dark);
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+
+  .bexhr-sidebar-nav {
+    gap: 0.4rem;
+  }
+
+  .bexhr-sidebar-item {
+    position: relative;
+    min-height: 42px;
+    padding: 0.62rem 0.72rem;
+    border-radius: 14px;
+    color: #667085;
+    font-size: 0.86rem;
+    font-weight: 650;
+    transition:
+      background-color 0.16s ease,
+      color 0.16s ease,
+      transform 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+
+  .bexhr-sidebar-item i {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a94a6;
+    font-size: 1rem;
+    transition:
+      color 0.16s ease,
+      background-color 0.16s ease;
+  }
+
+  .bexhr-sidebar-item:hover {
+    background: #fff2e5;
+    color: var(--hr-primary-dark);
+    transform: translateX(2px);
+  }
+
+  .bexhr-sidebar-item:hover i {
+    color: var(--hr-primary);
+  }
+
+  .bexhr-sidebar-item.active {
+    background: linear-gradient(135deg, #fff1df 0%, #fff7ef 100%);
+    color: var(--hr-primary-dark);
+    box-shadow: inset 0 0 0 1px rgba(144, 77, 0, 0.08);
+  }
+
+  .bexhr-sidebar-item.active::before {
+    content: "";
+    position: absolute;
+    left: -0.75rem;
+    top: 9px;
+    bottom: 9px;
+    width: 4px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--hr-primary) 0%, var(--hr-primary-soft) 100%);
+  }
+
+  .bexhr-sidebar-item.active i {
+    color: var(--hr-primary);
+  }
+
+  .bexhr-sidebar-footer {
+    margin-top: auto;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(234, 217, 201, 0.75);
+  }
+
+  .bexhr-sidebar-footer .bexhr-sidebar-item {
+    color: #667085;
+  }
+
+  .bexhr-sidebar-footer .bexhr-sidebar-item:hover {
+    background: #fff2e5;
+    color: var(--hr-primary-dark);
+  }
+}
+
+/* =========================================================
+   CROSS-DASHBOARD SIDEBAR REPLICATION - STEP 1C-1A
+   Hide duplicate hero logout on desktop when sidebar is active.
+
+   Purpose:
+   - Desktop sidebar already provides Sign out.
+   - Keep the original #logoutBtn in the DOM so sidebar Sign out can still
+     trigger the existing logout JS.
+   - Keep hero Logout visible on mobile/tablet because the sidebar is hidden.
+   ========================================================= */
+
+@media (min-width: 992px) {
+  body.dashboard-page.bexhr-has-sidebar .dashboard-hero #logoutBtn {
     display: none !important;
   }
 }
 
 /* =========================================================
-   SKELETON LOADING SHIMMER
-   Applied to stat tiles and hero meta values while data loads.
-   JS removes the class and sets real text once data arrives.
+   ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-1
+   Company grouped access records.
+
+   Purpose:
+   - Make Admin user access review readable by Company > Role.
+   - Remove awkward badge-only rows from the grouped table.
+   - Give each company group its own inner scroll for long access lists.
+   - Display-only: no access assignment, edit, reset password, tenant, role,
+     or Supabase logic is changed.
    ========================================================= */
 
-@keyframes skeletonShimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
+.admin-access-company-header-row > td {
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fffaf4;
 }
 
-.skeleton {
-  display: inline-block;
-  min-width: 48px;
-  min-height: 1em;
-  border-radius: 6px;
-  background: linear-gradient(
-    90deg,
-    #e8edf3 25%,
-    #f4f6f9 50%,
-    #e8edf3 75%
-  );
-  background-size: 800px 100%;
-  animation: skeletonShimmer 1.4s ease-in-out infinite;
-  color: transparent !important;
-  user-select: none;
+.admin-access-company-toggle {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.85rem 1rem;
+  border: 0;
+  background:
+    radial-gradient(circle at top right, rgba(255, 160, 75, 0.12), transparent 30%),
+    linear-gradient(180deg, #fffaf4 0%, #ffffff 100%);
+  color: #16233b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: left;
+}
+
+.admin-access-company-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.admin-access-company-code {
+  color: #667085;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.admin-access-company-count {
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-access-company-content-row > td {
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.admin-access-company-panel {
+  padding: 0.75rem 1rem 1rem;
+  background: #ffffff;
+}
+
+.admin-access-company-scroll {
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  border: 1px solid #edf1f5;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.admin-access-company-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.admin-access-company-scroll::-webkit-scrollbar-thumb {
+  background: rgba(144, 77, 0, 0.22);
+  border-radius: 999px;
+}
+
+.admin-access-company-scroll::-webkit-scrollbar-track {
+  background: rgba(144, 77, 0, 0.06);
+  border-radius: 999px;
+}
+
+.admin-access-role-section + .admin-access-role-section {
+  border-top: 1px solid #edf1f5;
+}
+
+.admin-access-role-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 40px;
+  padding: 0.65rem 0.85rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #edf1f5;
+  color: #475467;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.admin-access-company-inner-table td {
+  padding: 0.8rem 0.85rem;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.admin-access-company-inner-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-access-role-pill,
+.admin-access-company-id-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0.22rem 0.58rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475467;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+@media (max-width: 767.98px) {
+  .admin-access-company-toggle {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-access-company-title {
+    flex-wrap: wrap;
+  }
+
+  .admin-access-company-panel {
+    padding: 0.65rem;
+  }
+
+  .admin-access-company-scroll {
+    max-height: 320px;
+  }
+}
+
+/* =========================================================
+   ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-3
+   Four-column grouped access records.
+
+   Purpose:
+   - Company is shown once in the company group header.
+   - User rows no longer repeat the Company column.
+   - Header and inner rows share the same column widths.
+   - Company names are visually stronger than employee names.
+   ========================================================= */
+
+.admin-access-table th,
+.admin-access-company-inner-table td {
   vertical-align: middle;
 }
 
-/* Wider skeleton for text values like email */
-.skeleton-wide {
-  min-width: 120px;
+.admin-access-company-name {
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: -0.015em;
 }
 
-/*
-  =====================================================================
-  PRINT — payslip only
-  When the user clicks "Print" on a payslip we want a clean A4 output
-  showing only the payslip content. Everything else (navbar, sidebar,
-  modals chrome, buttons) is hidden.
-  =====================================================================
-*/
-@media print {
+.admin-access-company-toggle {
+  border-left: 4px solid var(--hr-primary);
+}
 
-  /* Hide the entire page … */
-  body * {
-    visibility: hidden;
+.admin-access-company-title {
+  min-width: 0;
+}
+
+.admin-access-company-code {
+  color: #667085;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-access-company-count {
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.admin-access-company-inner-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.admin-access-company-inner-table td:nth-child(4) {
+  text-align: center;
+}
+
+@media (max-width: 767.98px) {
+  .admin-access-table,
+  .admin-access-company-inner-table {
+    min-width: 760px;
   }
 
-  /* … then reveal only the payslip content and its descendants */
-  #payslipPreviewContent,
-  #payslipPreviewContent * {
-    visibility: visible;
-  }
-
-  /* Position the payslip block so it fills the printed page */
-  #payslipPreviewContent {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    padding: 24px;
-    box-sizing: border-box;
-  }
-
-  /* Remove Bootstrap modal backdrop and any overflow clipping */
-  .modal,
-  .modal-dialog,
-  .modal-content {
-    overflow: visible !important;
-  }
-}
-
-/* =========================================================
-   EMPLOYEE UI CLEANUP - STEP 1I
-   Floating Back-to-Top arrow button.
-
-   Purpose:
-   - Helps employees return to the top on long dashboard pages
-   - Uses the same blue filled action style already used across the app
-   - Does not interfere with payroll cards, tables, filters, or PDFs
-   ========================================================= */
-
-.dashboard-scroll-top-btn {
-  position: fixed;
-  right: 1.25rem;
-  bottom: 1.25rem;
-  z-index: 1080;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--hr-primary);
-  border-radius: 999px;
-  background-color: var(--hr-primary);
-  color: #ffffff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 14px 30px rgba(144, 77, 0, 0.28);
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease,
-    background-color 0.18s ease,
-    border-color 0.18s ease;
-}
-
-.dashboard-scroll-top-btn:hover,
-.dashboard-scroll-top-btn:focus {
-  border-color: var(--hr-primary-dark);
-  background-color: var(--hr-primary-dark);
-  color: #ffffff;
-  transform: translateY(-2px);
-  box-shadow: 0 18px 36px rgba(144, 77, 0, 0.36);
-}
-
-.dashboard-scroll-top-btn i {
-  font-size: 1.15rem;
-  line-height: 1;
-}
-
-@media (max-width: 575.98px) {
-  .dashboard-scroll-top-btn {
-    right: 0.9rem;
-    bottom: 0.9rem;
-    width: 42px;
-    height: 42px;
+  .admin-access-company-name {
+    font-size: 0.95rem;
   }
 }
 
 /* =========================================================
-   EMPLOYEE UI CLEANUP - STEP 1J
-   Read-only Employee Profile field styling.
+   ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-4
+   Align grouped user access table columns.
 
    Purpose:
-   - Makes uneditable employee profile fields visually greyed out
-   - Matches the read-only/disabled feel used in other dashboards
-   - Does not affect profile image upload, leave forms, payroll filters,
-     payroll history, or payslip functionality
+   - The parent table header has User / Role / Company ID / Action.
+   - User rows are rendered inside a nested company table.
+   - Remove inner panel offset so nested row content aligns with the parent
+     table headers.
+   - CSS-only: no user access data, edit action, reset password, or Supabase
+     logic is changed.
    ========================================================= */
 
-#profileSection input.form-control[readonly] {
-  background-color: #f1f3f5;
-  border-color: #d9dee7;
-  color: #6c757d;
-  cursor: not-allowed;
-  box-shadow: none;
-  opacity: 1;
+#profileTenantLinksTableWrapper .admin-access-table,
+#profileTenantLinksTableWrapper .admin-access-company-inner-table {
+  table-layout: fixed !important;
+  width: 100% !important;
 }
 
-#profileSection input.form-control[readonly]:focus {
-  background-color: #f1f3f5;
-  border-color: #d9dee7;
-  color: #6c757d;
-  box-shadow: none;
+/* Keep parent header and nested rows on the same column widths. */
+#profileTenantLinksTableWrapper .admin-access-table col:nth-child(1),
+#profileTenantLinksTableWrapper .admin-access-company-inner-table col:nth-child(1) {
+  width: 42% !important;
 }
 
-#profileSection input.form-control[readonly]::placeholder {
-  color: #9aa3af;
+#profileTenantLinksTableWrapper .admin-access-table col:nth-child(2),
+#profileTenantLinksTableWrapper .admin-access-company-inner-table col:nth-child(2) {
+  width: 18% !important;
 }
 
-/* =========================================================
-   EMPLOYEE UI CLEANUP - STEP 1J
-   Profile image upload empty-state button.
-
-   Purpose:
-   - Grey out Upload Profile Picture when no image is selected
-   - Re-enable normal blue styling only after a valid image is selected
-   - Does not affect the file picker, profile details, payroll, leave, or PDF
-   ========================================================= */
-
-#profileSection #saveProfileImageBtn:disabled,
-#profileSection #saveProfileImageBtn.profile-upload-empty {
-  background-color: #adb5bd;
-  border-color: #adb5bd;
-  color: #ffffff;
-  opacity: 1;
-  cursor: not-allowed;
-  box-shadow: none;
+#profileTenantLinksTableWrapper .admin-access-table col:nth-child(3),
+#profileTenantLinksTableWrapper .admin-access-company-inner-table col:nth-child(3) {
+  width: 20% !important;
 }
 
-#profileSection #saveProfileImageBtn:disabled:hover,
-#profileSection #saveProfileImageBtn:disabled:focus,
-#profileSection #saveProfileImageBtn.profile-upload-empty:hover,
-#profileSection #saveProfileImageBtn.profile-upload-empty:focus {
-  background-color: #adb5bd;
-  border-color: #adb5bd;
-  color: #ffffff;
-  transform: none;
-  box-shadow: none;
+#profileTenantLinksTableWrapper .admin-access-table col:nth-child(4),
+#profileTenantLinksTableWrapper .admin-access-company-inner-table col:nth-child(4) {
+  width: 20% !important;
 }
 
-#profileSection #saveProfileImageBtn:not(:disabled):not(.profile-upload-empty) {
-  cursor: pointer;
+/* Remove the nested panel indentation that was pushing row content away from the header. */
+#profileTenantLinksTableWrapper .admin-access-company-panel {
+  padding: 0 !important;
+  background: #ffffff;
+}
+
+/* Keep the company content contained, but do not shrink the inner table width. */
+#profileTenantLinksTableWrapper .admin-access-company-scroll {
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  border: 0 !important;
+  border-radius: 0 0 18px 18px !important;
+  background: #ffffff;
+}
+
+/* Match Bootstrap header/body rhythm so Role and Company ID sit under their headers. */
+#profileTenantLinksTableWrapper .admin-access-table thead th,
+#profileTenantLinksTableWrapper .admin-access-company-inner-table td {
+  padding-left: 0.85rem !important;
+  padding-right: 0.85rem !important;
+  vertical-align: middle !important;
+}
+
+/* Keep action buttons centred under Action. */
+#profileTenantLinksTableWrapper .admin-access-table thead th:last-child,
+#profileTenantLinksTableWrapper .admin-access-company-inner-table td:last-child {
+  text-align: center !important;
+}
+
+/* Make company group name visibly stronger than employee names. */
+#profileTenantLinksTableWrapper .admin-access-company-name {
+  color: #111827 !important;
+  font-size: 1.02rem !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.015em;
+}
+
+/* Keep employee names strong but clearly secondary to company group headers. */
+#profileTenantLinksTableWrapper .admin-access-company-inner-table .fw-semibold {
+  font-weight: 750 !important;
 }

@@ -33,32 +33,28 @@
     <ul class="bexhr-sidebar-nav">
       <li>
         <button class="bexhr-sidebar-item active" id="sidebarProfileBtn"
-          onclick="document.getElementById('hrTabProfileBtn').click()"
-          title="Profile">
+          onclick="document.getElementById('hrTabProfileBtn').click()" title="Profile">
           <i class="bi bi-person-circle"></i>
           <span>Profile</span>
         </button>
       </li>
       <li>
         <button class="bexhr-sidebar-item" id="sidebarPeopleBtn"
-          onclick="document.getElementById('hrTabEmployeesBtn').click()"
-          title="People">
+          onclick="document.getElementById('hrTabEmployeesBtn').click()" title="People">
           <i class="bi bi-people"></i>
           <span>People</span>
         </button>
       </li>
       <li>
         <button class="bexhr-sidebar-item" id="sidebarSetupBtn"
-          onclick="document.getElementById('hrTabSetupBtn').click()"
-          title="Setup">
+          onclick="document.getElementById('hrTabSetupBtn').click()" title="Setup">
           <i class="bi bi-sliders"></i>
           <span>Setup</span>
         </button>
       </li>
       <li>
         <button class="bexhr-sidebar-item" id="sidebarPayrollBtn"
-          onclick="document.getElementById('hrTabPayrollBtn').click()"
-          title="Payroll">
+          onclick="document.getElementById('hrTabPayrollBtn').click()" title="Payroll">
           <i class="bi bi-cash-coin"></i>
           <span>Payroll</span>
         </button>
@@ -285,14 +281,16 @@
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
                 <div class="summary-tile-label">Total Employees</div>
-                <div class="summary-tile-value" id="totalEmployeesValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value" id="totalEmployeesValue"><span class="skeleton">&nbsp;&nbsp;</span>
+                </div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
                 <div class="summary-tile-label">Active Employees</div>
-                <div class="summary-tile-value" id="activeEmployeesValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value" id="activeEmployeesValue"><span class="skeleton">&nbsp;&nbsp;</span>
+                </div>
               </div>
             </div>
 
@@ -306,7 +304,8 @@
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
                 <div class="summary-tile-label">Without Employee Number</div>
-                <div class="summary-tile-value" id="missingEmployeeNumberValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value" id="missingEmployeeNumberValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
           </div>
@@ -2518,9 +2517,13 @@
               No banks have been added yet.
             </div>
 
-            <div id="bankDirectoryTableWrapper" class="table-responsive d-none">
+            <!-- HR SETUP INNER SCROLL - STEP 1G-1
+                 Bank Directory Records can grow as approved banks are added.
+                 Keep the list contained inside Payment Setup. -->
+            <div id="bankDirectoryTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 360px; overflow: auto; overscroll-behavior: contain;">
               <table class="table align-middle dashboard-table mb-0">
-                <thead>
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <tr>
                     <th>Bank Name</th>
                     <th>Bank Code</th>
@@ -2681,9 +2684,13 @@
               No employee bank details have been added yet.
             </div>
 
-            <div id="employeeBankDetailsTableWrapper" class="table-responsive d-none">
+            <!-- HR SETUP INNER SCROLL - STEP 1G-1
+                 Employee Bank Records are payment-sensitive setup records.
+                 Keep the list contained inside Payment Setup as the employee base grows. -->
+            <div id="employeeBankDetailsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
               <table class="table align-middle dashboard-table mb-0">
-                <thead>
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <tr>
                     <th>Employee</th>
                     <th>Bank</th>
@@ -2878,12 +2885,15 @@
               No payroll master records found yet.
             </div>
 
-            <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 11
-     Remove the old side-scroll hint from Payroll Master Records now that
-     the reduced table layout fits more naturally within the card. -->
-            <div id="payrollMasterRecordsTableWrapper" class="dashboard-table-wrap d-none">
-              <table class="table align-middle">
-                <thead>
+            <!-- HR SETUP INNER SCROLL - STEP 1G-1
+                 Payroll Master Records can grow over time.
+                 Keep the records contained inside this card and remove the
+                 duplicate payrollMasterRecordsTableWrapper that could confuse
+                 document.getElementById() and table rendering. -->
+            <div id="payrollMasterRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
+              <table class="table align-middle mb-0">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <!-- DESCRIPTION ITEM 3 - STEP 2A-2
                        Payroll Grade / Level is restored to Payroll Master Records
                        because statutory deductions can inherit rules from payroll grade/level. -->
@@ -2908,13 +2918,7 @@
                     </td>
                   </tr>
                 </tbody>
-                <div id="payrollMasterRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none">
-                  <table class="table align-middle">
-                  </table>
-                </div>
-
-                <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 3
-     Close the collapsible content wrapper for Payroll Master Data. -->
+              </table>
             </div>
           </div>
       </section>
@@ -3078,15 +3082,17 @@
               No allowance components found yet.
             </div>
 
-            <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 11
-     Remove the old side-scroll hint from Allowance Records now that
-     the reduced table layout fits more naturally within the card. -->
-            <div id="payrollAllowanceRecordsTableWrapper" class="dashboard-table-wrap d-none">
-              <table class="table align-middle">
-                <thead>
+            <!-- HR SETUP INNER SCROLL - STEP 1G-1
+                 Allowance Records can grow quickly per employee.
+                 Keep the records contained and remove the duplicate
+                 payrollAllowanceRecordsTableWrapper block. -->
+            <div id="payrollAllowanceRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
+              <table class="table align-middle mb-0">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 7
-       Shorten Allowance Records headers so the table reads more cleanly
-       and aligns with the reduced payroll table style. -->
+                       Shorten Allowance Records headers so the table reads more cleanly
+                       and aligns with the reduced payroll table style. -->
                   <tr>
                     <th>Master Ref</th>
                     <th>Type</th>
@@ -3104,13 +3110,7 @@
                     </td>
                   </tr>
                 </tbody>
-                <div id="payrollAllowanceRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none">
-                  <table class="table align-middle">
-                  </table>
-                </div>
-
-                <!-- DESCRIPTION ITEM 2 - UI ALIGNMENT STEP 4
-     Close the collapsible content wrapper for Allowance Components. -->
+              </table>
             </div>
           </div>
       </section>
@@ -3328,9 +3328,13 @@
               No statutory deduction records found yet.
             </div>
 
-            <div id="payrollStatutoryRecordsTableWrapper" class="dashboard-table-wrap d-none">
-              <table class="table align-middle">
-                <thead>
+            <!-- HR SETUP INNER SCROLL - STEP 1G-1
+                 Statutory Deduction Records can grow by employee and effective date.
+                 Keep the table contained inside the Payroll Setup card. -->
+            <div id="payrollStatutoryRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
+              <table class="table align-middle mb-0">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <tr>
                     <th>Master Ref</th>
                     <th>Type</th>
@@ -3548,9 +3552,13 @@
               No other deduction records found yet.
             </div>
 
-            <div id="payrollOtherDeductionRecordsTableWrapper" class="dashboard-table-wrap d-none">
-              <table class="table align-middle">
-                <thead>
+            <!-- HR SETUP INNER SCROLL - STEP 1G-1
+                 Other Deduction Records can become long because deductions may
+                 be recurring, employee-specific, and date-bound. -->
+            <div id="payrollOtherDeductionRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
+              <table class="table align-middle mb-0">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <tr>
                     <th>Master Ref</th>
                     <th>Type</th>
@@ -3822,9 +3830,13 @@
               No employee override records found yet.
             </div>
 
-            <div id="payrollEmployeeOverrideRecordsTableWrapper" class="dashboard-table-wrap d-none">
-              <table class="table align-middle">
-                <thead>
+            <!-- HR SETUP INNER SCROLL - STEP 1G-1
+                 Employee Payroll Override Records are exception records and
+                 must stay reviewable without stretching the whole Setup page. -->
+            <div id="payrollEmployeeOverrideRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 420px; overflow: auto; overscroll-behavior: contain;">
+              <table class="table align-middle mb-0">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
                   <tr>
                     <th>Master Ref</th>
                     <th>Category</th>
@@ -4774,8 +4786,14 @@
                       No payslip email logs have been prepared yet.
                     </div>
 
-                    <div id="payslipEmailLogsTableWrapper" class="dashboard-table-wrap d-none">
-                      <table class="table align-middle mb-0">
+                    <!-- CROSS-DASHBOARD UI CLEANUP - STEP 1A
+     Payslip Email Status can grow quickly as payroll emails are sent.
+     Keep the delivery log contained inside the Payroll Records card with
+     its own inner scroll instead of stretching the full HR dashboard page. -->
+                    <div id="payslipEmailLogsTableWrapper"
+                      class="dashboard-table-wrap table-responsive d-none border rounded-4"
+                      style="max-height: 320px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain;">
+                      <table class="table align-middle mb-0" style="min-width: 860px;">
                         <thead>
                           <tr>
                             <th>Employee / Recipient</th>
@@ -4807,9 +4825,9 @@
        Floating Back to Top button.
        This supports long HR/payroll pages by letting HR return to the top
        without scrolling manually through employee and payroll records. -->
-  <button type="button" id="backToTopBtn" class="btn btn-primary rounded-circle shadow d-none" aria-label="Back to top"
-    title="Back to top"
-    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px;">
+  <button type="button" id="backToTopBtn" class="btn rounded-circle shadow d-none bexhr-back-to-top-btn"
+    aria-label="Back to top" title="Back to top"
+    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px; background-color: #8a5a05; border-color: #8a5a05; color: #fff;"
     <i class="bi bi-arrow-up"></i>
   </button>
   <!-- BATCH PAYROLL DEFAULT - STEP 8A

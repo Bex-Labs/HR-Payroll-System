@@ -1136,6 +1136,18 @@ function switchAdminWorkspace(workspace) {
         ? "Overview"
         : "Company Setup";
   }
+
+  // CROSS-DASHBOARD SIDEBAR REPLICATION - ADMIN STEP 1C-1
+  // Keep the new Admin desktop sidebar active state aligned with the
+  // existing Admin workspace tabs. This does not change routing logic.
+  [
+    { id: "sidebarAdminProfileBtn", active: isProfile },
+    { id: "sidebarAdminOverviewBtn", active: isOverview },
+    { id: "sidebarAdminCompaniesBtn", active: isTenants },
+  ].forEach(({ id, active }) => {
+    const item = document.getElementById(id);
+    if (item) item.classList.toggle("active", active);
+  });
 }
 
 function getInitials(fullName, fallback = "AD") {
@@ -2810,7 +2822,7 @@ function renderProfileTenantLinksLoadingState() {
 
   state.dom.profileTenantLinksTableBody.innerHTML = `
     <tr>
-      <td colspan="5" class="text-center text-secondary py-4">
+      <td colspan="4" class="text-center text-secondary py-4">
         Loading user access records.
       </td>
     </tr>
@@ -2832,64 +2844,173 @@ function renderProfileTenantLinks(records = []) {
   state.dom.profileTenantLinksEmptyState?.classList.add("d-none");
   state.dom.profileTenantLinksTableWrapper?.classList.remove("d-none");
 
-  const recordsToRender = [...records].sort((a, b) =>
-    getProfileDisplayName(a).localeCompare(getProfileDisplayName(b), undefined, {
-      sensitivity: "base",
-    }),
-  );
+  // ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-3
+  // Group records by company and remove the repeated Company column from
+  // user rows. The company name is shown once, boldly, in the group header.
+  // Existing edit, reset password, refresh, profile, tenant, and role logic
+  // is preserved.
+  const groupedRecords = new Map();
 
-  recordsToRender.forEach((profile) => {
-    const tenant = getTenantByTenantId(profile.tenant_id);
-    const row = document.createElement("tr");
+  [...records]
+    .sort((a, b) => {
+      const tenantA = getTenantByTenantId(a.tenant_id);
+      const tenantB = getTenantByTenantId(b.tenant_id);
 
-    row.innerHTML = `
-      <td>
-        <div class="fw-semibold">${escapeHtml(getProfileDisplayName(profile))}</div>
-        <div class="text-secondary small text-break">${escapeHtml(profile.email || "--")}</div>
+      const companyCompare = String(tenantA?.company_name || "Not linked")
+        .localeCompare(String(tenantB?.company_name || "Not linked"), undefined, {
+          sensitivity: "base",
+        });
+
+      if (companyCompare !== 0) return companyCompare;
+
+      const roleCompare = String(a.role || "--")
+        .localeCompare(String(b.role || "--"), undefined, {
+          sensitivity: "base",
+        });
+
+      if (roleCompare !== 0) return roleCompare;
+
+      return getProfileDisplayName(a).localeCompare(getProfileDisplayName(b), undefined, {
+        sensitivity: "base",
+      });
+    })
+    .forEach((profile) => {
+      const tenant = getTenantByTenantId(profile.tenant_id);
+      const companyName = tenant?.company_name || "Not linked";
+      const companyCode = tenant?.tenant_code || "--";
+      const companyKey = `${companyName}|${companyCode}`;
+
+      if (!groupedRecords.has(companyKey)) {
+        groupedRecords.set(companyKey, {
+          companyName,
+          companyCode,
+          profiles: [],
+        });
+      }
+
+      groupedRecords.get(companyKey).profiles.push(profile);
+    });
+
+  Array.from(groupedRecords.values()).forEach((companyGroup, companyIndex) => {
+    const companyContentRowId = `adminAccessCompanyContent${companyIndex}`;
+    const companyUserCount = companyGroup.profiles.length;
+
+    const companyHeaderRow = document.createElement("tr");
+    companyHeaderRow.className = "admin-access-company-header-row";
+
+    companyHeaderRow.innerHTML = `
+      <td colspan="4" class="p-0">
+        <button
+          type="button"
+          class="admin-access-company-toggle"
+          aria-expanded="true"
+          aria-controls="${escapeHtml(companyContentRowId)}"
+          onclick="
+            const contentRow = document.getElementById('${escapeHtml(companyContentRowId)}');
+            const expanded = this.getAttribute('aria-expanded') === 'true';
+            if (contentRow) contentRow.classList.toggle('d-none', expanded);
+            this.setAttribute('aria-expanded', String(!expanded));
+            this.querySelector('[data-company-toggle-icon]')?.classList.toggle('bi-chevron-up', !expanded);
+            this.querySelector('[data-company-toggle-icon]')?.classList.toggle('bi-chevron-down', expanded);
+          "
+        >
+          <span class="admin-access-company-title">
+            <i class="bi bi-chevron-up text-secondary" data-company-toggle-icon></i>
+            <span class="admin-access-company-name">${escapeHtml(companyGroup.companyName)}</span>
+            <span class="admin-access-company-code">
+              Company ID: ${escapeHtml(companyGroup.companyCode)}
+            </span>
+          </span>
+
+          <span class="admin-access-company-count">
+            ${escapeHtml(companyUserCount)} user${companyUserCount === 1 ? "" : "s"}
+          </span>
+        </button>
       </td>
+    `;
 
-      <td>
-        <span class="badge rounded-pill text-bg-light border">
-          ${escapeHtml(profile.role || "--")}
-        </span>
-      </td>
+    tbody.appendChild(companyHeaderRow);
 
-      <td>${escapeHtml(tenant?.company_name || "Not linked")}</td>
+    const companyRowsHtml = companyGroup.profiles
+      .map((profile) => {
+        const tenant = getTenantByTenantId(profile.tenant_id);
 
-      <td>
-        <span class="badge rounded-pill text-bg-light border">
-          ${escapeHtml(tenant?.tenant_code || "--")}
-        </span>
-      </td>
+        return `
+          <tr>
+            <td>
+              <div class="fw-semibold">${escapeHtml(getProfileDisplayName(profile))}</div>
+              <div class="text-secondary small text-break">${escapeHtml(profile.email || "--")}</div>
+            </td>
 
-      <td class="text-center">
-        <div class="d-flex gap-1 justify-content-center">
-          <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1E-2
-               Load this profile into the user access setup form. -->
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-primary"
-            title="Edit user access setup"
-            onclick="window.adminEditProfileTenantLink('${escapeHtml(profile.id)}')"
-          >
-            <i class="bi bi-pencil-square"></i>
-          </button>
+            <td>
+              <span class="admin-access-role-pill">
+                ${escapeHtml(profile.role || "--")}
+              </span>
+            </td>
 
-          <!-- ADMIN PASSWORD RESET
-               Open the reset password modal for this user. -->
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-warning"
-            title="Reset password"
-            onclick="window.adminResetUserPassword('${escapeHtml(profile.id)}')"
-          >
-            <i class="bi bi-key"></i>
-          </button>
+            <td>
+              <span class="admin-access-company-id-pill">
+                ${escapeHtml(tenant?.tenant_code || "--")}
+              </span>
+            </td>
+
+            <td class="text-center">
+              <div class="d-flex gap-1 justify-content-center">
+                <!-- ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-3
+                     Existing edit action is preserved. -->
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-primary"
+                  title="Edit user access setup"
+                  onclick="window.adminEditProfileTenantLink('${escapeHtml(profile.id)}')"
+                >
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+
+                <!-- ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-3
+                     Existing password reset action is preserved. -->
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-warning"
+                  title="Reset password"
+                  onclick="window.adminResetUserPassword('${escapeHtml(profile.id)}')"
+                >
+                  <i class="bi bi-key"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const companyContentRow = document.createElement("tr");
+    companyContentRow.id = companyContentRowId;
+    companyContentRow.className = "admin-access-company-content-row";
+
+    companyContentRow.innerHTML = `
+      <td colspan="4" class="p-0">
+        <div class="admin-access-company-panel">
+          <div class="admin-access-company-scroll" style="max-height: 360px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;">
+            <div class="table-responsive">
+              <table class="table align-middle mb-0 admin-access-company-inner-table">
+                <colgroup>
+                  <col style="width: 42%;">
+                  <col style="width: 18%;">
+                  <col style="width: 20%;">
+                  <col style="width: 20%;">
+                </colgroup>
+                <tbody>
+                  ${companyRowsHtml}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </td>
     `;
 
-    tbody.appendChild(row);
+    tbody.appendChild(companyContentRow);
   });
 }
 

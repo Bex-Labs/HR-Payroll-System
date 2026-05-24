@@ -89,19 +89,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         "No email";
     }
 
-if (state.dom.heroRoleValue) {
-  state.dom.heroRoleValue.textContent = String(
-    state.currentProfile?.role || authResult.profile?.role || "employee",
-  ).toLowerCase();
-}
+    if (state.dom.heroRoleValue) {
+      state.dom.heroRoleValue.textContent = String(
+        state.currentProfile?.role || authResult.profile?.role || "employee",
+      ).toLowerCase();
+    }
 
-// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Restore the intended workspace before long leave/payroll data loading starts.
-// Safe URL links such as ?section=payroll still take priority inside
-// showInitialEmployeeDashboardSection().
-showInitialEmployeeDashboardSection();
+    // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Restore the intended workspace before long leave/payroll data loading starts.
+    // Safe URL links such as ?section=payroll still take priority inside
+    // showInitialEmployeeDashboardSection().
+    showInitialEmployeeDashboardSection();
 
-await loadEmployeeRecord(
+    await loadEmployeeRecord(
       authResult.session.user.id,
       authResult.session.user.email,
     );
@@ -112,12 +112,12 @@ await loadEmployeeRecord(
     await loadEmployeeLeaveRequests();
     await loadEmployeePayroll();
 
-// EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
-// Workspace restore already happened early after authentication.
-// Keep the final startup step focused on leave auto-refresh only.
-forceEmployeeDashboardToTopAfterRefresh();
+    // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Workspace restore already happened early after authentication.
+    // Keep the final startup step focused on leave auto-refresh only.
+    forceEmployeeDashboardToTopAfterRefresh();
 
-startLeaveAutoRefresh();
+    startLeaveAutoRefresh();
   } catch (error) {
     console.error("Error initialising employee dashboard:", error);
     showPageAlert(
@@ -648,13 +648,13 @@ function bindNavigationEvents() {
 }
 
 function bindUtilityEvents() {
-state.dom.logoutBtn?.addEventListener("click", async () => {
-  // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
-  // Logout must reset the next Employee session to Profile.
-  clearRememberedEmployeeWorkspace();
+  state.dom.logoutBtn?.addEventListener("click", async () => {
+    // EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Logout must reset the next Employee session to Profile.
+    clearRememberedEmployeeWorkspace();
 
-  await window.SessionManager.logoutUser("logout");
-});
+    await window.SessionManager.logoutUser("logout");
+  });
 
   state.dom.refreshLeaveBalancesBtn?.addEventListener("click", async () => {
     await refreshEmployeeLeaveBalancesManually();
@@ -1267,6 +1267,19 @@ function showSection(sectionName) {
     state.dom.navPayrollBtn.classList.add("btn-primary");
     if (state.dom.heroModuleValue) state.dom.heroModuleValue.textContent = "Payroll";
   }
+
+  // CROSS-DASHBOARD SIDEBAR REPLICATION - EMPLOYEE STEP 1C-3
+  // Keep the Employee desktop sidebar active state aligned with the existing
+  // Employee workspace buttons. This does not change profile, leave, payroll,
+  // payslip, PDF, or workspace-memory logic.
+  [
+    { id: "sidebarEmployeeProfileBtn", active: isProfile },
+    { id: "sidebarEmployeeLeaveBtn", active: isLeave },
+    { id: "sidebarEmployeePayrollBtn", active: isPayroll },
+  ].forEach(({ id, active }) => {
+    const item = document.getElementById(id);
+    if (item) item.classList.toggle("active", active);
+  });
 }
 
 // EMPLOYEE LEAVE POLICY ELIGIBILITY - STEP 1E

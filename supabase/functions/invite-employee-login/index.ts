@@ -22,8 +22,23 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Only HR and Admin users may provision employee login accounts.
-const allowedRoles = new Set(["hr", "admin"]);
+// EMPLOYEE LOGIN PROVISIONING - STEP 1F-2
+// Keep invite permissions aligned with HR People maintenance roles.
+// HR, HR Manager, Admin, and System Admin can create employee records,
+// so the secure invite function must allow the same maintenance roles.
+const allowedRoles = new Set([
+  "hr",
+  "hr_manager",
+  "admin",
+  "system_admin",
+]);
+
+function normaliseRole(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
 
 function jsonResponse(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
@@ -89,13 +104,14 @@ serve(async (req: Request) => {
       return jsonResponse(403, { error: "Caller profile not found." });
     }
 
-    const callerRole = cleanText(callerProfile.role).toLowerCase();
+    const callerRole = normaliseRole(callerProfile.role);
 
-    if (!allowedRoles.has(callerRole) || callerProfile.is_active === false) {
-      return jsonResponse(403, {
-        error: "You do not have permission to provision employee logins.",
-      });
-    }
+if (!allowedRoles.has(callerRole) || callerProfile.is_active === false) {
+  return jsonResponse(403, {
+    error: "You do not have permission to provision employee logins.",
+    callerRole,
+  });
+}
 
     // Parse and validate the request payload.
     let payload: Record<string, unknown>;

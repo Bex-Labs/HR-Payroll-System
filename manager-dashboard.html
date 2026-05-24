@@ -15,7 +15,44 @@
   <link rel="icon" type="image/x-icon" href="assets/favicon.png" />
 </head>
 
-<body class="dashboard-page">
+<body class="dashboard-page bexhr-has-sidebar">
+  <!-- =========================================================
+       BEXHR SIDEBAR NAV - MANAGER STEP 1C-2
+       Desktop sidebar for Manager. It proxies to the existing Manager
+       workspace tab buttons, so current JS routing and workspace memory
+       remain intact. Hidden on mobile by shared CSS; the workspace switcher
+       remains available on smaller screens.
+       ========================================================= -->
+  <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="Manager workspace navigation">
+    <div class="bexhr-sidebar-brand">
+      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">MG</span>
+    </div>
+
+    <ul class="bexhr-sidebar-nav">
+      <li>
+        <button class="bexhr-sidebar-item active" id="sidebarManagerProfileBtn"
+          onclick="document.getElementById('managerTabProfileBtn')?.click()" title="Profile">
+          <i class="bi bi-person-circle"></i>
+          <span>Profile</span>
+        </button>
+      </li>
+
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarManagerTeamBtn"
+          onclick="document.getElementById('managerTabTeamBtn')?.click()" title="Team Management">
+          <i class="bi bi-people"></i>
+          <span>Team</span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="bexhr-sidebar-footer">
+      <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
+        <i class="bi bi-box-arrow-left"></i>
+        <span>Sign out</span>
+      </button>
+    </div>
+  </nav>
   <main class="container py-4 py-lg-5">
     <!-- =========================================================
            HERO
@@ -223,28 +260,32 @@
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile manager-summary-tile border rounded-4 p-3 bg-light-subtle h-100">
                 <div class="summary-tile-label text-secondary small fw-semibold">Team Members</div>
-                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="teamCountValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="teamCountValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile manager-summary-tile border rounded-4 p-3 bg-light-subtle h-100">
                 <div class="summary-tile-label text-secondary small fw-semibold">Active Users</div>
-                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="activeCountValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="activeCountValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile manager-summary-tile border rounded-4 p-3 bg-light-subtle h-100">
                 <div class="summary-tile-label text-secondary small fw-semibold">Employees Missing Login</div>
-                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="pendingCountValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="pendingCountValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile manager-summary-tile border rounded-4 p-3 bg-light-subtle h-100">
                 <div class="summary-tile-label text-secondary small fw-semibold">Departments Covered</div>
-                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="departmentCountValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="departmentCountValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
           </div>
@@ -268,28 +309,32 @@
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile manager-summary-tile border rounded-4 p-3 bg-light-subtle h-100">
                 <div class="summary-tile-label text-secondary small fw-semibold">Pending Requests</div>
-                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="pendingLeaveCountValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="pendingLeaveCountValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile manager-summary-tile border rounded-4 p-3 bg-light-subtle h-100">
                 <div class="summary-tile-label text-secondary small fw-semibold">Upcoming Leave</div>
-                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="upcomingLeaveCountValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="upcomingLeaveCountValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile manager-summary-tile border rounded-4 p-3 bg-light-subtle h-100">
                 <div class="summary-tile-label text-secondary small fw-semibold">Leave Conflicts</div>
-                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="overlapCountValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="overlapCountValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile manager-summary-tile border rounded-4 p-3 bg-light-subtle h-100">
                 <div class="summary-tile-label text-secondary small fw-semibold">Leave Types in View</div>
-                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="leaveTypeCountValue"><span class="skeleton">&nbsp;&nbsp;</span></div>
+                <div class="summary-tile-value fs-4 fw-bold mb-0 mt-2" id="leaveTypeCountValue"><span
+                    class="skeleton">&nbsp;&nbsp;</span></div>
               </div>
             </div>
           </div>
@@ -586,9 +631,9 @@
   <!-- MANAGER LEAVE APPROVAL UI CLEANUP - STEP 1L
        Floating Back to Top button for the manager page.
        This follows the cleaned HR dashboard pattern but stays local to Manager. -->
-  <button type="button" id="backToTopBtn" class="btn btn-primary rounded-circle shadow d-none" aria-label="Back to top"
-    title="Back to top"
-    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px;">
+  <button type="button" id="backToTopBtn" class="btn rounded-circle shadow d-none bexhr-back-to-top-btn"
+    aria-label="Back to top" title="Back to top"
+    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px; background-color: #8a5a05; border-color: #8a5a05; color: #fff;">
     <i class="bi bi-arrow-up"></i>
   </button>
 
@@ -717,53 +762,53 @@
     </div>
   </div>
 
-<!-- MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+  <!-- MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
      First-paint restore for Manager workspace.
      This prevents a visible Profile flash when refreshing from Team Management.
      It reads only the lightweight workspace key written by manager-dashboard.js. -->
-<script>
-  (function () {
-    try {
-      if ("scrollRestoration" in window.history) {
-        window.history.scrollRestoration = "manual";
-      }
-
-      var workspace = sessionStorage.getItem("hrPayroll:lastManagerWorkspace:last") || "profile";
-
-      if (workspace === "team") {
-        var profileSection = document.getElementById("managerProfileSection");
-        var teamSection = document.getElementById("managerTeamSection");
-
-        if (profileSection) profileSection.classList.add("d-none");
-        if (teamSection) teamSection.classList.remove("d-none");
-
-        var profileBtn = document.getElementById("managerTabProfileBtn");
-        var teamBtn = document.getElementById("managerTabTeamBtn");
-
-        if (profileBtn) {
-          profileBtn.className = profileBtn.className.replace("btn-primary", "btn-outline-primary");
+  <script>
+    (function () {
+      try {
+        if ("scrollRestoration" in window.history) {
+          window.history.scrollRestoration = "manual";
         }
 
-        if (teamBtn) {
-          teamBtn.className = teamBtn.className.replace("btn-outline-primary", "btn-primary");
+        var workspace = sessionStorage.getItem("hrPayroll:lastManagerWorkspace:last") || "profile";
+
+        if (workspace === "team") {
+          var profileSection = document.getElementById("managerProfileSection");
+          var teamSection = document.getElementById("managerTeamSection");
+
+          if (profileSection) profileSection.classList.add("d-none");
+          if (teamSection) teamSection.classList.remove("d-none");
+
+          var profileBtn = document.getElementById("managerTabProfileBtn");
+          var teamBtn = document.getElementById("managerTabTeamBtn");
+
+          if (profileBtn) {
+            profileBtn.className = profileBtn.className.replace("btn-primary", "btn-outline-primary");
+          }
+
+          if (teamBtn) {
+            teamBtn.className = teamBtn.className.replace("btn-outline-primary", "btn-primary");
+          }
+
+          var moduleValue = document.getElementById("managerModuleValue");
+          if (moduleValue) moduleValue.textContent = "Team Management";
         }
 
-        var moduleValue = document.getElementById("managerModuleValue");
-        if (moduleValue) moduleValue.textContent = "Team Management";
+        window.scrollTo(0, 0);
+      } catch (error) {
+        // If sessionStorage is blocked, the HTML default Profile workspace remains safe.
       }
+    })();
+  </script>
 
-      window.scrollTo(0, 0);
-    } catch (error) {
-      // If sessionStorage is blocked, the HTML default Profile workspace remains safe.
-    }
-  })();
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/app.js"></script>
-<script src="js/session.js"></script>
-<script src="js/manager-dashboard.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+  <script src="js/session.js"></script>
+  <script src="js/manager-dashboard.js"></script>
 </body>
 
 </html>

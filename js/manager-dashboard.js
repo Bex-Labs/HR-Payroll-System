@@ -577,27 +577,27 @@ function getLeaveDecisionToastTitle(status = "") {
 }
 
 function bindEvents() {
-state.dom.logoutBtn?.addEventListener("click", async () => {
-  // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
-  // Logout must reset the next Manager session to Profile.
-  clearRememberedManagerWorkspace();
+  state.dom.logoutBtn?.addEventListener("click", async () => {
+    // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Logout must reset the next Manager session to Profile.
+    clearRememberedManagerWorkspace();
 
-  await window.SessionManager.logoutUser("logout");
-});
+    await window.SessionManager.logoutUser("logout");
+  });
 
-state.dom.managerTabProfileBtn?.addEventListener("click", () => {
-  // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
-  // Remember Profile only for refresh in the current browser session.
-  rememberManagerWorkspace("profile");
-  switchManagerWorkspace("profile");
-});
+  state.dom.managerTabProfileBtn?.addEventListener("click", () => {
+    // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Remember Profile only for refresh in the current browser session.
+    rememberManagerWorkspace("profile");
+    switchManagerWorkspace("profile");
+  });
 
-state.dom.managerTabTeamBtn?.addEventListener("click", () => {
-  // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
-  // Remember Team Management only for refresh. No team or leave data is stored.
-  rememberManagerWorkspace("team");
-  switchManagerWorkspace("team");
-});
+  state.dom.managerTabTeamBtn?.addEventListener("click", () => {
+    // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
+    // Remember Team Management only for refresh. No team or leave data is stored.
+    rememberManagerWorkspace("team");
+    switchManagerWorkspace("team");
+  });
 
   state.dom.managerProfileForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -939,15 +939,16 @@ ${errorMessage}`);
 
 function switchManagerWorkspace(workspace) {
   const isProfile = workspace === "profile";
+  const isTeam = workspace === "team";
 
   state.dom.managerProfileSection?.classList.toggle("d-none", !isProfile);
-  state.dom.managerTeamSection?.classList.toggle("d-none", isProfile);
+  state.dom.managerTeamSection?.classList.toggle("d-none", !isTeam);
 
   state.dom.managerTabProfileBtn.className = isProfile
     ? "btn btn-primary dashboard-action-btn"
     : "btn btn-outline-primary dashboard-action-btn";
 
-  state.dom.managerTabTeamBtn.className = !isProfile
+  state.dom.managerTabTeamBtn.className = isTeam
     ? "btn btn-primary dashboard-action-btn"
     : "btn btn-outline-primary dashboard-action-btn";
 
@@ -956,6 +957,18 @@ function switchManagerWorkspace(workspace) {
       ? "Profile"
       : "Team Management";
   }
+
+  // CROSS-DASHBOARD SIDEBAR REPLICATION - MANAGER STEP 1C-2
+  // Keep the Manager desktop sidebar active state aligned with the existing
+  // Manager workspace tabs. This does not change routing, leave approval,
+  // reporting-line visibility, or workspace memory logic.
+  [
+    { id: "sidebarManagerProfileBtn", active: isProfile },
+    { id: "sidebarManagerTeamBtn", active: isTeam },
+  ].forEach(({ id, active }) => {
+    const item = document.getElementById(id);
+    if (item) item.classList.toggle("active", active);
+  });
 }
 
 function normalizeText(value) {
@@ -1117,31 +1130,11 @@ async function ensureManagerProfileDepartment(supabase, profileData) {
     // Nothing to sync if no employee record department was found.
     if (!employeeDept) return profileData;
 
-    // Ensure the department exists in the controlled organization_departments list.
-    const { data: existingDepts, error: fetchError } = await supabase
-      .from("organization_departments")
-      .select("id, department_name")
-      .ilike("department_name", employeeDept)
-      .limit(1);
-
-    if (fetchError) {
-      console.warn("Manager department seed: could not query organization_departments:", fetchError);
-    } else if (!existingDepts || existingDepts.length === 0) {
-      // The HR-assigned department isn't in the list yet — add it as Active.
-      const { error: insertError } = await supabase
-        .from("organization_departments")
-        .insert([{
-          department_name: employeeDept,
-          status: "Active",
-          created_by: state.currentUser?.id || null,
-          updated_by: state.currentUser?.id || null,
-        }]);
-
-      if (insertError) {
-        console.warn("Manager department seed: insert failed:", insertError);
-      }
-    }
-
+    // CROSS-DASHBOARD SIDEBAR REPLICATION - MANAGER STEP 1C-2B
+    // Manager dashboard must not create controlled organization setup values.
+    // Department setup is owned by HR/Admin through Manage Organization.
+    // The manager profile can still display/sync the department assigned on
+    // the employee record, but it must not insert into organization_departments.
     // Sync into profiles.department if blank or different from employee record.
     const profileDept = String(profileData.department || "").trim();
     if (profileDept !== employeeDept) {

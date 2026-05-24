@@ -82,7 +82,51 @@
   </style>
 </head>
 
-<body class="dashboard-page">
+<body class="dashboard-page bexhr-has-sidebar">
+  <!-- =========================================================
+       BEXHR SIDEBAR NAV - EMPLOYEE STEP 1C-3
+       Desktop sidebar for Employee Self Service. It proxies to the existing
+       employee workspace buttons so profile, leave, payroll, payslip links,
+       and workspace memory remain unchanged. Hidden on mobile by shared CSS.
+       ========================================================= -->
+  <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="Employee workspace navigation">
+    <div class="bexhr-sidebar-brand">
+      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">EM</span>
+    </div>
+
+    <ul class="bexhr-sidebar-nav">
+      <li>
+        <button class="bexhr-sidebar-item active" id="sidebarEmployeeProfileBtn"
+          onclick="document.getElementById('navProfileBtn')?.click()" title="Profile">
+          <i class="bi bi-person-circle"></i>
+          <span>Profile</span>
+        </button>
+      </li>
+
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarEmployeeLeaveBtn"
+          onclick="document.getElementById('navLeaveBtn')?.click()" title="Leave Management">
+          <i class="bi bi-calendar-check"></i>
+          <span>Leave</span>
+        </button>
+      </li>
+
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarEmployeePayrollBtn"
+          onclick="document.getElementById('navPayrollBtn')?.click()" title="Payroll">
+          <i class="bi bi-cash-coin"></i>
+          <span>Payroll</span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="bexhr-sidebar-footer">
+      <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
+        <i class="bi bi-box-arrow-left"></i>
+        <span>Sign out</span>
+      </button>
+    </div>
+  </nav>
   <main class="container py-4 py-lg-5">
     <section class="dashboard-hero mb-4">
       <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-4">
@@ -796,78 +840,82 @@
     <!-- EMPLOYEE UI CLEANUP - STEP 1I
          Floating Back-to-Top control for long employee dashboard pages.
          This is navigation-only and does not touch payroll data or records. -->
-    <button type="button" id="scrollToTopBtn" class="dashboard-scroll-top-btn d-none" aria-label="Back to top"
-      title="Back to top">
+    <!-- CROSS-DASHBOARD UI CLEANUP - STEP 1A
+     Match the Employee floating Back-to-Top control with the brown
+     navigation colour now used across Admin, HR, and Manager dashboards. -->
+    <button type="button" id="scrollToTopBtn" class="dashboard-scroll-top-btn bexhr-back-to-top-btn d-none"
+      aria-label="Back to top" title="Back to top"
+      style="background-color: #8a5a05; border-color: #8a5a05; color: #fff;">
       <i class="bi bi-arrow-up"></i>
     </button>
   </main>
 
-<!-- EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
+  <!-- EMPLOYEE DASHBOARD WORKSPACE MEMORY - STEP 1A
      First-paint restore for Employee workspace.
      This prevents a visible Profile flash when refreshing from Leave or Payroll.
      It reads only the lightweight workspace key written by employee-dashboard.js. -->
-<script>
-  (function () {
-    try {
-      if ("scrollRestoration" in window.history) {
-        window.history.scrollRestoration = "manual";
-      }
-
-      var workspace = sessionStorage.getItem("hrPayroll:lastEmployeeWorkspace:last") || "profile";
-
-      var profileSection = document.getElementById("profileSection");
-      var leaveSection = document.getElementById("leaveSection");
-      var payrollSection = document.getElementById("payrollSection");
-
-      var profileBtn = document.getElementById("navProfileBtn");
-      var leaveBtn = document.getElementById("navLeaveBtn");
-      var payrollBtn = document.getElementById("navPayrollBtn");
-      var moduleValue = document.getElementById("heroModuleValue");
-
-      function setInactive(button) {
-        if (!button) return;
-        button.classList.remove("btn-primary");
-        button.classList.add("btn-outline-primary");
-      }
-
-      function setActive(button) {
-        if (!button) return;
-        button.classList.remove("btn-outline-primary");
-        button.classList.add("btn-primary");
-      }
-
-      if (workspace === "leave" || workspace === "payroll") {
-        if (profileSection) profileSection.classList.add("d-none");
-        if (leaveSection) leaveSection.classList.toggle("d-none", workspace !== "leave");
-        if (payrollSection) payrollSection.classList.toggle("d-none", workspace !== "payroll");
-
-        setInactive(profileBtn);
-        setInactive(leaveBtn);
-        setInactive(payrollBtn);
-
-        if (workspace === "leave") {
-          setActive(leaveBtn);
-          if (moduleValue) moduleValue.textContent = "Leave Management";
+  <script>
+    (function () {
+      try {
+        if ("scrollRestoration" in window.history) {
+          window.history.scrollRestoration = "manual";
         }
 
-        if (workspace === "payroll") {
-          setActive(payrollBtn);
-          if (moduleValue) moduleValue.textContent = "Payroll";
+        var workspace = sessionStorage.getItem("hrPayroll:lastEmployeeWorkspace:last") || "profile";
+
+        var profileSection = document.getElementById("profileSection");
+        var leaveSection = document.getElementById("leaveSection");
+        var payrollSection = document.getElementById("payrollSection");
+
+        var profileBtn = document.getElementById("navProfileBtn");
+        var leaveBtn = document.getElementById("navLeaveBtn");
+        var payrollBtn = document.getElementById("navPayrollBtn");
+        var moduleValue = document.getElementById("heroModuleValue");
+
+        function setInactive(button) {
+          if (!button) return;
+          button.classList.remove("btn-primary");
+          button.classList.add("btn-outline-primary");
         }
+
+        function setActive(button) {
+          if (!button) return;
+          button.classList.remove("btn-outline-primary");
+          button.classList.add("btn-primary");
+        }
+
+        if (workspace === "leave" || workspace === "payroll") {
+          if (profileSection) profileSection.classList.add("d-none");
+          if (leaveSection) leaveSection.classList.toggle("d-none", workspace !== "leave");
+          if (payrollSection) payrollSection.classList.toggle("d-none", workspace !== "payroll");
+
+          setInactive(profileBtn);
+          setInactive(leaveBtn);
+          setInactive(payrollBtn);
+
+          if (workspace === "leave") {
+            setActive(leaveBtn);
+            if (moduleValue) moduleValue.textContent = "Leave Management";
+          }
+
+          if (workspace === "payroll") {
+            setActive(payrollBtn);
+            if (moduleValue) moduleValue.textContent = "Payroll";
+          }
+        }
+
+        window.scrollTo(0, 0);
+      } catch (error) {
+        // If sessionStorage is blocked, the HTML default Profile workspace remains safe.
       }
+    })();
+  </script>
 
-      window.scrollTo(0, 0);
-    } catch (error) {
-      // If sessionStorage is blocked, the HTML default Profile workspace remains safe.
-    }
-  })();
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/app.js"></script>
-<script src="js/session.js"></script>
-<script src="js/employee-dashboard.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+  <script src="js/session.js"></script>
+  <script src="js/employee-dashboard.js"></script>
 
   <script>
     /* EMPLOYEE DASHBOARD FINAL QA - STEP 1R-C
