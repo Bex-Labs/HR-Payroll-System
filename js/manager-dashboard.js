@@ -1090,9 +1090,10 @@ function getInitials(fullName, fallback = "MG") {
 
 // MANAGER PROFILE DEPARTMENT SEEDING
 // Resolves the manager's department from their employees record (set by HR
-// from the controlled organization_departments list). Ensures the department
-// exists in organization_departments, then syncs it into profiles.department
-// if the profile department is blank or out of date.
+// from the controlled organization_departments list). Syncs the value into
+// profiles.department if the profile department is blank or out of date.
+// Does not insert into organization_departments — department setup is owned
+// by HR/Admin through Manage Organization.
 async function ensureManagerProfileDepartment(supabase, profileData) {
   if (!profileData) return profileData;
 

@@ -106,12 +106,11 @@ serve(async (req: Request) => {
 
     const callerRole = normaliseRole(callerProfile.role);
 
-if (!allowedRoles.has(callerRole) || callerProfile.is_active === false) {
-  return jsonResponse(403, {
-    error: "You do not have permission to provision employee logins.",
-    callerRole,
-  });
-}
+    if (!allowedRoles.has(callerRole) || callerProfile.is_active === false) {
+      return jsonResponse(403, {
+        error: "You do not have permission to provision employee logins.",
+      });
+    }
 
     // Parse and validate the request payload.
     let payload: Record<string, unknown>;
