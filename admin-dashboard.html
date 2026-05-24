@@ -15,7 +15,52 @@
   <link rel="icon" type="image/x-icon" href="assets/favicon.png" />
 </head>
 
-<body class="dashboard-page">
+<body class="dashboard-page bexhr-has-sidebar">
+  <!-- =========================================================
+       BEXHR SIDEBAR NAV - ADMIN STEP 1C-1
+       Desktop sidebar for Admin. It proxies to the existing Admin
+       workspace tab buttons, so current JS routing remains intact.
+       Hidden on mobile by shared CSS; the workspace switcher card remains
+       available on smaller screens.
+       ========================================================= -->
+  <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="Admin workspace navigation">
+    <div class="bexhr-sidebar-brand">
+      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">AD</span>
+    </div>
+
+    <ul class="bexhr-sidebar-nav">
+      <li>
+        <button class="bexhr-sidebar-item active" id="sidebarAdminProfileBtn"
+          onclick="document.getElementById('adminTabProfileBtn')?.click()" title="Profile">
+          <i class="bi bi-person-circle"></i>
+          <span>Profile</span>
+        </button>
+      </li>
+
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarAdminOverviewBtn"
+          onclick="document.getElementById('adminTabOverviewBtn')?.click()" title="Overview">
+          <i class="bi bi-grid"></i>
+          <span>Overview</span>
+        </button>
+      </li>
+
+      <li>
+        <button class="bexhr-sidebar-item" id="sidebarAdminCompaniesBtn"
+          onclick="document.getElementById('adminTabTenantsBtn')?.click()" title="Companies">
+          <i class="bi bi-building"></i>
+          <span>Companies</span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="bexhr-sidebar-footer">
+      <button class="bexhr-sidebar-item" onclick="document.getElementById('logoutBtn')?.click()" title="Sign out">
+        <i class="bi bi-box-arrow-left"></i>
+        <span>Sign out</span>
+      </button>
+    </div>
+  </nav>
   <main class="container py-4 py-lg-5">
     <!-- =========================================================
            HERO
@@ -53,7 +98,8 @@
       <div class="hero-meta-grid">
         <div class="hero-meta-card">
           <div class="hero-meta-label">Signed in as</div>
-          <div class="hero-meta-value text-break" id="adminEmail"><span class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
+          <div class="hero-meta-value text-break" id="adminEmail"><span
+              class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
         </div>
 
         <div class="hero-meta-card">
@@ -311,14 +357,16 @@
             <div class="col-md-6 col-xl-3">
               <div class="info-tile">
                 <div class="info-tile-label">Full Name</div>
-                <div class="info-tile-value text-break" id="adminFullName"><span class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
+                <div class="info-tile-value text-break" id="adminFullName"><span
+                    class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
             <div class="col-md-6 col-xl-3">
               <div class="info-tile">
                 <div class="info-tile-label">Email</div>
-                <div class="info-tile-value text-break" id="adminEmailTile"><span class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
+                <div class="info-tile-value text-break" id="adminEmailTile"><span
+                    class="skeleton skeleton-wide">&nbsp;&nbsp;</span></div>
               </div>
             </div>
 
@@ -893,12 +941,20 @@
                 </div>
 
                 <div id="profileTenantLinksTableWrapper" class="table-responsive d-none">
-                  <table class="table align-middle dashboard-table mb-0">
+                  <!-- ADMIN ACCESS RECORDS UX CLEANUP - STEP 1E-3
+       Company is now shown once in the grouped company header.
+       User rows keep only role, Company ID, and actions to reduce repetition. -->
+                  <table class="table align-middle dashboard-table mb-0 admin-access-table">
+                    <colgroup>
+                      <col style="width: 42%;">
+                      <col style="width: 18%;">
+                      <col style="width: 20%;">
+                      <col style="width: 20%;">
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>User</th>
                         <th>Role</th>
-                        <th>Company</th>
                         <th>Company ID</th>
                         <th class="text-center">Action</th>
                       </tr>
@@ -917,9 +973,9 @@
   <!-- ADMIN UI CLEANUP - STEP 1H
        Floating Back to Top button for long Admin pages.
        This matches the HR dashboard behaviour without changing any form data. -->
-  <button type="button" id="backToTopBtn" class="btn btn-primary rounded-circle shadow d-none" aria-label="Back to top"
-    title="Back to top"
-    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px;">
+  <button type="button" id="backToTopBtn" class="btn rounded-circle shadow d-none bexhr-back-to-top-btn"
+    aria-label="Back to top" title="Back to top"
+    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px; background-color: #8a5a05; border-color: #8a5a05; color: #fff;"
     <i class="bi bi-arrow-up"></i>
   </button>
 
