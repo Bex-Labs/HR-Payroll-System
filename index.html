@@ -6,30 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BexHR</title>
 
-  <!--
-    ==============================================================
-    BOOTSTRAP CSS
-    --------------------------------------------------------------
-    Bootstrap is used as requested for layout, spacing, buttons,
-    navbar, cards, modal, and responsive behavior.
-    ==============================================================
-  -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-
-  <!-- Bootstrap Icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
-
-  <!--
-    ==============================================================
-    CUSTOM STYLESHEET
-    --------------------------------------------------------------
-    This contains the mockup-inspired design system and all custom
-    styling for the landing page and sign-in experience.
-    ==============================================================
-  -->
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="icon" type="image/x-icon" href="assets/favicon.png">
 </head>
@@ -38,78 +19,29 @@
   <!--
     ==============================================================
     NAVBAR
-    --------------------------------------------------------------
-    Public top navigation for the landing page.
-    "Sign In" opens the authentication modal.
     ==============================================================
   -->
-  <nav class="navbar navbar-expand-lg fixed-top hr-navbar">
+  <nav class="navbar fixed-top hr-navbar">
     <div class="container">
       <a class="navbar-brand d-flex align-items-center gap-2" href="#home">
         <span class="hr-brand-mark">HR</span>
         <span class="hr-brand-text">BexHR</span>
       </a>
-
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
-        aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-
-      <div class="collapse navbar-collapse" id="mainNav">
-        <ul class="navbar-nav ms-auto me-lg-3 mb-2 mb-lg-0">
-          <li class="nav-item">
-            <a class="nav-link" href="#features">Features</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="#roles">Roles</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="#access">Access</a>
-          </li>
-        </ul>
-
-        <div class="d-flex gap-2">
-          <!--
-            This button launches the sign-in modal.
-            User stays on the landing page until they choose to sign in.
-          -->
-          <button class="btn btn-outline-secondary rounded-pill px-4" data-bs-toggle="modal"
-            data-bs-target="#signInModal">
-            Sign In
-          </button>
-
-          <a href="#features" class="btn hr-btn-primary"> Explore System </a>
-        </div>
-      </div>
     </div>
   </nav>
 
   <!--
     ==============================================================
-    HERO SECTION
-    --------------------------------------------------------------
-    Main public landing section.
-    This is visually inspired by the uploaded mockup:
-    - warm amber tones
-    - polished premium look
-    - strong headline
-    - soft cards and rounded corners
-    ==============================================================
-  -->
-  <!--
-    ==============================================================
-    HERO SECTION
-    --------------------------------------------------------------
-    Public landing section for the BexHR platform.
-    Wording now reflects the system's actual employee, manager, HR,
-    payroll, role-security, and audit behaviours.
+    HERO SECTION — headline left, sign-in form right
     ==============================================================
   -->
   <section class="hr-hero-section landing-animated-page" id="home">
     <div class="container">
       <div class="row align-items-center g-4 g-lg-5">
+
+        <!-- Left: brand copy + stat cards -->
         <div class="col-lg-6 landing-animate-in landing-animate-delay-1">
-          <span class="hr-hero-badge mb-3">BexHR — Operational HR & Payroll Platform</span>
+          <span class="hr-hero-badge mb-3">BexHR — Operational HR &amp; Payroll Platform</span>
 
           <h1 class="hr-hero-title mb-4">
             Manage people, leave, payroll, and approvals through a
@@ -117,23 +49,12 @@
           </h1>
 
           <p class="hr-hero-copy mb-4">
-            A secure HR and Payroll system for employees, managers, HR officers,
-            payroll officers, leadership, system administrators, and auditors.
-            Built to support employee self-service, manager review, payroll
-            operations, access control, and auditable HR decisions.
+            A secure HR and Payroll system built to support employee
+            self-service, manager approvals, payroll operations, access
+            control, and auditable HR decisions.
           </p>
 
-          <div class="d-flex flex-column flex-sm-row gap-3 mb-4">
-            <button class="btn hr-btn-primary" data-bs-toggle="modal" data-bs-target="#signInModal">
-              <i class="bi bi-box-arrow-in-right me-2"></i>Sign In Securely
-            </button>
-
-            <a href="#roles" class="btn hr-btn-secondary">
-              <i class="bi bi-diagram-3 me-2"></i>View Role Workspaces
-            </a>
-          </div>
-
-          <div class="row g-3 landing-animate-in landing-animate-delay-3">
+          <div class="row g-3">
             <div class="col-sm-4">
               <div class="hr-mini-card p-3 h-100">
                 <div class="small text-secondary">Access</div>
@@ -157,439 +78,95 @@
           </div>
         </div>
 
+        <!-- Right: inline sign-in form -->
         <div class="col-lg-6 landing-animate-in landing-animate-delay-2">
-          <div class="hr-hero-panel landing-hero-card p-4 p-md-5 h-100">
-            <div>
-              <span class="badge text-bg-light rounded-pill mb-3">Built for HR Operations</span>
-
-              <h2 class="fw-bold mb-3">
-                From employee request to manager decision, payroll action, and audit trail.
-              </h2>
-
-              <p class="text-white-50 mb-0">
-                The platform separates access by role, guides employees through
-                self-service, supports manager approval controls, protects payroll
-                information, and preserves a traceable record of HR decisions.
-              </p>
-            </div>
-
-            <div class="landing-workflow-strip mt-4" aria-label="HR workflow animation">
-              <div class="landing-workflow-step">
-                <span class="landing-workflow-icon"><i class="bi bi-person"></i></span>
-                <span>Employee</span>
-              </div>
-
-              <div class="landing-workflow-connector"></div>
-
-              <div class="landing-workflow-step">
-                <span class="landing-workflow-icon"><i class="bi bi-person-check"></i></span>
-                <span>Manager</span>
-              </div>
-
-              <div class="landing-workflow-connector"></div>
-
-              <div class="landing-workflow-step">
-                <span class="landing-workflow-icon"><i class="bi bi-people"></i></span>
-                <span>HR</span>
-              </div>
-
-              <div class="landing-workflow-connector"></div>
-
-              <div class="landing-workflow-step">
-                <span class="landing-workflow-icon"><i class="bi bi-cash-coin"></i></span>
-                <span>Payroll</span>
-              </div>
-
-              <div class="landing-workflow-connector"></div>
-
-              <div class="landing-workflow-step">
-                <span class="landing-workflow-icon"><i class="bi bi-clipboard-check"></i></span>
-                <span>Audited</span>
-              </div>
-            </div>
-
-            <div class="row g-3 mt-4">
-              <div class="col-12">
-                <div class="hr-panel-box p-3 rounded-4">
-                  <div class="fw-semibold mb-1">Employee Self-Service</div>
-                  <small class="text-white-50">
-                    Employees can review profile details, leave balances,
-                    leave history, decisions, payroll history, and payslip
-                    information from a secure workspace.
-                  </small>
-                </div>
-              </div>
-
-              <div class="col-md-6">
-                <div class="hr-panel-box p-3 rounded-4 h-100">
-                  <div class="fw-semibold mb-1">Manager Review Controls</div>
-                  <small class="text-white-50">
-                    Managers can review scoped team records, pending leave,
-                    balance readiness, eligibility issues, and coverage risks.
-                  </small>
-                </div>
-              </div>
-
-              <div class="col-md-6">
-                <div class="hr-panel-box p-3 rounded-4 h-100">
-                  <div class="fw-semibold mb-1">Payroll & Audit Support</div>
-                  <small class="text-white-50">
-                    Payroll and HR decisions are protected by role access,
-                    clear workflows, and auditable status changes.
-                  </small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- FEATURES SECTION -->
-  <section class="py-5 landing-animate-in landing-animate-delay-4" id="features">
-    <div class="container py-4">
-      <div class="text-center mb-5">
-        <h2 class="hr-section-title mb-3">
-          Structured HR delivery from self-service to audit
-        </h2>
-        <p class="hr-section-copy mx-auto">
-          The system supports controlled access, employee self-service,
-          manager approvals, HR administration, payroll operations, and
-          traceable decision history across the employee lifecycle.
-        </p>
-      </div>
-
-      <div class="row g-4">
-        <div class="col-md-6 col-xl-3">
-          <div class="hr-feature-card p-4 h-100">
-            <div class="hr-feature-icon mb-3">
-              <i class="bi bi-person-workspace"></i>
-            </div>
-            <h5 class="fw-bold">Employee Self-Service</h5>
-            <p class="text-secondary mb-0">
-              Employees can manage leave requests, view balances, track
-              manager decisions, review payroll history, and access payslip
-              information from one workspace.
+          <div class="bg-white rounded-4 border p-4 p-md-5">
+            <h2 class="fw-bold mb-1">Sign In</h2>
+            <p class="text-secondary mb-3">
+              Enter your company ID and credentials to continue.
             </p>
-          </div>
-        </div>
 
-        <div class="col-md-6 col-xl-3">
-          <div class="hr-feature-card p-4 h-100">
-            <div class="hr-feature-icon mb-3">
-              <i class="bi bi-person-check"></i>
-            </div>
-            <h5 class="fw-bold">Manager Approval Control</h5>
-            <p class="text-secondary mb-0">
-              Managers review assigned employees only, with decision readiness
-              checks for leave balance, employee eligibility, duplicate
-              requests, and team coverage.
-            </p>
-          </div>
-        </div>
+            <!-- Alert container for sign-in messages -->
+            <div id="loginAlertContainer"></div>
 
-        <div class="col-md-6 col-xl-3">
-          <div class="hr-feature-card p-4 h-100">
-            <div class="hr-feature-icon mb-3">
-              <i class="bi bi-cash-coin"></i>
-            </div>
-            <h5 class="fw-bold">Payroll Operations</h5>
-            <p class="text-secondary mb-0">
-              Payroll users can work with payroll records, payslip visibility,
-              payment preparation, payroll history, and controlled payroll
-              outputs.
-            </p>
-          </div>
-        </div>
-
-        <div class="col-md-6 col-xl-3">
-          <div class="hr-feature-card p-4 h-100">
-            <div class="hr-feature-icon mb-3">
-              <i class="bi bi-journal-check"></i>
-            </div>
-            <h5 class="fw-bold">Audit & Policy Support</h5>
-            <p class="text-secondary mb-0">
-              HR decisions, returned requests, resubmissions, access separation,
-              and lifecycle events are structured for review and accountability.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ROLES SECTION -->
-  <section class="py-5 landing-animate-in landing-animate-delay-4" id="roles">
-    <div class="container py-4">
-      <div class="row align-items-center g-4">
-        <div class="col-lg-5">
-          <h2 class="hr-section-title mb-3">
-            Role-based workspaces for HR and payroll operations
-          </h2>
-          <p class="hr-section-copy mb-0">
-            Each user enters the workspace assigned to their profile, with
-            access limited to the functions needed for their HR, payroll,
-            management, oversight, or audit responsibility.
-          </p>
-        </div>
-
-        <div class="col-lg-7">
-          <div class="row g-3">
-            <div class="col-sm-6 col-xl-4">
-              <div class="hr-role-card p-3 h-100">
-                <div class="fw-semibold mb-1">Employee</div>
-                <div class="small text-secondary">
-                  Profile, leave, balances, decisions, payroll history, and payslip access.
+            <form id="loginForm" novalidate>
+              <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-2 -->
+              <div class="mb-3">
+                <label for="loginTenantCode" class="form-label fw-semibold">
+                  Company / Tenant ID
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-white border-end-0">
+                    <i class="bi bi-building"></i>
+                  </span>
+                  <input type="text" class="form-control border-start-0" id="loginTenantCode"
+                    placeholder="Enter your Company ID" autocomplete="organization" required />
+                </div>
+                <div class="form-text">
+                  Enter the Company/Tenant ID provided by your administrator.
+                </div>
+                <div class="invalid-feedback">
+                  Please enter your Company/Tenant ID.
                 </div>
               </div>
-            </div>
 
-            <div class="col-sm-6 col-xl-4">
-              <div class="hr-role-card p-3 h-100">
-                <div class="fw-semibold mb-1">Manager</div>
-                <div class="small text-secondary">
-                  Assigned team records, leave approval, returns, rejections, and coverage review.
+              <div class="mb-3">
+                <label for="email" class="form-label fw-semibold">Username / Email Address</label>
+                <div class="input-group">
+                  <span class="input-group-text bg-white border-end-0">
+                    <i class="bi bi-envelope"></i>
+                  </span>
+                  <input type="email" class="form-control border-start-0" id="email"
+                    placeholder="Enter your username/email" autocomplete="email" required />
+                </div>
+                <div class="invalid-feedback">
+                  Please enter your email address.
                 </div>
               </div>
-            </div>
 
-            <div class="col-sm-6 col-xl-4">
-              <div class="hr-role-card p-3 h-100">
-                <div class="fw-semibold mb-1">HR Officer</div>
-                <div class="small text-secondary">
-                  Employee records, leave policy setup, entitlement oversight, and HR administration.
-                </div>
-              </div>
-            </div>
-
-            <div class="col-sm-6 col-xl-4">
-              <div class="hr-role-card p-3 h-100">
-                <div class="fw-semibold mb-1">Payroll Officer</div>
-                <div class="small text-secondary">
-                  Payroll records, payslip preparation, payroll outputs, and payment readiness.
-                </div>
-              </div>
-            </div>
-
-            <div class="col-sm-6 col-xl-4">
-              <div class="hr-role-card p-3 h-100">
-                <div class="fw-semibold mb-1">Executive User</div>
-                <div class="small text-secondary">
-                  Leadership visibility over HR and payroll operations without operational clutter.
-                </div>
-              </div>
-            </div>
-
-            <div class="col-sm-6 col-xl-4">
-              <div class="hr-role-card p-3 h-100">
-                <div class="fw-semibold mb-1">System Administrator</div>
-                <div class="small text-secondary">
-                  User access, system setup, configuration, and controlled administration.
-                </div>
-              </div>
-            </div>
-
-            <div class="col-sm-6 col-xl-4">
-              <div class="hr-role-card p-3 h-100">
-                <div class="fw-semibold mb-1">Auditor</div>
-                <div class="small text-secondary">
-                  Read-focused access to audit trails, lifecycle events, and compliance evidence.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ACCESS / CALL TO ACTION SECTION -->
-  <section class="py-5 landing-animate-in landing-animate-delay-4" id="access">
-    <div class="container py-4">
-      <div class="hr-access-card p-4 p-md-5">
-        <div class="row g-4 align-items-center">
-          <div class="col-lg-8">
-            <h2 class="hr-section-title mb-3">
-              Enter your assigned BexHR workspace
-            </h2>
-            <p class="hr-section-copy mb-0">
-              Sign in securely to continue. The system will route you to the
-              dashboard and tools permitted for your role.
-            </p>
-          </div>
-
-          <div class="col-lg-4 text-lg-end">
-            <button class="btn hr-btn-primary" data-bs-toggle="modal" data-bs-target="#signInModal">
-              Open Sign In
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!--
-    ==============================================================
-    SIGN-IN MODAL
-    --------------------------------------------------------------
-    This is the sign-in UI for the first user story.
-    For now it is frontend only.
-    Later we will connect this form to Supabase authentication.
-    ==============================================================
-  -->
-  <div class="modal fade" id="signInModal" tabindex="-1" aria-labelledby="signInModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-      <div class="modal-content hr-modal-shell border-0">
-        <div class="modal-body p-0">
-          <div class="row g-0">
-            <!-- Left side of modal -->
-            <div class="col-lg-5 d-none d-lg-block">
-              <div class="hr-modal-panel p-4 p-xl-5 h-100">
-                <span class="badge text-bg-light rounded-pill mb-3">Secure Workspace Access</span>
-                <h3 class="fw-bold mb-3">
-                  Sign in to continue to your assigned role
-                </h3>
-                <p class="text-white-50 mb-4">
-                  Access is controlled by your user profile, company workspace,
-                  and assigned HR or payroll role.
-                </p>
-
-                <div class="hr-panel-box p-3 rounded-4 mb-3">
-                  <div class="fw-semibold mb-1">Role-based access</div>
-                  <small class="text-white-50">
-                    Valid credentials route each user to the correct employee,
-                    manager, HR, payroll, admin, leadership, or audit workspace.
-                  </small>
-                </div>
-
-                <div class="hr-panel-box p-3 rounded-4">
-                  <div class="fw-semibold mb-1">Protected HR data</div>
-                  <small class="text-white-50">
-                    Access controls help protect employee records, leave
-                    decisions, payroll information, and audit evidence.
-                  </small>
-                </div>
-              </div>
-            </div>
-
-            <!-- Right side of modal -->
-            <div class="col-lg-7">
-              <div class="p-4 p-md-5">
-                <div class="d-flex justify-content-between align-items-start mb-3">
-                  <div>
-                    <h2 class="fw-bold mb-1" id="signInModalLabel">
-                      Sign In
-                    </h2>
-                    <p class="text-secondary mb-0">
-                      Enter your company ID and credentials to continue.
-                    </p>
-                  </div>
-
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-
-                <!--
-                  Alert container for sign-in messages.
-                  Messages such as invalid credentials or success will be shown here.
-                -->
-                <div id="loginAlertContainer"></div>
-
-                <!--
-                  SIGN-IN FORM
-                  ------------------------------------------------------
-                  This form will later be connected to Supabase auth.
-                  For now it validates the UI cleanly and simulates login behavior.
-                -->
-                <form id="loginForm" novalidate>
-                  <!-- HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-2
-       Company/Tenant ID is entered before email/password so the app can later
-       validate the signed-in user against the correct company workspace. -->
-                  <div class="mb-3">
-                    <label for="loginTenantCode" class="form-label fw-semibold">
-                      Company / Tenant ID
-                    </label>
-                    <div class="input-group">
-                      <span class="input-group-text bg-white border-end-0">
-                        <i class="bi bi-building"></i>
-                      </span>
-                      <input type="text" class="form-control border-start-0" id="loginTenantCode"
-                        placeholder="Enter your Company ID" autocomplete="organization" required />
-                    </div>
-                    <div class="form-text">
-                      Enter the Company/Tenant ID provided by your administrator.
-                    </div>
-                    <div class="invalid-feedback">
-                      Please enter your Company/Tenant ID.
-                    </div>
-                  </div>
-
-                  <!-- HRP-80 - LOGIN FORM REQUIREMENT - STEP 2A
-     The requirement says username and password. The current auth uses email,
-     so we label this as Username / Email Address without changing the working
-     Supabase email/password login flow. -->
-                  <div class="mb-3">
-                    <label for="email" class="form-label fw-semibold">Username / Email Address</label>
-                    <div class="input-group">
-                      <span class="input-group-text bg-white border-end-0">
-                        <i class="bi bi-envelope"></i>
-                      </span>
-                      <input type="email" class="form-control border-start-0" id="email"
-                        placeholder="Enter your username/email" autocomplete="email" required />
-                    </div>
-                    <div class="invalid-feedback">
-                      Please enter your email address.
-                    </div>
-                  </div>
-
-                  <div class="mb-3">
-                    <label for="password" class="form-label fw-semibold">Password</label>
-                    <div class="input-group">
-                      <span class="input-group-text bg-white border-end-0">
-                        <i class="bi bi-shield-lock"></i>
-                      </span>
-                      <input type="password" class="form-control border-start-0 border-end-0" id="password"
-                        placeholder="Enter your password" required />
-                      <button class="btn btn-outline-secondary" type="button" id="togglePasswordBtn"
-                        aria-label="Toggle password visibility">
-                        <i class="bi bi-eye" id="togglePasswordIcon"></i>
-                      </button>
-                    </div>
-                    <div class="invalid-feedback">
-                      Please enter your password.
-                    </div>
-                  </div>
-
-                  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" id="rememberMe" />
-                      <label class="form-check-label" for="rememberMe">Remember me</label>
-                    </div>
-
-                    <a href="#" class="hr-link" id="forgotPasswordLink">Forgot password?</a>
-                  </div>
-
-                  <button type="submit" class="btn hr-btn-primary w-100 mb-3">
-                    <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+              <div class="mb-3">
+                <label for="password" class="form-label fw-semibold">Password</label>
+                <div class="input-group">
+                  <span class="input-group-text bg-white border-end-0">
+                    <i class="bi bi-shield-lock"></i>
+                  </span>
+                  <input type="password" class="form-control border-start-0 border-end-0" id="password"
+                    placeholder="Enter your password" required />
+                  <button class="btn btn-outline-secondary" type="button" id="togglePasswordBtn"
+                    aria-label="Toggle password visibility">
+                    <i class="bi bi-eye" id="togglePasswordIcon"></i>
                   </button>
-                </form>
-
-                <!--
-                  Developer note shown in UI.
-                  Makes clear that this is the frontend stage before Supabase wiring.
-                -->
-                <div class="hr-dev-note p-3 mt-4 small text-secondary">
-                  <strong>Access note:</strong> Your dashboard is determined by
-                  your authenticated profile and assigned role. Contact your
-                  administrator if your workspace or permissions look incorrect.
+                </div>
+                <div class="invalid-feedback">
+                  Please enter your password.
                 </div>
               </div>
+
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="rememberMe" />
+                  <label class="form-check-label" for="rememberMe">Remember me</label>
+                </div>
+
+                <a href="#" class="hr-link" id="forgotPasswordLink">Forgot password?</a>
+              </div>
+
+              <button type="submit" class="btn hr-btn-primary w-100 mb-3">
+                <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+              </button>
+            </form>
+
+            <div class="hr-dev-note p-3 mt-2 small text-secondary">
+              <strong>Access note:</strong> Your dashboard is determined by
+              your authenticated profile and assigned role. Contact your
+              administrator if your workspace or permissions look incorrect.
             </div>
           </div>
         </div>
+
       </div>
     </div>
-  </div>
+  </section>
 
   <!-- FOOTER -->
   <footer class="hr-footer py-4 mt-4">
@@ -599,25 +176,13 @@
         <span class="hr-brand-text">BexHR</span>
       </div>
       <div class="text-secondary small">
-        © 2026 BexHR. All rights reserved.
+        &copy; 2026 BexHR. All rights reserved.
       </div>
     </div>
   </footer>
 
-  <!-- Bootstrap Bundle JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!--
-    ============================================================== 
-    SUPABASE JAVASCRIPT CLIENT
-    --------------------------------------------------------------
-    This is the browser client library used to authenticate users
-    with Supabase from plain HTML and JavaScript.
-    ============================================================== 
-  -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <!-- Custom JavaScript -->
   <script src="js/app.js"></script>
 </body>
 
