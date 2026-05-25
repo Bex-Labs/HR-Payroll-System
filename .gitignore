@@ -2,7 +2,6 @@
 # Dependencies
 # ─────────────────────────────────────────
 node_modules/
-package-lock.json
 
 # ─────────────────────────────────────────
 # Test artefacts  (not needed in production)
@@ -11,10 +10,9 @@ coverage/
 __tests__/
 
 # ─────────────────────────────────────────
-# Wrangler / Cloudflare
+# Wrangler / Cloudflare  (config files ARE committed; only the build cache is ignored)
 # ─────────────────────────────────────────
 .wrangler/
-wrangler.toml
 
 # ─────────────────────────────────────────
 # OS / editor noise

@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bexhr",
+  "compatibility_date": "2026-05-25",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": ".",
+    "exclude": [
+      "node_modules/**",
+      "coverage/**",
+      "__tests__/**",
+      ".git/**",
+      "supabase/**",
+      "*.log",
+      ".wrangler/**"
+    ]
+  },
+  "compatibility_flags": ["nodejs_compat"]
+}
