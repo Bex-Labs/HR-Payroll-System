@@ -2512,7 +2512,52 @@ body.dashboard-page #currentPayrollSummaryGrid {
   letter-spacing: -0.015em;
 }
 
-/* Keep employee names strong but clearly secondary to company group headers. */
+/* =========================================================
+   ADMIN ACCESS RECORDS TEXT WEIGHT CLEANUP - STEP 1
+   Only company group names should appear bold in User Company Links.
+
+   HR/Admin behaviour:
+   - Company headers are the main grouping labels and stay visually bold.
+   - Individual user names should read as normal table values.
+   - Display-only change; no access, tenant, role, reset password, or Supabase
+     logic is changed.
+   ========================================================= */
+
 #profileTenantLinksTableWrapper .admin-access-company-inner-table .fw-semibold {
-  font-weight: 750 !important;
+  font-weight: 500 !important;
+}
+
+/* =========================================================
+   HR PAYROLL ACTION COLOUR ALIGNMENT - STEP 2
+   Match payroll run action buttons to the BexHR dashboard brand colour.
+
+   HR behaviour:
+   - Run Payroll starts the payroll run.
+   - Continue to Payroll progresses the same payroll run.
+   - Both are operational payroll actions, not success/status buttons.
+   - Styling only; payroll selection and processing logic remain untouched.
+   ========================================================= */
+
+body.dashboard-page .bexhr-brand-action-btn {
+  background: linear-gradient(135deg, var(--hr-primary) 0%, var(--hr-primary-soft) 100%) !important;
+  border: 1px solid var(--hr-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(144, 77, 0, 0.24) !important;
+}
+
+body.dashboard-page .bexhr-brand-action-btn:hover,
+body.dashboard-page .bexhr-brand-action-btn:focus {
+  background: linear-gradient(135deg, var(--hr-primary-dark) 0%, var(--hr-primary) 100%) !important;
+  border-color: var(--hr-primary-dark) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 26px rgba(144, 77, 0, 0.28) !important;
+}
+
+body.dashboard-page .bexhr-brand-action-btn:disabled {
+  background: #adb5bd !important;
+  border-color: #adb5bd !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  cursor: not-allowed;
+  box-shadow: none !important;
 }

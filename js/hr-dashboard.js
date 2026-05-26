@@ -2223,6 +2223,15 @@ function cacheDomElements() {
     systemRole: document.getElementById("systemRole"),
     customSystemRole: document.getElementById("customSystemRole"),
 
+    // HR SELF-ROLE PROTECTION - STEP 1
+    // Shows when the signed-in HR user is editing their own employee record.
+    hrSelfRoleProtectionNotice: document.getElementById("hrSelfRoleProtectionNotice"),
+
+    // HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
+    // HR role assignment needs deliberate confirmation before save.
+    hrRoleAssignmentWarning: document.getElementById("hrRoleAssignmentWarning"),
+    confirmHrRoleAssignment: document.getElementById("confirmHrRoleAssignment"),
+
     employeeAccountStatusBadge: document.getElementById(
       "employeeAccountStatusBadge",
     ),
@@ -6850,10 +6859,18 @@ function bindEvents() {
     field?.addEventListener("change", updateEmployeeSaveButtonState);
   });
 
-  // ASSIGN LINE MANAGER - STEP 1E
-  // Show/hide the custom role input when HR selects Other.
+  // HR SELF-ROLE PROTECTION - STEP 1
+  // System Role changes affect custom-role visibility, HR role warning,
+  // self-role protection, and save readiness.
   state.dom.systemRole?.addEventListener("change", () => {
     syncCustomSystemRoleVisibility();
+    syncHrRoleAssignmentWarning();
+    syncHrSelfRoleProtectionState();
+    updateEmployeeSaveButtonState();
+  });
+
+  state.dom.confirmHrRoleAssignment?.addEventListener("change", () => {
+    updateEmployeeSaveButtonState();
   });
 
   // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1F
@@ -11056,6 +11073,170 @@ function syncCustomSystemRoleVisibility() {
     state.dom.customSystemRole.value = "";
   }
 }
+// HR SELF-ROLE PROTECTION - STEP 1
+// Detect whether the employee being edited is the currently signed-in HR user.
+// Match linked auth user first, then work email. This mirrors the existing
+// current-user employee resolution pattern used by dashboard permission checks.
+function isCurrentSignedInEmployeeRecord(employee = {}) {
+  const currentUserId = String(state.currentUser?.id || "").trim();
+  const currentProfileEmail = String(state.currentProfile?.email || "")
+    .trim()
+    .toLowerCase();
+
+  const employeeUserId = String(employee.user_id || employee.auth_user_id || "").trim();
+  const employeeWorkEmail = String(employee.work_email || "").trim().toLowerCase();
+
+  return Boolean(
+    (currentUserId && employeeUserId && currentUserId === employeeUserId) ||
+    (currentProfileEmail && employeeWorkEmail && currentProfileEmail === employeeWorkEmail),
+  );
+}
+
+// HR SELF-ROLE PROTECTION - STEP 1
+// Applies only in edit mode when HR opens their own employee row.
+function isEditingCurrentSignedInEmployeeRecord() {
+  return Boolean(
+    state.currentEditingEmployee &&
+    isCurrentSignedInEmployeeRecord(state.currentEditingEmployee),
+  );
+}
+
+// HR SELF-ROLE / PEER HR PROTECTION - STEP 2
+// Protect System Role when HR edits:
+// 1. their own employee row, or
+// 2. any employee row that is already saved as HR.
+//
+// This keeps normal biodata maintenance available, but prevents HR-to-HR
+// access changes from the employee list. HR access must be managed by Admin.
+function syncHrSelfRoleProtectionState() {
+  const savedRole = normaliseHrBusinessRole(
+    state.currentEditingEmployee?.system_role || "",
+  );
+
+  const isOwnEmployeeRecord = isEditingCurrentSignedInEmployeeRecord();
+  const isSavedHrEmployeeRecord = savedRole === "hr";
+  const shouldProtectSystemRole =
+    Boolean(state.currentEditingEmployee) &&
+    (isOwnEmployeeRecord || isSavedHrEmployeeRecord);
+
+  state.dom.hrSelfRoleProtectionNotice?.classList.toggle(
+    "d-none",
+    !shouldProtectSystemRole,
+  );
+
+  if (shouldProtectSystemRole) {
+    setEmployeeSystemRoleFieldValue(state.currentEditingEmployee?.system_role || "");
+  }
+
+  if (state.dom.systemRole) {
+    state.dom.systemRole.disabled = shouldProtectSystemRole;
+    state.dom.systemRole.setAttribute("aria-disabled", String(shouldProtectSystemRole));
+    state.dom.systemRole.classList.toggle("bg-light", shouldProtectSystemRole);
+  }
+
+  if (state.dom.customSystemRole) {
+    state.dom.customSystemRole.disabled = shouldProtectSystemRole;
+    state.dom.customSystemRole.setAttribute("aria-disabled", String(shouldProtectSystemRole));
+    state.dom.customSystemRole.classList.toggle("bg-light", shouldProtectSystemRole);
+  }
+}
+
+// HR SELF-ROLE / PEER HR PROTECTION - STEP 2
+// Defensive save guard:
+// - HR cannot change their own System Role.
+// - HR cannot change another saved HR employee's System Role.
+// This catches browser-tool manipulation even when the dropdown is disabled.
+function isOwnSystemRoleChangeBlockedForSubmit() {
+  const savedRole = normaliseHrBusinessRole(
+    state.currentEditingEmployee?.system_role || "",
+  );
+
+  const selectedRole = normaliseHrBusinessRole(
+    getSelectedEmployeeSystemRoleValue(),
+  );
+
+  const isOwnEmployeeRecord = isEditingCurrentSignedInEmployeeRecord();
+  const isSavedHrEmployeeRecord = savedRole === "hr";
+
+  return (
+    Boolean(state.currentEditingEmployee) &&
+    (isOwnEmployeeRecord || isSavedHrEmployeeRecord) &&
+    selectedRole !== savedRole
+  );
+}
+
+// HR SELF-ROLE / PEER HR PROTECTION - STEP 2
+// Show one clear message for protected HR access, whether HR is editing
+// their own row or another employee row already saved as HR.
+function showOwnSystemRoleChangeBlockedMessage() {
+  setEmployeeSystemRoleFieldValue(state.currentEditingEmployee?.system_role || "");
+  syncHrSelfRoleProtectionState();
+
+  showPageAlert(
+    "warning",
+    "HR dashboard access is protected. Ask Admin to update HR access for this employee.",
+  );
+
+  showDashboardToast(
+    "warning",
+    "HR access protected",
+    "System Role cannot be changed for an HR employee from the employee list.",
+  );
+}
+// HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
+// Require confirmation only when HR access is newly being assigned.
+// Existing HR employees can still be edited without repeatedly confirming
+// the same already-saved HR role.
+function isHrRoleAssignmentConfirmationRequired() {
+  const selectedRole = normaliseHrBusinessRole(state.dom.systemRole?.value || "");
+  const savedRole = normaliseHrBusinessRole(state.currentEditingEmployee?.system_role || "");
+
+  return selectedRole === "hr" && savedRole !== "hr";
+}
+
+// HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
+// Show the amber warning only when HR is being newly assigned.
+// Hide and clear it when HR changes back to Employee, Manager, blank, or custom.
+function syncHrRoleAssignmentWarning() {
+  const isRequired = isHrRoleAssignmentConfirmationRequired();
+
+  state.dom.hrRoleAssignmentWarning?.classList.toggle("d-none", !isRequired);
+
+  if (!isRequired && state.dom.confirmHrRoleAssignment) {
+    state.dom.confirmHrRoleAssignment.checked = false;
+    state.dom.confirmHrRoleAssignment.classList.remove("is-invalid");
+  }
+}
+
+// HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
+// Employee save readiness must include the HR confirmation checkbox
+// when HR access is being newly assigned.
+function isHrRoleAssignmentConfirmedForSubmit() {
+  if (!isHrRoleAssignmentConfirmationRequired()) {
+    return true;
+  }
+
+  return Boolean(state.dom.confirmHrRoleAssignment?.checked);
+}
+
+// HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
+// Defensive save guard in case a disabled button is bypassed.
+function showHrRoleAssignmentConfirmationWarning() {
+  syncHrRoleAssignmentWarning();
+
+  state.dom.confirmHrRoleAssignment?.classList.add("is-invalid");
+
+  showPageAlert(
+    "warning",
+    "Please confirm that this employee is authorised to perform HR administration before saving the HR role.",
+  );
+
+  showDashboardToast(
+    "warning",
+    "HR access confirmation required",
+    "Tick the HR authorisation confirmation box before saving this employee as HR.",
+  );
+}
 
 // ASSIGN LINE MANAGER - STEP 1E
 // Load saved role values correctly in edit mode.
@@ -11070,6 +11251,7 @@ function setEmployeeSystemRoleFieldValue(roleValue = "") {
     state.dom.systemRole.value = "";
     if (state.dom.customSystemRole) state.dom.customSystemRole.value = "";
     syncCustomSystemRoleVisibility();
+    syncHrRoleAssignmentWarning();
     return;
   }
 
@@ -11084,6 +11266,7 @@ function setEmployeeSystemRoleFieldValue(roleValue = "") {
   }
 
   syncCustomSystemRoleVisibility();
+  syncHrRoleAssignmentWarning();
 }
 
 // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1D FIX
@@ -11153,6 +11336,18 @@ function isEmployeeFormReadyForSubmit() {
   // it must be complete before Create/Update Employee is enabled.
   const hasValidDependantFields = areEmployeeDependantFieldsReadyForSubmit();
 
+  // HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
+  // If HR access is newly selected, Save must remain disabled until
+  // the authorisation checkbox is ticked.
+  const hasValidHrRoleAssignmentConfirmation =
+    isHrRoleAssignmentConfirmedForSubmit();
+
+  // HR SELF-ROLE PROTECTION - STEP 1
+  // Save must not become active if the signed-in HR user's own System Role
+  // has somehow been changed through browser tools.
+  const hasValidSelfRoleProtection =
+    !isOwnSystemRoleChangeBlockedForSubmit();
+
   return (
     hasRequiredValues &&
     hasValidWorkEmail &&
@@ -11162,7 +11357,9 @@ function isEmployeeFormReadyForSubmit() {
     hasValidAddressFields &&
     hasValidNextOfKinFields &&
     hasValidEducationFields &&
-    hasValidDependantFields
+    hasValidDependantFields &&
+    hasValidHrRoleAssignmentConfirmation &&
+    hasValidSelfRoleProtection
   );
 }
 
@@ -20793,10 +20990,10 @@ function resetEmployeeForm() {
 
   setSelectValueIfPresent(state.dom.employmentStatus, "active", ["Active"]);
 
-  // ASSIGN LINE MANAGER - STEP 1E RECOVERY
-  // Reset/create mode has no employee object, so clear the System Role field.
-  // The employee-specific value is only loaded inside enterEmployeeEditMode().
+  // HR SELF-ROLE PROTECTION - STEP 1
+  // Reset/create mode has no employee object, so clear and unlock System Role.
   setEmployeeSystemRoleFieldValue("");
+  syncHrSelfRoleProtectionState();
 
   // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1F
   // After clearing the form, Job Title should wait for Department selection.
@@ -20945,10 +21142,11 @@ function enterEmployeeEditMode(employee) {
     "Active",
   ]);
 
-  // ASSIGN LINE MANAGER - STEP 1E RECOVERY
-  // Edit mode has an employee object, so load the saved System Role.
-  // Create/reset mode is handled separately inside resetEmployeeForm().
+  // HR SELF-ROLE PROTECTION - STEP 1
+  // Edit mode loads the saved System Role, then locks it if HR is editing
+  // their own employee record.
   setEmployeeSystemRoleFieldValue(employee.system_role || "");
+  syncHrSelfRoleProtectionState();
 
   setEmployeeAccountPanel(getEmployeeAccountLinkage(employee));
 
@@ -22221,6 +22419,24 @@ async function handleEmployeeSave() {
   // or update employee records from the shared HR Dashboard.
   if (!canCurrentUserMaintainPeopleData()) {
     showHrPeopleAccessDeniedMessage();
+    return;
+  }
+
+  // HR ROLE ASSIGNMENT SAFEGUARD - STEP 1
+  // Defensive guard: even if a disabled button is bypassed, HR access
+  // cannot be newly assigned without explicit authorisation confirmation.
+  if (!isHrRoleAssignmentConfirmedForSubmit()) {
+    showHrRoleAssignmentConfirmationWarning();
+    updateEmployeeSaveButtonState();
+    return;
+  }
+
+  // HR SELF-ROLE PROTECTION - STEP 1
+  // Defensive guard: the signed-in HR user cannot change their own dashboard role
+  // from the employee list, even if the disabled field is manipulated.
+  if (isOwnSystemRoleChangeBlockedForSubmit()) {
+    showOwnSystemRoleChangeBlockedMessage();
+    updateEmployeeSaveButtonState();
     return;
   }
 
