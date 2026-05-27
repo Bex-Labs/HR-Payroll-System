@@ -851,39 +851,40 @@
       </section>
       <section class="card dashboard-section-card mb-4">
         <div class="card-body p-4 p-lg-5">
-          <!-- DESCRIPTION ITEM 1 - STEP 5
-     Add a persistent header row so the Create Employee Profile card
-     can collapse and expand without losing its title/action control. -->
+
+          <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 1
+               Keep the employee creation card clearly separated from payroll finalisation.
+               JS expects employeeFormTitle / employeeFormSubtext for create/edit mode,
+               while payrollFormTitle / payrollFormSubtext must remain reserved for Payroll only. -->
           <div class="mb-4">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
               <div>
-                <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5B
-     This card is the payroll finalisation workspace.
-     It supports single employee finalisation and all-active employee batch review.
-     Payslip sending remains a separate deliberate action after payroll is finalised. -->
-                <h2 class="section-heading h4 mb-1" id="payrollFormTitle">
-                  Finalise Payroll &amp; Payslips
+                <h2 class="section-heading h4 mb-1" id="employeeFormTitle">
+                  Create Employee Profile
                 </h2>
-                <p class="section-subtext mb-0" id="payrollFormSubtext">
-                  Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are
-                  sent separately after payroll records are finalised.
+                <p class="section-subtext mb-0" id="employeeFormSubtext">
+                  Create a new employee record, link account access, and complete core HR profile details.
                 </p>
               </div>
 
+              <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 1
+                   Keep the collapse/expand control on one line.
+                   This prevents the icon from sitting above the label on deployed layouts. -->
               <button type="button" id="toggleEmployeeFormCardBtn"
-                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
-                aria-controls="employeeFormCardCollapse">
+                class="btn btn-outline-secondary dashboard-action-btn text-nowrap d-inline-flex align-items-center justify-content-center flex-shrink-0 align-self-start"
+                aria-expanded="true" aria-controls="employeeFormCardCollapse">
                 <i class="bi bi-chevron-up me-2"></i>
                 <span>Collapse</span>
               </button>
             </div>
           </div>
 
-          <!-- BEXHR FORM PROGRESS INDICATOR
-               Shows which sections of the employee form are present.
-               Sections are always visible — the stepper is informational only.
-               JS adds .form-step-done when a section has user-entered data. -->
-          <div class="bexhr-form-steps mb-4" id="employeeFormSteps">
+          <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 2
+               Restore the employee form stepper wrapper.
+               Without this wrapper, the stepper renders vertically and looks broken. -->
+
+          <div id="employeeFormCardCollapse">
+                      <div class="bexhr-form-steps mb-4" id="employeeFormSteps">
             <div class="bexhr-form-step form-step-done" data-step="1" title="Core Details">
               <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">1</span></div>
               <span class="bexhr-step-label">Core Details</span>
@@ -919,11 +920,12 @@
               <span class="bexhr-step-label">Documents</span>
             </div>
           </div>
-
-          <div id="employeeFormCardCollapse">
             <div class="dashboard-toolbar hr-form-toolbar mb-4">
-              <span id="payrollFormModeBadge" class="badge rounded-pill text-bg-light border px-3 py-2">
-                Single Employee Mode
+              <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 3
+                   Employee form badge must not reuse payrollFormModeBadge.
+                   The payroll badge belongs only to the Payroll workspace. -->
+              <span id="employeeFormModeBadge" class="badge rounded-pill text-bg-light border px-3 py-2">
+                Create Mode
               </span>
 
               <button type="button" id="cancelEditBtn" class="btn btn-outline-danger dashboard-action-btn d-none">
