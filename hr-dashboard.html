@@ -4131,9 +4131,12 @@
                  This warns HR when the selected employee has no active bank
                  details, but it does not block payroll submission yet. -->
             <div id="payrollBankReadinessSubmitWarning" class="alert alert-warning border d-none mb-4">
+              <!-- PAYROLL BANK READINESS - RESTRICTION REMOVAL - STEP 1
+       Missing bank details are advisory for payroll creation/finalisation.
+       They should affect payment export readiness, not payroll calculation. -->
               <div class="fw-semibold">Payment bank details are missing.</div>
               <div class="small">
-                Payroll can still be prepared for now, but this employee will not be ready for bank payment export
+                Payroll can still be created and finalised. This employee will not be ready for bank payment export
                 until active bank details are saved.
               </div>
             </div>
@@ -4287,10 +4290,12 @@
                           </div>
 
                           <div id="payrollBankReadinessWarning" class="alert alert-warning d-none mt-3 mb-0">
+                            <!-- PAYROLL BANK READINESS - RESTRICTION REMOVAL - STEP 1
+       Keep this as a warning only. Payroll should still save/finalise. -->
                             <div class="fw-semibold">No active payment bank details found.</div>
                             <div class="small">
-                              Payroll can still be prepared for now, but this employee will not be ready for payment
-                              export
+                              Payroll can still be created and finalised, but this employee will not be ready for
+                              payment export
                               until active bank details are saved.
                             </div>
                           </div>

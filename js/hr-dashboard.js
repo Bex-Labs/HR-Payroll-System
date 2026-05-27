@@ -7484,10 +7484,11 @@ function bindEvents() {
     closePayslipPreview();
   });
 
-  // Print the payslip content using the browser's native print dialog.
-  // @media print CSS in styles.css hides everything except the payslip content.
+  // PAYSLIP PRINT RENDERING FIX - STEP 1
+  // Print from an isolated payslip-only document so the fixed dashboard modal
+  // does not clip, repeat, or overlap content in Chrome's PDF preview.
   state.dom.printPayslipBtn?.addEventListener("click", () => {
-    window.print();
+    printCurrentPayslipPreview();
   });
 
   // DESCRIPTION ITEM 4 - STEP 7
@@ -11387,7 +11388,7 @@ function updateEmployeeFormSteps() {
     hasVal(state.dom.assignedLineManagerEmployeeId),
     // Step 3: Dependants — at least one dependant full name entered
     hasVal(state.dom.employeeDependantFullName) ||
-      Boolean(state.dom.employeeDependantsRecordsList?.querySelector("[data-dependant-id]")),
+    Boolean(state.dom.employeeDependantsRecordsList?.querySelector("[data-dependant-id]")),
     // Step 4: Address — current address line 1 entered
     hasVal(state.dom.employeeCurrentAddressLine1) || hasVal(state.dom.employeePermanentAddressLine1),
     // Step 5: Next of Kin — full name entered
@@ -11396,7 +11397,7 @@ function updateEmployeeFormSteps() {
     hasVal(state.dom.employeeEducationInstitutionName),
     // Step 7: Documents — pending file queued or attached doc exists
     state.pendingFiles?.length > 0 ||
-      Boolean(state.dom.attachedDocumentsList?.querySelector("[data-document-id]")),
+    Boolean(state.dom.attachedDocumentsList?.querySelector("[data-document-id]")),
   ];
 
   stepDone.forEach((done, i) => {
@@ -16530,10 +16531,10 @@ function switchHrWorkspace(workspace) {
 
   // BEXHR SIDEBAR — sync active state to match the selected workspace tab.
   const sidebarMap = [
-    { id: "sidebarProfileBtn",  active: isProfile },
-    { id: "sidebarPeopleBtn",   active: isEmployees },
-    { id: "sidebarSetupBtn",    active: isSetup },
-    { id: "sidebarPayrollBtn",  active: isPayroll },
+    { id: "sidebarProfileBtn", active: isProfile },
+    { id: "sidebarPeopleBtn", active: isEmployees },
+    { id: "sidebarSetupBtn", active: isSetup },
+    { id: "sidebarPayrollBtn", active: isPayroll },
   ];
   sidebarMap.forEach(({ id, active }) => {
     const el = document.getElementById(id);
@@ -22967,38 +22968,17 @@ function getEmployeesMissingActiveBankDetails(employeeIds = []) {
     );
 }
 
-// PAYROLL BANK READINESS - STEP 11D
-// Finalisation rule:
-// Payroll can be prepared without bank details,
-// but it cannot be marked as finalised/payment-ready without active bank details.
+// PAYROLL BANK READINESS - RESTRICTION REMOVAL - STEP 1
+// Bank details are no longer a payroll creation/finalisation blocker.
+//
+// HR/business behaviour:
+// - Payroll can be created and finalised even when employee bank details are missing.
+// - Missing bank details remain a payment-readiness warning only.
+// - Bank details should still be required later for payment export/CSV, not payroll calculation.
 function validatePayrollFinalisationBankReadiness(employeeIds = []) {
-  const isBeingFinalised = Boolean(state.dom.payrollIsFinalised?.checked);
-
-  if (!isBeingFinalised) {
-    return true;
-  }
-
-  const missingBankEmployeeIds =
-    getEmployeesMissingActiveBankDetails(employeeIds);
-
-  if (!missingBankEmployeeIds.length) {
-    return true;
-  }
-
-  const missingEmployeeNames = missingBankEmployeeIds
-    .slice(0, 5)
-    .map((employeeId) => getEmployeeDisplayNameById(employeeId));
-
-  const extraCount = missingBankEmployeeIds.length - missingEmployeeNames.length;
-
-  showPageAlert(
-    "warning",
-    `Payroll cannot be finalised because ${missingBankEmployeeIds.length} employee(s) do not have active payment bank details. Affected: <strong>${escapeHtml(
-      missingEmployeeNames.join(", "),
-    )}${extraCount > 0 ? `, and ${extraCount} more` : ""}</strong>. Save active employee bank details first, or untick Mark as Finalised to save the payroll as non-finalised.`,
-  );
-
-  return false;
+  // Keep the employeeIds parameter for compatibility with the existing save flow
+  // and future audit/reporting, but do not block payroll save/finalisation here.
+  return true;
 }
 
 // PAYROLL BANK READINESS - STEP 11B
@@ -26166,12 +26146,380 @@ function renderPayslipPreview(payrollRecord) {
     </div>
 
 <div class="alert alert-light border mt-4 mb-0">
-  <div class="fw-semibold mb-1">HR preview only</div>
+  <!-- PAYSLIP PRINT RENDERING FIX - STEP 4
+       Use employee-facing confidentiality wording on the payslip output.
+       This is display-only: it does not send email, alter payroll records,
+       expose bank details, or change payslip delivery behaviour. -->
+  <div class="fw-semibold mb-1">Confidential Payslip</div>
   <div class="small text-secondary">
-    This preview does not send an email. Use Send Selected Payslips from Payroll Records to send a controlled notification. Salary, deduction, and bank details must remain protected behind secure system access.
+    This payslip is confidential and intended only for the named employee. Salary, deduction, and payroll details must be handled securely and shared only through approved company channels.
   </div>
 </div>
   `;
+}
+
+// PAYSLIP PRINT RENDERING FIX - STEP 1
+// Print the payslip from an isolated hidden document instead of printing the
+// full HR dashboard page. This prevents the fixed preview modal, sidebar,
+// dashboard scroll state, and global print CSS from overlapping payslip content.
+//
+// HR/business behaviour:
+// - Prints only the reviewed payslip content.
+// - Does not send email.
+// - Does not change payroll records.
+// - Does not expose dashboard chrome, buttons, or background UI in the PDF.
+function printCurrentPayslipPreview() {
+  const source = state.dom.payslipPreviewContent;
+  const previewText = String(source?.textContent || "").trim();
+
+  const isEmptyPreview =
+    !source ||
+    !previewText ||
+    previewText.includes("Select a finalised payroll record") ||
+    previewText.includes("Loading payslip preview");
+
+  if (isEmptyPreview) {
+    showDashboardToast(
+      "warning",
+      "Payslip not ready",
+      "Open a finalised payslip preview before printing.",
+    );
+    return;
+  }
+
+  const printFrame = document.createElement("iframe");
+
+  printFrame.title = "Payslip print preview";
+  printFrame.setAttribute("aria-hidden", "true");
+
+  Object.assign(printFrame.style, {
+    position: "fixed",
+    right: "0",
+    bottom: "0",
+    width: "0",
+    height: "0",
+    border: "0",
+    opacity: "0",
+  });
+
+  document.body.appendChild(printFrame);
+
+  const frameWindow = printFrame.contentWindow;
+  const frameDocument = printFrame.contentDocument || frameWindow?.document;
+
+  if (!frameDocument || !frameWindow) {
+    printFrame.remove();
+
+    showDashboardToast(
+      "warning",
+      "Print fallback",
+      "The browser could not prepare an isolated payslip print view. Please try again.",
+    );
+
+    return;
+  }
+
+  const printTitle = escapeHtml(
+    state.dom.payslipPreviewTitle?.textContent || "Payslip Preview",
+  );
+
+  const payslipMarkup = source.innerHTML;
+
+  frameDocument.open();
+  frameDocument.write(`
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>${printTitle}</title>
+
+        <style>
+@page {
+  size: A4;
+  margin: 6mm;
+}
+
+          *,
+          *::before,
+          *::after {
+            box-sizing: border-box;
+          }
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #111827;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+.payslip-print-shell {
+  width: 100%;
+  max-width: 198mm;
+  margin: 0 auto;
+  background: #ffffff;
+}
+
+.payslip-print-shell * {
+  overflow: visible !important;
+}
+
+/* PAYSLIP PRINT RENDERING FIX - STEP 3
+   Make the printed payslip readable as a formal payroll document.
+   This only affects the isolated print iframe, not the dashboard modal,
+   payroll records, email delivery, or saved payroll data. */
+.payslip-print-shell {
+  font-size: 1rem;
+}
+
+.payslip-print-shell .small {
+  font-size: 0.9rem !important;
+  line-height: 1.45 !important;
+}
+
+.payslip-print-shell .h4 {
+  font-size: 1.65rem !important;
+}
+
+.payslip-print-shell .h5 {
+  font-size: 1.35rem !important;
+}
+
+.payslip-print-shell .h6 {
+  font-size: 1.08rem !important;
+}
+
+.payslip-print-shell strong,
+.payslip-print-shell .fw-semibold,
+.payslip-print-shell .fw-bold {
+  font-weight: 700 !important;
+}
+
+.payslip-print-shell .border-bottom {
+  padding-top: 0.6rem !important;
+  padding-bottom: 0.6rem !important;
+}
+
+.payslip-print-shell .border,
+.payslip-print-shell .alert {
+  border-color: #cbd5e1 !important;
+}
+
+          .row {
+            display: flex;
+            flex-wrap: wrap;
+            margin-left: -6px;
+            margin-right: -6px;
+          }
+
+          .row > * {
+            width: 100%;
+            padding-left: 6px;
+            padding-right: 6px;
+          }
+
+          .col-md-4 {
+            flex: 0 0 33.333333%;
+            max-width: 33.333333%;
+          }
+
+          .col-lg-6 {
+            flex: 0 0 50%;
+            max-width: 50%;
+          }
+
+          .d-flex {
+            display: flex !important;
+          }
+
+          .flex-column {
+            flex-direction: column !important;
+          }
+
+          .flex-md-row,
+          .flex-lg-row {
+            flex-direction: row !important;
+          }
+
+          .justify-content-between {
+            justify-content: space-between !important;
+          }
+
+          .align-items-start {
+            align-items: flex-start !important;
+          }
+
+          .text-md-end,
+          .text-lg-end {
+            text-align: right !important;
+          }
+
+          .gap-3 {
+            gap: 0.75rem !important;
+          }
+
+          .gap-4 {
+            gap: 1rem !important;
+          }
+
+          .border {
+            border: 1px solid #d6dee8 !important;
+          }
+
+          .rounded-4 {
+            border-radius: 12px !important;
+          }
+
+          .bg-light-subtle,
+          .alert-light {
+            background: #f8fafc !important;
+          }
+
+          .p-3 {
+            padding: 0.75rem !important;
+          }
+
+          .p-4 {
+            padding: 1rem !important;
+          }
+
+          .py-2 {
+            padding-top: 0.45rem !important;
+            padding-bottom: 0.45rem !important;
+          }
+
+          .pt-3 {
+            padding-top: 0.75rem !important;
+          }
+
+          .mb-0 {
+            margin-bottom: 0 !important;
+          }
+
+          .mb-1 {
+            margin-bottom: 0.25rem !important;
+          }
+
+          .mb-3 {
+            margin-bottom: 0.75rem !important;
+          }
+
+          .mb-4 {
+            margin-bottom: 1rem !important;
+          }
+
+          .mt-2 {
+            margin-top: 0.5rem !important;
+          }
+
+          .mt-4 {
+            margin-top: 1rem !important;
+          }
+
+          .my-4 {
+            margin-top: 1rem !important;
+            margin-bottom: 1rem !important;
+          }
+
+          .h4 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            line-height: 1.2;
+          }
+
+          .h5 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.25;
+          }
+
+          .h6 {
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1.25;
+          }
+
+          .fw-semibold {
+            font-weight: 600 !important;
+          }
+
+          .fw-bold,
+          strong {
+            font-weight: 700 !important;
+          }
+
+          .small {
+            font-size: 0.78rem;
+          }
+
+          .text-secondary {
+            color: #64748b !important;
+          }
+
+          .text-break {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+          }
+
+          .border-bottom {
+            border-bottom: 1px solid #d6dee8 !important;
+          }
+
+          .alert {
+            padding: 0.8rem;
+            border: 1px solid #d6dee8;
+            border-radius: 12px;
+            background: #f8fafc;
+          }
+
+          hr {
+            border: 0;
+            border-top: 1px solid #d6dee8;
+          }
+
+          .border,
+          .alert,
+          .row.g-3,
+          .row.g-4 {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+        </style>
+      </head>
+
+      <body>
+        <main class="payslip-print-shell">
+          ${payslipMarkup}
+        </main>
+      </body>
+    </html>
+  `);
+  frameDocument.close();
+
+  const cleanupPrintFrame = () => {
+    window.setTimeout(() => {
+      printFrame.remove();
+    }, 250);
+  };
+
+  frameWindow.addEventListener("afterprint", cleanupPrintFrame, { once: true });
+
+  window.setTimeout(() => {
+    frameWindow.focus();
+    frameWindow.print();
+
+    // Fallback cleanup for browsers that do not fire afterprint reliably.
+    window.setTimeout(cleanupPrintFrame, 120000);
+  }, 250);
 }
 
 // DESCRIPTION ITEM 4 - STEP 7
@@ -28237,10 +28585,10 @@ function buildPayrollPayload() {
     currency:
       String(state.dom.payrollCurrency?.value || "NGN").trim().toUpperCase() ||
       "NGN",
-    // PAYROLL BANK READINESS - STEP 11D
+    // PAYROLL BANK READINESS - RESTRICTION REMOVAL - STEP 1
     // Respect the Mark as Finalised checkbox.
-    // This allows payroll to be prepared as non-finalised when bank details
-    // are not ready, while finalisation remains protected.
+    // Bank details no longer control payroll finalisation; they only affect
+    // payment readiness and later bank/payment export checks.
     is_finalised: Boolean(state.dom.payrollIsFinalised?.checked),
     // DESCRIPTION ITEM 5 - STEP 5C
     // Keep manual payroll notes, but append a final override audit snapshot
@@ -28554,9 +28902,9 @@ async function handlePayrollSave() {
     ? selectedBatchEmployeeIds
     : [selectedSingleEmployeeId].filter(Boolean);
 
-  // PAYROLL BANK READINESS - STEP 11D
-  // Block only finalisation when active bank details are missing.
-  // If Mark as Finalised is unticked, payroll can still be prepared/saved.
+  // PAYROLL BANK READINESS - RESTRICTION REMOVAL - STEP 1
+  // Bank details no longer block payroll creation or finalisation.
+  // They remain an advisory/payment-export readiness concern only.
   if (!validatePayrollFinalisationBankReadiness(employeeIdsForThisPayrollSave)) {
     return;
   }
