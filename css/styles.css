@@ -2230,7 +2230,7 @@ body.dashboard-page #currentPayrollSummaryGrid {
      or Supabase logic is changed.
    ========================================================= */
 
-.admin-access-company-header-row > td {
+.admin-access-company-header-row>td {
   border-top: 1px solid #e5e7eb;
   border-bottom: 1px solid #e5e7eb;
   background: #fffaf4;
@@ -2272,7 +2272,7 @@ body.dashboard-page #currentPayrollSummaryGrid {
   white-space: nowrap;
 }
 
-.admin-access-company-content-row > td {
+.admin-access-company-content-row>td {
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
 }
@@ -2306,7 +2306,7 @@ body.dashboard-page #currentPayrollSummaryGrid {
   border-radius: 999px;
 }
 
-.admin-access-role-section + .admin-access-role-section {
+.admin-access-role-section+.admin-access-role-section {
   border-top: 1px solid #edf1f5;
 }
 
@@ -2423,6 +2423,7 @@ body.dashboard-page #currentPayrollSummaryGrid {
 }
 
 @media (max-width: 767.98px) {
+
   .admin-access-table,
   .admin-access-company-inner-table {
     min-width: 760px;

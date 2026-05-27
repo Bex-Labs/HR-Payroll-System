@@ -67,6 +67,82 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Existing cards are moved only. They are not recreated, so existing
     // collapse buttons, forms, event handlers, records tables, and Supabase
     // refresh logic remain intact.
+
+    // PAYROLL WORKFLOW UX REPAIR - STEP 8A
+    // Merge Statutory Deductions and Other Deductions into one visible
+    // Deductions Setup card without merging their data, forms, save logic,
+    // records tables, or calculation behaviour.
+    //
+    // HR/business behaviour:
+    // - HR sees one deductions workspace.
+    // - Statutory deductions remain separate from non-statutory deductions.
+    // - Existing IDs remain intact, so save/edit/search/refresh/calculation
+    //   logic continues to work.
+    function mergePayrollDeductionSetupCards() {
+      const statutoryPanel = state.dom.payrollStatutoryCardCollapse;
+      const otherPanel = state.dom.payrollOtherDeductionCardCollapse;
+
+      const statutoryCard = statutoryPanel?.closest(".dashboard-section-card");
+      const otherCard = otherPanel?.closest(".dashboard-section-card");
+
+      if (!statutoryCard || !otherCard || !statutoryPanel || !otherPanel) {
+        return;
+      }
+
+      if (statutoryPanel.dataset.deductionsMerged === "true") {
+        return;
+      }
+
+      const statutoryTitle = statutoryCard.querySelector(".section-heading");
+      const statutorySubtext = statutoryCard.querySelector(".section-subtext");
+
+      if (statutoryTitle) {
+        statutoryTitle.textContent = "Deductions Setup";
+      }
+
+      if (statutorySubtext) {
+        statutorySubtext.textContent =
+          "Configure statutory and non-statutory deductions used during payroll finalisation.";
+      }
+
+      statutoryPanel.dataset.deductionsMerged = "true";
+
+      statutoryPanel.insertAdjacentHTML(
+        "afterbegin",
+        `
+          <!-- PAYROLL WORKFLOW UX REPAIR - STEP 8A
+               Internal section label only. Existing statutory form/table IDs stay unchanged. -->
+          <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+            <div class="fw-bold">Statutory Deductions</div>
+            <div class="small text-secondary">
+              PAYE, WHT, employee pension, employer pension, and other statutory payroll deductions.
+            </div>
+          </div>
+        `,
+      );
+
+      otherPanel.insertAdjacentHTML(
+        "afterbegin",
+        `
+          <!-- PAYROLL WORKFLOW UX REPAIR - STEP 8A
+               Internal section label only. Existing other deduction form/table IDs stay unchanged. -->
+          <hr class="my-5" />
+          <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+            <div class="fw-bold">Other Deductions</div>
+            <div class="small text-secondary">
+              Union dues, cooperative deductions, salary advances, and other approved non-statutory deductions.
+            </div>
+          </div>
+        `,
+      );
+
+      statutoryPanel.appendChild(otherPanel);
+
+      // Remove only the old outer card shell/header. The Other Deductions
+      // panel itself has already been moved into the new combined card.
+      otherCard.remove();
+    }
+
     function alignSetupWorkspaceCardOrder() {
       const setupSection = state.dom.hrSetupSection;
       const setupLandingCard = state.dom.hrSetupLandingCard;
@@ -82,8 +158,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const payrollSetupHeader = createSetupWorkspaceGroupHeader(
         "setupPayrollGroupHeader",
-        "Payroll Setup",
-        "Maintain payroll master data, allowances, deductions, and employee-specific payroll overrides.",
+        "Payroll Rules & Deductions",
+        "Maintain allowance components, statutory deductions, other deductions, and employee-specific payroll overrides.",
         "bi bi-sliders",
       );
 
@@ -111,7 +187,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       ].filter(Boolean);
 
       const payrollSetupCards = [
-        state.dom.payrollMasterCardCollapse?.closest(".dashboard-section-card"),
+        // PAYROLL WORKFLOW UX REPAIR - STEP 1
+        // Employee salary setup is employee/payroll preparation work, so it
+        // now lives in Payroll beside Run Payroll instead of inside Setup.
+        // Leave allowance/deduction rule cards in Setup for now until the
+        // wider payroll workflow is repaired step-by-step.
         state.dom.payrollAllowanceCardCollapse?.closest(".dashboard-section-card"),
         state.dom.payrollStatutoryCardCollapse?.closest(".dashboard-section-card"),
         state.dom.payrollOtherDeductionCardCollapse?.closest(".dashboard-section-card"),
@@ -142,6 +222,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         card.classList.add("mb-4");
         setupSection.appendChild(card);
       });
+
+      // PAYROLL WORKFLOW UX REPAIR - STEP 8A
+      // After the Setup cards have been placed in order, merge the two
+      // deductions cards visually into one Deductions Setup card.
+      mergePayrollDeductionSetupCards();
     }
 
     // WORKSPACE REARRANGEMENT - STEP 1D
@@ -1076,9 +1161,10 @@ function showHrPayrollSetupAccessDeniedMessage(areaLabel = "Payroll Setup") {
 }
 
 function showPayrollMasterAccessDeniedMessage() {
-  // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
-  // Keep older Payroll Master calls working through the new shared message.
-  showHrPayrollSetupAccessDeniedMessage("Payroll Master Data");
+  // PAYROLL WORKFLOW UX REPAIR - STEP 1
+  // Keep the existing function name for code safety, but show HR-friendly
+  // salary setup wording in the UI.
+  showHrPayrollSetupAccessDeniedMessage("Employee Salary Setup");
 }
 
 // HR DASHBOARD ROLE RESTRICTIONS - STEP 2D-1
@@ -1198,7 +1284,7 @@ function applyHrPayrollSetupAccessControls() {
   if (state.dom.savePayrollMasterBtn) {
     state.dom.savePayrollMasterBtn.innerHTML = `
       <i class="bi bi-lock me-2"></i>
-      <span id="savePayrollMasterBtnText">Payroll Master Read Only</span>
+      <span id="savePayrollMasterBtnText">Employee Salary Setup Read Only</span>
     `;
     state.dom.savePayrollMasterBtnText =
       document.getElementById("savePayrollMasterBtnText");
@@ -1458,7 +1544,7 @@ function applyHrPayrollOperationsAccessControls() {
   if (state.dom.savePayrollBtn) {
     state.dom.savePayrollBtn.innerHTML = `
       <i class="bi bi-lock me-2"></i>
-      <span id="savePayrollBtnText">Payroll Operations Read Only</span>
+      <span id="savePayrollBtnText">Payroll Finalisation Read Only</span>
     `;
     state.dom.savePayrollBtnText = document.getElementById("savePayrollBtnText");
   }
@@ -1466,14 +1552,14 @@ function applyHrPayrollOperationsAccessControls() {
   if (state.dom.topSubmitPayrollBtn) {
     state.dom.topSubmitPayrollBtn.innerHTML = `
       <i class="bi bi-lock me-2"></i>
-      Submit Payroll Read Only
+      Finalise Payroll Read Only
     `;
   }
 
   if (state.dom.submitBatchPayrollBtn) {
     state.dom.submitBatchPayrollBtn.innerHTML = `
       <i class="bi bi-lock me-2"></i>
-      Submit Batch Read Only
+      Finalise Batch Read Only
     `;
   }
 
@@ -2886,7 +2972,11 @@ function getDashboardWorkingCardPairs() {
     [state.dom.togglePayrollMasterCardBtn, state.dom.payrollMasterCardCollapse],
     [state.dom.togglePayrollAllowanceCardBtn, state.dom.payrollAllowanceCardCollapse],
     [state.dom.togglePayrollStatutoryCardBtn, state.dom.payrollStatutoryCardCollapse],
-    [state.dom.togglePayrollOtherDeductionCardBtn, state.dom.payrollOtherDeductionCardCollapse],
+
+    // PAYROLL WORKFLOW UX REPAIR - STEP 8A
+    // Other Deductions now lives inside the combined Deductions Setup card.
+    // Do not collapse it separately, otherwise HR would expand Deductions Setup
+    // but still find the non-statutory section hidden inside it.
 
     // DESCRIPTION ITEM 5 - STEP 2
     // Employee Payroll Overrides is another long payroll setup card,
@@ -6472,20 +6562,43 @@ function alignPayrollWorkspaceCardOrder() {
   const payrollOverviewCard =
     state.dom.payrollRecordCountValue?.closest(".dashboard-section-card");
 
+  const employeeSalarySetupCard =
+    state.dom.payrollMasterCardCollapse?.closest(".dashboard-section-card");
+
   const payrollRecordCard =
     state.dom.payrollRecordCardCollapse?.closest(".dashboard-section-card");
 
-  if (!payrollSection || !payrollOverviewCard || !payrollRecordCard) {
+  if (!payrollSection || !payrollOverviewCard) {
     return;
   }
 
-  // If the card is already directly after Payroll Overview, do nothing.
-  if (payrollOverviewCard.nextElementSibling === payrollRecordCard) {
-    return;
+  // PAYROLL WORKFLOW UX REPAIR - STEP 1
+  // Keep payroll-owned work inside Payroll:
+  // 1. Payroll Overview
+  // 2. Employee Salary Setup
+  // 3. Create Payroll Record / Create Payroll Batch
+  //
+  // Existing cards are moved only. They are not recreated, so all existing
+  // form IDs, event handlers, collapse buttons, save/edit logic, and Supabase
+  // persistence remain intact.
+  [
+    payrollOverviewCard,
+    employeeSalarySetupCard,
+    payrollRecordCard,
+  ].filter(Boolean).forEach((card) => {
+    card.classList.add("mb-4");
+  });
+
+  let insertAnchor = payrollOverviewCard;
+
+  if (employeeSalarySetupCard) {
+    insertAnchor.insertAdjacentElement("afterend", employeeSalarySetupCard);
+    insertAnchor = employeeSalarySetupCard;
   }
 
-  // Move Create Payroll Record / Create Payroll Batch directly below Payroll Overview.
-  payrollOverviewCard.insertAdjacentElement("afterend", payrollRecordCard);
+  if (payrollRecordCard) {
+    insertAnchor.insertAdjacentElement("afterend", payrollRecordCard);
+  }
 }
 // WORKSPACE REARRANGEMENT - STEP 1E
 // People should contain employee records and employee creation/import only.
@@ -6667,9 +6780,9 @@ function bindEvents() {
     switchHrWorkspace("payroll");
   });
 
-  // RUN PAYROLL - STEP 1
-  // Start the payroll run flow from the header by opening the employee list,
-  // where HR can select employees for payroll processing.
+  // PAYROLL WORKFLOW UX REPAIR - STEP 2
+  // Start payroll processing inside the Payroll workspace.
+  // Do not route HR to People for payroll operations.
   state.dom.runPayrollActionBtn?.addEventListener("click", () => {
     startRunPayrollSelectionFlow();
   });
@@ -6898,12 +7011,15 @@ function bindEvents() {
   populateAssignedLineManagerOptions();
   updateEmployeeSaveButtonState();
 
-  // DESCRIPTION ITEM 9 - STEP 2
-  // Master checkbox control for selecting or clearing all visible employees
-  // in the current employee list view.
-  state.dom.selectAllEmployeesForPayroll?.addEventListener("change", (event) => {
-    toggleAllVisibleEmployeesForPayroll(Boolean(event.target.checked));
-  });
+  // PAYROLL WORKFLOW UX REPAIR - STEP 8C
+  // Bind the Select All payroll checkbox without optional chaining syntax here.
+  // This keeps the HR dashboard parser-safe and prevents the whole UI from
+  // failing before payroll, setup, and people cards can initialise.
+  if (state.dom.selectAllEmployeesForPayroll) {
+    state.dom.selectAllEmployeesForPayroll.addEventListener("change", (event) => {
+      toggleAllVisibleEmployeesForPayroll(Boolean(event.target.checked));
+    });
+  }
 
   // DESCRIPTION ITEM 1 - STEP 5
   // Bind collapsible behavior for the two HR workspace cards.
@@ -11775,7 +11891,7 @@ function setPayrollMasterSaveLoading(isLoading, isEditMode = false) {
 
     button.innerHTML = `
       <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-${isEditMode ? "Saving New Version..." : "Saving Master Data..."}
+${isEditMode ? "Saving New Version..." : "Saving Salary Setup..."}
     `;
   } else if (button.dataset.originalHtml) {
     button.innerHTML = button.dataset.originalHtml;
@@ -11843,27 +11959,27 @@ async function handlePayrollMasterSave() {
 
     await refreshPayrollMasterWorkspace();
 
-    showPageAlert(
-      "success",
-      isEditMode
-        ? `New payroll master version was created successfully for effective date <strong>${escapeHtml(
-          payload.salary_effective_date,
-        )}</strong>.`
-        : `Payroll master record was created successfully for effective date <strong>${escapeHtml(
-          payload.salary_effective_date,
-        )}</strong>.`,
-    );
+showPageAlert(
+  "success",
+  isEditMode
+    ? `New Employee Salary Setup version was created successfully for effective date <strong>${escapeHtml(
+      payload.salary_effective_date,
+    )}</strong>.`
+    : `Employee Salary Setup was created successfully for effective date <strong>${escapeHtml(
+      payload.salary_effective_date,
+    )}</strong>.`,
+);
 
     // DESCRIPTION ITEM 6 - STEP 6A
     // Payroll Master save now uses the same floating success notification
     // pattern already used by other HR/payroll setup cards.
-    showDashboardToast(
-      "success",
-      isEditMode ? "Payroll master version created" : "Payroll master created",
-      isEditMode
-        ? "A new effective-dated payroll master version has been created. The old version remains for historical payroll."
-        : "The payroll master record has been saved successfully.",
-    );
+showDashboardToast(
+  "success",
+  isEditMode ? "Employee Salary Setup version created" : "Employee Salary Setup created",
+  isEditMode
+    ? "A new effective-dated Employee Salary Setup version has been created. The old version remains for historical payroll."
+    : "The employee salary setup has been saved successfully.",
+);
 
     // HR SAVE/EDIT BEHAVIOUR - PAYROLL MASTER STEP 1
     // After create/update, clear the form and redirect to Payroll Master Records.
@@ -11883,7 +11999,7 @@ async function handlePayrollMasterSave() {
     ) {
       showPageAlert(
         "warning",
-        "A payroll master record already exists for this employee on the selected salary effective date.",
+        "An Employee Salary Setup already exists for this employee on the selected salary effective date.",
       );
 
       // DESCRIPTION ITEM 6 - STEP 6A
@@ -11891,28 +12007,32 @@ async function handlePayrollMasterSave() {
       // inside the Payroll Master card and cannot see the top page alert.
       showDashboardToast(
         "warning",
-        "Duplicate payroll master version",
-        "This employee already has a payroll master record for the selected effective date. Use a different effective date for the new version.",
+        "Duplicate Employee Salary Setup",
+"This employee already has an Employee Salary Setup for the selected effective date. Use a different effective date for the new version.",
       );
 
       return;
     }
 
-    showPageAlert(
-      "danger",
-      error.message || "Payroll master record could not be saved.",
-    );
-    // DESCRIPTION ITEM 6 - STEP 6A
-    // Match the standard HR/payroll error notification pattern.
-    showDashboardToast(
-      "danger",
-      "Payroll master save failed",
-      error.message || "The payroll master record could not be saved.",
-    );
+showPageAlert(
+  "danger",
+  error.message || "Employee Salary Setup could not be saved.",
+);
+
+// PAYROLL WORKFLOW UX REPAIR - STEP 8C
+// Fix missing comma in the toast call. The missing comma caused a full
+// hr-dashboard.js parser failure, which broke the HR UI before startup.
+showDashboardToast(
+  "danger",
+  "Employee Salary Setup save failed",
+  error.message || "The employee salary setup could not be saved.",
+);
   } finally {
     setPayrollMasterSaveLoading(false, isEditMode);
   }
 }
+
+
 function resetPayrollMasterForm() {
   if (!state.dom.payrollMasterCreateForm) return;
 
@@ -11956,7 +12076,7 @@ function resetPayrollMasterForm() {
   if (state.dom.savePayrollMasterBtn) {
     state.dom.savePayrollMasterBtn.innerHTML = `
       <i class="bi bi-save me-2"></i>
-      <span id="savePayrollMasterBtnText">Create Payroll Master Record</span>
+      <span id="savePayrollMasterBtnText">Create Salary Setup</span>
     `;
     state.dom.savePayrollMasterBtnText = document.getElementById("savePayrollMasterBtnText");
   }
@@ -11987,7 +12107,7 @@ function renderPayrollMasterRecordsLoadingState() {
   state.dom.payrollMasterRecordsTableBody.innerHTML = `
     <tr>
       <td colspan="8" class="text-center text-secondary py-4">
-        Loading payroll master records.
+        Loading employee salary setup records.
       </td>
     </tr>
   `;
@@ -12192,7 +12312,7 @@ function startPayrollMasterEdit(payrollMasterId) {
   if (state.dom.savePayrollMasterBtn) {
     state.dom.savePayrollMasterBtn.innerHTML = `
       <i class="bi bi-save me-2"></i>
-<span id="savePayrollMasterBtnText">Save Payroll Master Version</span>
+<span id="savePayrollMasterBtnText">Save Salary Setup Version</span>
     `;
     state.dom.savePayrollMasterBtnText = document.getElementById("savePayrollMasterBtnText");
   }
@@ -15176,14 +15296,17 @@ function clearBatchPayrollCsvImportUi() {
 
   setPayrollRecordToolbarForManualMode();
 
-  if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Create Payroll Record";
-  }
+// PAYROLL WORKFLOW UX REPAIR - STEP 5
+// Manual mode is for one employee only.
+// Payslip sending remains a separate action after the payroll record is finalised.
+if (state.dom.payrollFormTitle) {
+  state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
+}
 
-  if (state.dom.payrollFormSubtext) {
-    state.dom.payrollFormSubtext.textContent =
-      "Enter payroll details for an employee. Core monetary fields use NGN.";
-  }
+if (state.dom.payrollFormSubtext) {
+  state.dom.payrollFormSubtext.textContent =
+    "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
+}
 
   updateBatchPayrollCsvImportButtonState();
   updateSubmitBatchPayrollButtonState();
@@ -15270,6 +15393,194 @@ function getActiveBatchPayrollExtraComponentsForMaster(payrollMasterRecordId = "
   });
 
   return extras;
+}
+
+// PAYROLL WORKFLOW UX REPAIR - STEP 6
+// Pull all active Allowance Components into Single Employee Finalisation.
+// This keeps allowance values inside HR-controlled Setup before payroll is
+// calculated/finalised.
+//
+// HR/business behaviour:
+// - HR creates allowance components in Setup.
+// - Single Employee Finalisation consumes those active setup records.
+// - Allowance records are effective-dated.
+// - Regular structured salary split remains intact.
+// - Matching structured allowance types act as top-ups, not replacements.
+// - Employee-specific Overrides can still apply after this setup pull.
+function getActiveManualPayrollAllowanceComponentsForMaster(
+  payrollMasterRecordId = "",
+  payrollDateValue = "",
+) {
+  const masterId = String(payrollMasterRecordId || "").trim();
+  const payrollDateTime = parsePayrollEffectiveDateToTime(
+    payrollDateValue || getCurrentPayrollCalculationDate(),
+  );
+
+  const totals = {
+    housingAllowanceTopUp: 0,
+    transportAllowanceTopUp: 0,
+    utilityAllowanceTopUp: 0,
+    otherAllowanceTopUp: 0,
+    medicalAllowance: 0,
+    bonus: 0,
+    overtime: 0,
+    logisticsAllowance: 0,
+    dataAirtimeAllowance: 0,
+  };
+
+  if (!masterId || !Number.isFinite(payrollDateTime)) {
+    return totals;
+  }
+
+  (state.payrollAllowanceComponents || []).forEach((component) => {
+    const componentMasterId = String(
+      component.payroll_master_record_id || "",
+    ).trim();
+
+    const isSameMaster = componentMasterId === masterId;
+    const isActive = normalizeText(component.allowance_status) === "active";
+    const amount = Number(component.allowance_amount || 0);
+    const effectiveTime = parsePayrollEffectiveDateToTime(component.effective_date);
+
+    const isEffective =
+      Number.isFinite(effectiveTime) &&
+      effectiveTime <= payrollDateTime;
+
+    if (
+      !isSameMaster ||
+      !isActive ||
+      !isEffective ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      return;
+    }
+
+    const type = normalizeText(component.allowance_type || "");
+
+    if (type === "housing" || type === "housing allowance") {
+      totals.housingAllowanceTopUp += amount;
+      return;
+    }
+
+    if (type === "transport" || type === "transport allowance") {
+      totals.transportAllowanceTopUp += amount;
+      return;
+    }
+
+    if (type === "utility" || type === "utility allowance") {
+      totals.utilityAllowanceTopUp += amount;
+      return;
+    }
+
+    if (type === "medical" || type === "medical allowance") {
+      totals.medicalAllowance += amount;
+      return;
+    }
+
+    if (type === "bonus") {
+      totals.bonus += amount;
+      return;
+    }
+
+    if (type === "overtime") {
+      totals.overtime += amount;
+      return;
+    }
+
+    if (type === "logistics allowance" || type === "logistics") {
+      totals.logisticsAllowance += amount;
+      return;
+    }
+
+    if (
+      type === "data & airtime" ||
+      type === "data and airtime" ||
+      type === "airtime" ||
+      type === "data"
+    ) {
+      totals.dataAirtimeAllowance += amount;
+      return;
+    }
+
+    // Setup-only allowance types without a dedicated payroll field are grouped
+    // into Other Allowance so they still affect Gross Pay and PAYE calculation.
+    if (
+      type === "meal" ||
+      type === "meal allowance" ||
+      type === "hazard" ||
+      type === "hazard allowance" ||
+      type === "other" ||
+      type === "other allowance"
+    ) {
+      totals.otherAllowanceTopUp += amount;
+    }
+  });
+
+  return totals;
+}
+
+// PAYROLL WORKFLOW UX REPAIR - STEP 6
+// Apply active setup allowances to the visible Single Employee Finalisation form.
+// This runs after the Regular payroll structure has calculated Basic/Housing/
+// Transport/Utility/Other split, so Setup allowances become controlled top-ups.
+function applyActivePayrollAllowanceComponentsToPayrollForm() {
+  if (!isAlpatechRegularSelected()) {
+    return;
+  }
+
+  const activePayrollMaster = getCurrentManualPayrollMasterForOverride();
+  const payrollDate = getCurrentPayrollCalculationDate();
+
+  if (!activePayrollMaster?.id || !payrollDate) {
+    return;
+  }
+
+  const allowances = getActiveManualPayrollAllowanceComponentsForMaster(
+    activePayrollMaster.id,
+    payrollDate,
+  );
+
+  const addTopUpToField = (field, amount = 0) => {
+    if (!field) return;
+
+    const topUp = Number(amount || 0);
+
+    if (!Number.isFinite(topUp) || topUp <= 0) {
+      return;
+    }
+
+    setNumericFieldValue(
+      field,
+      toNullableNumber(field.value) + topUp,
+    );
+  };
+
+  addTopUpToField(
+    state.dom.payrollHousingAllowance,
+    allowances.housingAllowanceTopUp,
+  );
+
+  addTopUpToField(
+    state.dom.payrollTransportAllowance,
+    allowances.transportAllowanceTopUp,
+  );
+
+  addTopUpToField(
+    state.dom.payrollUtilityAllowance,
+    allowances.utilityAllowanceTopUp,
+  );
+
+  addTopUpToField(
+    state.dom.payrollOtherAllowance,
+    allowances.otherAllowanceTopUp,
+  );
+
+  setNumericFieldValue(state.dom.payrollMedicalAllowance, allowances.medicalAllowance);
+  setNumericFieldValue(state.dom.payrollBonus, allowances.bonus);
+  setNumericFieldValue(state.dom.payrollOvertime, allowances.overtime);
+  setNumericFieldValue(state.dom.payrollLogisticsAllowance, allowances.logisticsAllowance);
+  setNumericFieldValue(state.dom.payrollDataAirtimeAllowance, allowances.dataAirtimeAllowance);
 }
 
 // BATCH PAYROLL CSV IMPORT - STEP 4
@@ -15990,14 +16301,17 @@ ${preparedRow.employee_override_applied
   state.dom.payrollCreateForm?.classList.add("d-none");
   setPayrollRecordToolbarForBatchMode();
 
-  if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Create Payroll Batch";
-  }
+// PAYROLL WORKFLOW UX REPAIR - STEP 5
+// Batch mode is for all active employees, but HR must still review the
+// Batch Payroll Review table before finalisation.
+if (state.dom.payrollFormTitle) {
+  state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
+}
 
-  if (state.dom.payrollFormSubtext) {
-    state.dom.payrollFormSubtext.textContent =
-      "Review selected employees in Batch Payroll Review before submitting payroll records.";
-  }
+if (state.dom.payrollFormSubtext) {
+  state.dom.payrollFormSubtext.textContent =
+    "Review active employees in Batch Payroll Review before finalising payroll records.";
+}
 
   if (state.dom.batchPayrollSetupWarning) {
     if (skippedRows.length) {
@@ -16409,10 +16723,10 @@ function renderBatchPayrollReviewTable(selectedEmployeeIds = []) {
   updateSubmitBatchPayrollButtonState();
 }
 
-// RUN PAYROLL - STEP 1
-// Opens the Full Employee List as the payroll selection workspace.
-// This keeps employee selection tied to the HR employee source and avoids
-// creating a separate payroll-only employee list.
+// PAYROLL WORKFLOW UX REPAIR - STEP 5D
+// Run Payroll must land HR inside the Payroll workspace, not People.
+// This opens the Finalise Payroll & Payslips card directly so payroll work
+// stays in Payroll and HR does not have to hunt through employee records.
 function startRunPayrollSelectionFlow() {
   // HR DASHBOARD ROLE RESTRICTIONS - STEP 2E-1
   // Auditor, QA, and custom HR-routed roles may review payroll only.
@@ -16421,60 +16735,42 @@ function startRunPayrollSelectionFlow() {
     return;
   }
 
-  // BATCH PAYROLL DEFAULT - STEP 1
-  // Run Payroll now starts in batch selection mode.
-  // This keeps the user on the employee table first instead of pushing them
-  // straight into the individual payroll dropdown/form.
-  state.isRunPayrollSelectionMode = true;
+  clearPageAlert();
+  hideDashboardToast();
 
-  // BATCH PAYROLL DEFAULT - STEP 1
-  // Start each payroll run with a clean selection so old checkmarks
-  // from a previous run do not accidentally carry into a new batch.
+  // PAYROLL WORKFLOW UX REPAIR - STEP 5D
+  // Run Payroll is now an operational payroll entry point.
+  // Clear any old People-table selection state so stale employee checkboxes
+  // do not control payroll finalisation.
+  state.isRunPayrollSelectionMode = false;
   state.selectedEmployeesForPayroll.clear();
+  state.batchPayrollPreparedRows = [];
 
-  // BATCH PAYROLL DEFAULT - STEP 1
-  // Clear employee search so all active employees are visible when the
-  // payroll batch selection table opens.
-  if (state.dom.employeeSearchInput) {
-    state.dom.employeeSearchInput.value = "";
-  }
+  state.dom.runPayrollSelectionNotice?.classList.add("d-none");
 
-  // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
-  // Run Payroll starts from People because HR selects employees there.
-  rememberHrWorkspace("employees");
-  switchHrWorkspace("employees");
+  rememberHrWorkspace("payroll");
+  switchHrWorkspace("payroll");
 
-  if (state.dom.employeeListCardCollapse) {
-    state.dom.employeeListCardCollapse.classList.remove("d-none");
-  }
+  // PAYROLL WORKFLOW UX REPAIR - STEP 5D
+  // Reset to clean single-employee finalisation mode and make the
+  // Finalise Payroll & Payslips card visible.
+  resetPayrollForm();
+  populatePayrollEmployeeOptions();
+  setCreatePayrollManualModeUi();
+  openPayrollRecordCard();
 
-  if (state.dom.toggleEmployeeListCardBtn) {
-    state.dom.toggleEmployeeListCardBtn.setAttribute("aria-expanded", "true");
+  applyHrPayrollOperationsAccessControls();
 
-    const icon = state.dom.toggleEmployeeListCardBtn.querySelector("i");
-    const label = state.dom.toggleEmployeeListCardBtn.querySelector("span");
+  const payrollFinaliseCard =
+    state.dom.payrollRecordCardCollapse?.closest(".dashboard-section-card") ||
+    state.dom.payrollFormTitle?.closest(".dashboard-section-card") ||
+    state.dom.payrollRecordCardCollapse ||
+    state.dom.payrollFormTitle;
 
-    if (icon) icon.className = "bi bi-chevron-up me-2";
-    if (label) label.textContent = "Collapse";
-  }
-
-  // BATCH PAYROLL DEFAULT - STEP 1
-  // Re-render the employee table after enabling Run Payroll mode.
-  // applyEmployeeSearch now limits this table to active employees only.
-  applyEmployeeSearch();
-
-  // RUN PAYROLL - STEP 2
-  // Show a clear mode notice so HR understands this is now payroll selection.
-  state.dom.runPayrollSelectionNotice?.classList.remove("d-none");
-
-  syncSelectAllEmployeesForPayrollCheckbox();
-
-  // SUBMIT PAYROLL - DESCRIPTION ITEM 2 - SCROLL FIX
-  // Scroll to the selection notice instead of the table so the Run Payroll
-  // header/context remains visible and does not look cut off.
-  state.dom.runPayrollSelectionNotice?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      scrollToDashboardTarget(payrollFinaliseCard, 16);
+    });
   });
 }
 
@@ -19403,14 +19699,21 @@ function clearCreatePayrollCardSelectAllSelection({ hideReview = false } = {}) {
     state.dom.payrollCreateForm?.classList.remove("d-none");
     setPayrollRecordToolbarForManualMode();
 
-    if (state.dom.payrollFormTitle) {
-      state.dom.payrollFormTitle.textContent = "Create Payroll Record";
-    }
+// PAYROLL WORKFLOW UX REPAIR - STEP 5B
+// Manual mode is now labelled as single employee payroll finalisation.
+// This is wording only; payroll save/finalisation logic remains unchanged.
+if (state.dom.payrollFormTitle) {
+  state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
+}
 
-    if (state.dom.payrollFormSubtext) {
-      state.dom.payrollFormSubtext.textContent =
-        "Enter payroll details for an employee. Core monetary fields use NGN.";
-    }
+if (state.dom.payrollFormSubtext) {
+  state.dom.payrollFormSubtext.textContent =
+    "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
+}
+
+if (state.dom.payrollFormModeBadge) {
+  state.dom.payrollFormModeBadge.textContent = "Single Employee Mode";
+}
   }
 
   updateSubmitBatchPayrollButtonState();
@@ -19461,14 +19764,17 @@ function handleCreatePayrollCardSelectAllEmployees(isChecked) {
   // Use the same batch toolbar behaviour as CSV import / Run Payroll.
   setPayrollRecordToolbarForBatchMode();
 
-  if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Create Payroll Batch";
-  }
+// PAYROLL WORKFLOW UX REPAIR - STEP 5
+// All-active employee mode uses the existing Batch Payroll Review table
+// so HR can review readiness before finalising records.
+if (state.dom.payrollFormTitle) {
+  state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
+}
 
-  if (state.dom.payrollFormSubtext) {
-    state.dom.payrollFormSubtext.textContent =
-      "Review selected employees in Batch Payroll Review before submitting payroll records.";
-  }
+if (state.dom.payrollFormSubtext) {
+  state.dom.payrollFormSubtext.textContent =
+    "Review active employees in Batch Payroll Review before finalising payroll records.";
+}
 
   state.isRunPayrollSelectionMode = true;
   state.selectedEmployeesForPayroll = new Set(activeEmployeeIds);
@@ -19482,14 +19788,20 @@ function handleCreatePayrollCardSelectAllEmployees(isChecked) {
   state.dom.payrollCreateForm?.classList.add("d-none");
   setPayrollRecordToolbarForBatchMode();
 
-  if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Create Payroll Batch";
-  }
+// PAYROLL WORKFLOW UX REPAIR - STEP 5B
+// Batch mode is all-active employee payroll finalisation review.
+if (state.dom.payrollFormTitle) {
+  state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
+}
 
-  if (state.dom.payrollFormSubtext) {
-    state.dom.payrollFormSubtext.textContent =
-      "Review selected employees in Batch Payroll Review before submitting payroll records.";
-  }
+if (state.dom.payrollFormSubtext) {
+  state.dom.payrollFormSubtext.textContent =
+    "Review active employees in Batch Payroll Review before finalising payroll records.";
+}
+
+if (state.dom.payrollFormModeBadge) {
+  state.dom.payrollFormModeBadge.textContent = "All Active Employees Mode";
+}
 
   syncSelectAllEmployeesForPayrollCheckbox();
   updateSubmitBatchPayrollButtonState();
@@ -19517,14 +19829,20 @@ function setCreatePayrollBatchModeUi() {
   state.dom.payrollCreateForm?.classList.add("d-none");
   setPayrollRecordToolbarForBatchMode();
 
-  if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Create Payroll Batch";
-  }
+// PAYROLL WORKFLOW UX REPAIR - STEP 5B
+// All-active employee mode must not revert to old Create Payroll Batch wording.
+if (state.dom.payrollFormTitle) {
+  state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
+}
 
-  if (state.dom.payrollFormSubtext) {
-    state.dom.payrollFormSubtext.textContent =
-      "Review selected employees in Batch Payroll Review before submitting payroll records.";
-  }
+if (state.dom.payrollFormSubtext) {
+  state.dom.payrollFormSubtext.textContent =
+    "Review active employees in Batch Payroll Review before finalising payroll records.";
+}
+
+if (state.dom.payrollFormModeBadge) {
+  state.dom.payrollFormModeBadge.textContent = "All Active Employees Mode";
+}
 }
 
 // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I FINAL
@@ -19533,14 +19851,21 @@ function setCreatePayrollManualModeUi() {
   state.dom.payrollCreateForm?.classList.remove("d-none");
   setPayrollRecordToolbarForManualMode();
 
-  if (state.dom.payrollFormTitle) {
-    state.dom.payrollFormTitle.textContent = "Create Payroll Record";
-  }
+// PAYROLL WORKFLOW UX REPAIR - STEP 5D
+// Manual mode is now single-employee payroll finalisation.
+// Do not revert the card back to old "Create Payroll Record" wording.
+if (state.dom.payrollFormTitle) {
+  state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
+}
 
-  if (state.dom.payrollFormSubtext) {
-    state.dom.payrollFormSubtext.textContent =
-      "Enter payroll details for an employee. Core monetary fields use NGN.";
-  }
+if (state.dom.payrollFormSubtext) {
+  state.dom.payrollFormSubtext.textContent =
+    "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
+}
+
+if (state.dom.payrollFormModeBadge) {
+  state.dom.payrollFormModeBadge.textContent = "Single Employee Mode";
+}
 }
 
 // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I FINAL
@@ -19742,12 +20067,14 @@ function renderBatchPayrollSetupWarning(selectedEmployees = []) {
 
   const extraCount = affectedEmployees.length - affectedNames.length;
 
-  warning.innerHTML = `
-    <div class="fw-semibold">Batch payroll setup is incomplete.</div>
+warning.innerHTML = `
+    <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5B
+         Use the new Employee Salary Setup wording in batch readiness warnings. -->
+    <div class="fw-semibold">Employee salary setup is incomplete.</div>
     <div class="small">
-      ${affectedEmployees.length} selected employee(s) cannot be processed yet because they do not have a valid active Payroll Master setup.
+      ${affectedEmployees.length} selected employee(s) cannot be finalised yet because they do not have a valid active Employee Salary Setup.
       Affected: <strong>${escapeHtml(affectedNames.join(", "))}${extraCount > 0 ? `, and ${extraCount} more` : ""}</strong>.
-      Update Payroll Master Data before continuing this batch.
+      Update Employee Salary Setup before continuing this batch.
     </div>
   `;
 
@@ -22661,6 +22988,22 @@ async function handleEmployeeSave() {
     // Keep payroll-related employee dropdowns aligned after employee create/update.
     populatePayrollEmployeeOptions();
     populatePayrollMasterEmployeeOptions();
+
+    // PAYROLL WORKFLOW UX REPAIR - STEP 3
+    // Keep Employee Bank Details aligned immediately after HR creates or updates
+    // an employee. Without this, the new employee exists in state.employees
+    // after loadEmployees(), but the bank-details Employee dropdown still shows
+    // the old option list until a full browser refresh.
+    //
+    // HR/business behaviour:
+    // - HR can create an employee.
+    // - HR can immediately move to Employee Bank Details.
+    // - The new employee appears in the Employee dropdown without refreshing.
+    // - No bank record is created automatically; this only refreshes the dropdown.
+    populateEmployeeBankEmployeeOptions();
+
+    updateEmployeeBankDetailsSaveButtonState();
+
     renderPayrollSelectedEmployeeReference(
       state.dom.payrollEmployeeId?.value || "",
     );
@@ -25818,7 +26161,7 @@ function resetPayrollForm() {
     // Keep the default payroll action aligned with the new story wording.
     state.dom.savePayrollBtn.innerHTML = `
     <i class="bi bi-send-check me-2"></i>
-    <span id="savePayrollBtnText">Submit Payroll</span>
+    <span id="savePayrollBtnText">Finalise Single Employee</span>
   `;
     state.dom.savePayrollBtnText = document.getElementById("savePayrollBtnText");
   }
@@ -27144,9 +27487,13 @@ function getActiveStatutoryDeductionsForCurrentPayroll() {
 function getStatutoryDeductionBaseAmount(deductionType = "") {
   const type = String(deductionType || "").trim();
 
-  if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
-    return calculateRegularBht();
-  }
+if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
+  // PAYROLL WORKFLOW UX REPAIR - STEP 7B
+  // Pension setup should calculate from the final visible BHT after salary
+  // setup and allowance components have been applied, not from an earlier
+  // pre-setup Regular structure snapshot.
+  return calculateCurrentVisibleBhtForPension();
+}
 
   if (type === "NHF") {
     return calculateRegularBasicPay();
@@ -27179,13 +27526,20 @@ function calculateStatutoryDeductionAmount(record = {}) {
     return calculateRegularPayeTax();
   }
 
-  if (type === "EMPLOYEE_PENSION") {
-    return calculateRegularEmployeePension();
-  }
+if (type === "EMPLOYEE_PENSION") {
+  // PAYROLL WORKFLOW UX REPAIR - STEP 7B
+  // Rule-based Employee Pension applies only when HR created an active
+  // statutory pension setup row. It uses 8% of final visible BHT.
+  return calculateCurrentVisibleBhtForPension() * 0.08;
+}
 
-  if (type === "EMPLOYER_PENSION") {
-    return calculateRegularEmployerPension();
-  }
+if (type === "EMPLOYER_PENSION") {
+  // PAYROLL WORKFLOW UX REPAIR - STEP 7B
+  // Rule-based Employer Pension applies only when HR created an active
+  // statutory employer pension setup row. It uses 10% of final visible BHT.
+  // This remains employer cost and is excluded from employee Net Pay.
+  return calculateCurrentVisibleBhtForPension() * 0.1;
+}
 
   if (type === "NHF") {
     return calculateRegularBasicPay() * 0.025;
@@ -27199,10 +27553,14 @@ function calculateStatutoryDeductionAmount(record = {}) {
 // This prevents old PAYE/Pension/NHF values from staying on the form when HR
 // changes employee, pay cycle, or pay date.
 function clearPayrollStatutoryDeductionPreviewValues() {
-  setNumericFieldValue(state.dom.payrollPayeTax, 0);
-  setNumericFieldValue(state.dom.payrollEmployeePension, 0);
-  setNumericFieldValue(state.dom.payrollEmployerPension, 0);
-
+  // PAYROLL WORKFLOW UX REPAIR - STEP 7
+  // Do not wipe PAYE or pension here.
+  // Regular payroll already calculates a safe baseline from HR-controlled
+  // salary setup and allowance setup. Statutory setup should override that
+  // baseline only when an active effective-dated statutory record exists.
+  //
+  // This prevents PAYE / pension from dropping back to 0.00 simply because
+  // there is no matching statutory setup row for the selected pay date.
   if (state.dom.payrollOtherDeductions) {
     state.dom.payrollOtherDeductions.dataset.statutoryAppliedOtherDeductions = "0";
   }
@@ -27698,6 +28056,43 @@ function applyActivePayrollStatutoryDeductionsToPayrollForm() {
   }
 }
 
+// PAYROLL WORKFLOW UX REPAIR - STEP 7B
+// BHT is the pensionable-pay base used when pension is explicitly configured.
+// Keep this based on the final visible payroll form values after Employee
+// Salary Setup and Allowance Components have been applied.
+function calculateCurrentVisibleBhtForPension() {
+  return (
+    toNullableNumber(state.dom.payrollBasicPay?.value) +
+    toNullableNumber(state.dom.payrollHousingAllowance?.value) +
+    toNullableNumber(state.dom.payrollTransportAllowance?.value)
+  );
+}
+
+// PAYROLL WORKFLOW UX REPAIR - STEP 7B
+// Recalculate only the automatic baseline values that are safe inside HR payroll.
+//
+// HR/professional behaviour:
+// - PAYE may be rule-calculated automatically from final taxable earnings.
+// - Employee Pension must not be assumed unless active Statutory Deduction setup exists.
+// - Employer Pension must not be assumed unless active Statutory Deduction setup exists.
+// - Employer Pension is a company cost and still must not reduce employee Net Pay.
+function refreshRegularPayrollBaselineDeductionsFromCurrentValues() {
+  if (!isAlpatechRegularSelected()) {
+    return;
+  }
+
+  const currentBht = calculateCurrentVisibleBhtForPension();
+
+  setNumericFieldValue(state.dom.regularBht, currentBht);
+  setNumericFieldValue(state.dom.payrollPayeTax, calculateRegularPayeTax());
+
+  // Pension is setup-controlled. Do not auto-populate it from the Regular
+  // structure banner. Active statutory pension setup will apply later in
+  // applyActivePayrollStatutoryDeductionsToPayrollForm().
+  setNumericFieldValue(state.dom.payrollEmployeePension, 0);
+  setNumericFieldValue(state.dom.payrollEmployerPension, 0);
+}
+
 function calculatePayrollTotalDeductions() {
   // DESCRIPTION ITEM 3 - STEP 2E-1 FIX
   // Total Deductions must use the visible deduction values currently on the form.
@@ -27990,18 +28385,51 @@ function calculateRegularEmployerPension() {
   return calculateRegularBht() * 0.1;
 }
 
-// PAYROLL TAX DEDUCTION CALCULATION - STEP 1
-// Calculates monthly PAYE for the Regular payroll structure using
-// NTA 2025 bands from the TaxCalc model.
+// PAYROLL WORKFLOW UX REPAIR - STEP 7
+// Read the visible payroll form value when it exists; otherwise fall back to
+// the standard Regular payroll structure calculation.
+// This makes PAYE respond to HR setup values that are pulled into the form,
+// including allowance components and approved earning overrides.
+function getPayrollAmountForTaxCalculation(field, fallbackAmount = 0) {
+  const rawValue = String(field?.value ?? "").trim();
+
+  if (!rawValue) {
+    return Number(fallbackAmount || 0);
+  }
+
+  const parsedValue = Number(rawValue);
+
+  return Number.isFinite(parsedValue)
+    ? parsedValue
+    : Number(fallbackAmount || 0);
+}
+
+// PAYROLL WORKFLOW UX REPAIR - STEP 7
+// PAYE must be calculated from the final visible earning values on the
+// Single Employee Finalisation form, not only from the original percentage
+// split. This keeps tax aligned after Allowance Components are pulled from Setup.
 function calculateRegularPayeTax() {
   return calculateNta2025MonthlyPayeTaxFromComponents({
-    basicPay: calculateRegularBasicPay(),
-    housingAllowance: calculateRegularHousingAllowance(),
-    transportAllowance: calculateRegularTransportAllowance(),
-    utilityAllowance: calculateRegularUtilityAllowance(),
-    otherAllowance: calculateRegularOtherAllowance(),
-
-    // These remain optional manual earning components on the HR form.
+    basicPay: getPayrollAmountForTaxCalculation(
+      state.dom.payrollBasicPay,
+      calculateRegularBasicPay(),
+    ),
+    housingAllowance: getPayrollAmountForTaxCalculation(
+      state.dom.payrollHousingAllowance,
+      calculateRegularHousingAllowance(),
+    ),
+    transportAllowance: getPayrollAmountForTaxCalculation(
+      state.dom.payrollTransportAllowance,
+      calculateRegularTransportAllowance(),
+    ),
+    utilityAllowance: getPayrollAmountForTaxCalculation(
+      state.dom.payrollUtilityAllowance,
+      calculateRegularUtilityAllowance(),
+    ),
+    otherAllowance: getPayrollAmountForTaxCalculation(
+      state.dom.payrollOtherAllowance,
+      calculateRegularOtherAllowance(),
+    ),
     medicalAllowance: toNullableNumber(state.dom.payrollMedicalAllowance?.value),
     bonus: toNullableNumber(state.dom.payrollBonus?.value),
     overtime: toNullableNumber(state.dom.payrollOvertime?.value),
@@ -28107,28 +28535,45 @@ function applyAlpatechRegularRev2DerivedFields() {
 }
 
 function recalculatePayrollFormTotals() {
-  // PAYROLL CALCULATION REPAIR - STEP 12A.2
-  // Lock calculated fields before refreshing values.
+  // PAYROLL WORKFLOW UX REPAIR - STEP 7
+  // Single Employee Finalisation calculation order:
+  // 1. Lock calculated fields.
+  // 2. Apply base salary override before structured split.
+  // 3. Calculate Regular payroll structure.
+  // 4. Pull active Allowance Components from Setup.
+  // 5. Recalculate PAYE and pension from the final visible earnings.
+  // 6. Apply effective-dated statutory setup records.
+  // 7. Apply employee-specific overrides.
+  // 8. Recalculate Gross Pay, Total Deductions, and Net Pay.
+  //
+  // This keeps all calculations inside HR-controlled setup/finalisation logic
+  // and avoids one-off fixes for PAYE, pension, gross, or net separately.
   syncPayrollCalculatedFieldLockState();
 
-  // DESCRIPTION ITEM 5 - STEP 5A
-  // Apply Basic Salary override before structured Regular payroll fields
-  // are recalculated. This lets the salary split use the employee-specific
-  // override instead of the standard Payroll Master salary.
   applyActivePayrollEmployeeBaseSalaryOverrideToPayrollForm();
 
   if (isAlpatechRegularSelected()) {
     applyAlpatechRegularRev2DerivedFields();
+
+    // PAYROLL WORKFLOW UX REPAIR - STEP 6
+    // Pull active earning setup rows into the form before final statutory
+    // and net pay calculations are performed.
+    applyActivePayrollAllowanceComponentsToPayrollForm();
+
+    // PAYROLL WORKFLOW UX REPAIR - STEP 7
+    // Recalculate baseline PAYE and pensions after setup allowances are present.
+    refreshRegularPayrollBaselineDeductionsFromCurrentValues();
   }
 
-  // DESCRIPTION ITEM 3 - STEP 2E-1 FIX
-  // Regular payroll still derives earnings first, but statutory deductions
-  // now come from active statutory setup by Pay Date.
+  // DESCRIPTION ITEM 4 - STEP 5 FIX
+  // Apply active statutory setup and configured Other Deductions after the
+  // baseline calculation. Where statutory records exist, they intentionally
+  // override the baseline PAYE / pension values.
   applyActivePayrollStatutoryDeductionsToPayrollForm();
 
   // DESCRIPTION ITEM 5 - STEP 5A
-  // Apply employee-specific overrides after standard earnings/deductions
-  // have been calculated, so the override is the final manual payroll value.
+  // Employee-specific overrides remain final HR exceptions after standard
+  // setup and statutory setup have been applied.
   applyActivePayrollEmployeeOverridesToPayrollForm();
 
   const grossPay = calculatePayrollGrossPay();
@@ -28139,12 +28584,19 @@ function recalculatePayrollFormTotals() {
   setNumericFieldValue(state.dom.payrollTotalDeductions, totalDeductions);
   setNumericFieldValue(state.dom.payrollNetPay, netPay);
 
-  // PAYROLL TAX DEDUCTION CALCULATION - STEP 2
-  // Keep the PAYE exemption helper note in sync with the current calculation.
-  updatePayrollPayeTaxNote();
+  // PAYROLL WORKFLOW UX REPAIR - STEP 7
+  // Keep Regular summary fields aligned with the final payroll result.
+  // These are display/calculation support values only; they do not save
+  // separately from the final payroll record payload.
+  if (isAlpatechRegularSelected()) {
+    setNumericFieldValue(state.dom.regularNetSalary, netPay);
+    setNumericFieldValue(
+      state.dom.regularMonthlySalaryPlusLogistics,
+      netPay + toNullableNumber(state.dom.payrollLogisticsAllowance?.value),
+    );
+  }
 
-  // PAYROLL CALCULATION REPAIR - STEP 12A.2
-  // Keep invalid calculations visibly blocked and keep Submit state accurate.
+  updatePayrollPayeTaxNote();
   syncPayrollCalculationValidity();
   updatePayrollSubmitButtonState();
 }

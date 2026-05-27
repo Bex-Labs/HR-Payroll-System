@@ -857,12 +857,16 @@
           <div class="mb-4">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
               <div>
-                <h2 class="section-heading h4 mb-1" id="employeeFormTitle">
-                  Create Employee Profile
+                <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5B
+     This card is the payroll finalisation workspace.
+     It supports single employee finalisation and all-active employee batch review.
+     Payslip sending remains a separate deliberate action after payroll is finalised. -->
+                <h2 class="section-heading h4 mb-1" id="payrollFormTitle">
+                  Finalise Payroll &amp; Payslips
                 </h2>
-                <p class="section-subtext mb-0" id="employeeFormSubtext">
-                  Enter employee bio data and employment details. Fields marked
-                  with <span class="text-danger">*</span> are required.
+                <p class="section-subtext mb-0" id="payrollFormSubtext">
+                  Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are
+                  sent separately after payroll records are finalised.
                 </p>
               </div>
 
@@ -918,8 +922,8 @@
 
           <div id="employeeFormCardCollapse">
             <div class="dashboard-toolbar hr-form-toolbar mb-4">
-              <span id="employeeFormModeBadge" class="badge rounded-pill text-bg-light border px-3 py-2">
-                Create Mode
+              <span id="payrollFormModeBadge" class="badge rounded-pill text-bg-light border px-3 py-2">
+                Single Employee Mode
               </span>
 
               <button type="button" id="cancelEditBtn" class="btn btn-outline-danger dashboard-action-btn d-none">
@@ -2028,13 +2032,23 @@
             </div>
 
             <div class="dashboard-table-hint">Swipe to view more →</div>
-            <div id="employeeRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none">
+
+            <!-- FULL EMPLOYEE LIST UX - STEP 1
+     Keep long employee records inside the card with an inner scroll.
+     This prevents the whole HR dashboard page from becoming tiring to navigate
+     when many employees exist, while keeping search, payroll selection,
+     and card controls visible above the table. -->
+            <div id="employeeRecordsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 520px; overflow-y: auto;">
               <!-- EMPLOYEE LIST ROW ALIGNMENT CLEANUP - STEP 1
        Use top alignment so Employee, Contact, Role, Status, Account,
        Docs, Start Date, and Action all begin from the same vertical line.
        This prevents short badge/action cells from sitting lower than text cells. -->
               <table class="table align-top">
-                <thead>
+                <!-- FULL EMPLOYEE LIST UX - STEP 1
+     Sticky header keeps Employee, Contact, Role, Status, Account, Docs,
+     Start Date, and Action labels visible while HR scrolls through records. -->
+                <thead class="position-sticky top-0 bg-white" style="z-index: 2;">
                   <tr>
                     <th class="text-center">
                       <div class="d-inline-flex align-items-center gap-2">
@@ -2082,9 +2096,13 @@
       <section id="hrSetupLandingCard" class="card dashboard-section-card mb-4">
         <div class="card-body p-4 p-lg-5">
           <div class="mb-4">
-            <h2 class="section-heading h4 mb-1">Setup &amp; Master Data</h2>
+            <!-- PAYROLL WORKFLOW UX REPAIR - STEP 4
+     Setup now holds configuration/rules only.
+     Employee Salary Setup has moved to Payroll, so avoid "Master Data"
+     wording here to reduce payroll workflow confusion. -->
+            <h2 class="section-heading h4 mb-1">Setup &amp; Configuration</h2>
             <p class="section-subtext mb-0">
-              Maintain organisation, payroll structure, deductions, overrides, banks, and employee payment setup.
+              Maintain organisation settings, payroll rules, deductions, payment setup, and email configuration.
             </p>
           </div>
 
@@ -2098,8 +2116,11 @@
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
-                <div class="summary-tile-label">Payroll Setup</div>
-                <div class="summary-tile-value h6 mb-0">Rules &amp; master data</div>
+                <!-- PAYROLL WORKFLOW UX REPAIR - STEP 4
+     Payroll salary setup now lives in Payroll.
+     Setup keeps rules/configuration only. -->
+                <div class="summary-tile-label">Payroll Rules</div>
+                <div class="summary-tile-value h6 mb-0">Allowances &amp; overrides</div>
               </div>
             </div>
 
@@ -2112,7 +2133,7 @@
 
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
-                <div class="summary-tile-label">Payments</div>
+                <div class="summary-tile-label">Payment Setup</div>
                 <div class="summary-tile-value h6 mb-0">Banks &amp; accounts</div>
               </div>
             </div>
@@ -2122,8 +2143,8 @@
                  surfaced in Setup summary rather than Payroll operations. -->
             <div class="col-md-6 col-xl-3">
               <div class="summary-tile">
-                <div class="summary-tile-label">Email Integration</div>
-                <div class="summary-tile-value h6 mb-0">Provider &amp; test send</div>
+                <div class="summary-tile-label">Email Setup</div>
+                <div class="summary-tile-value h6 mb-0">Provider validation</div>
               </div>
             </div>
           </div>
@@ -2766,9 +2787,13 @@
           <div class="mb-4">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
               <div>
-                <h2 class="section-heading h4 mb-1">Payroll Master Data</h2>
+                <!-- PAYROLL WORKFLOW UX REPAIR - STEP 1
+     Rename Payroll Master Data to HR/payroll-friendly wording.
+     This card defines each employee's salary setup before payroll is run. -->
+                <h2 class="section-heading h4 mb-1">Employee Salary Setup</h2>
                 <p class="section-subtext mb-0">
-                  Create and maintain payroll master records for each employee.
+                  Set up each employee’s monthly salary, pay cycle, effective date, and payroll status before running
+                  payroll.
                 </p>
               </div>
 
@@ -2799,7 +2824,7 @@
 
               <button type="button" id="refreshPayrollMasterRecordsBtn"
                 class="btn btn-outline-primary dashboard-action-btn">
-                <i class="bi bi-arrow-clockwise me-2"></i>Refresh Master Data
+                <i class="bi bi-arrow-clockwise me-2"></i>Refresh Salary Setup
               </button>
             </div>
 
@@ -2894,7 +2919,7 @@
                     <button type="submit" id="savePayrollMasterBtn" class="btn btn-primary dashboard-action-btn">
                       <i class="bi bi-save me-2"></i>
                       <span id="savePayrollMasterBtnText">
-                        Create Payroll Master Record
+                        Create Salary Setup
                       </span>
                     </button>
                   </div>
@@ -2910,23 +2935,23 @@
             <div id="payrollMasterRecordsHeader"
               class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
               <div>
-                <h3 class="h5 mb-1">Payroll Master Records</h3>
+                <h3 class="h5 mb-1">Employee Salary Setup Records</h3>
                 <p class="section-subtext mb-0">
-                  Review and maintain employee payroll master records by effective date.
+                  Review and maintain employee salary setup records by effective date.
                 </p>
               </div>
 
               <div class="w-100 w-lg-auto" style="max-width: 320px;">
                 <label for="payrollMasterSearchInput" class="form-label fw-semibold mb-2">
-                  Search payroll master data
+                  Search salary setup
                 </label>
                 <input type="text" id="payrollMasterSearchInput" class="form-control"
-                  placeholder="Search by employee, pay cycle, status..." />
+                  placeholder="Search by employee, salary, pay cycle, status..." />
               </div>
             </div>
 
             <div id="payrollMasterRecordsEmptyState" class="text-center text-secondary py-4">
-              No payroll master records found yet.
+              No employee salary setup records found yet.
             </div>
 
             <!-- HR SETUP INNER SCROLL - STEP 1G-1
@@ -2958,7 +2983,7 @@
                          Colspan increased because Payroll Grade / Level is now shown
                          as a real Payroll Master Records column. -->
                     <td colspan="8" class="text-center text-secondary py-4">
-                      Payroll master records will load here.
+                      Employee salary setup records will load here.
                     </td>
                   </tr>
                 </tbody>
@@ -3023,10 +3048,10 @@
               <div class="row g-4">
                 <div class="col-md-6 col-xl-4">
                   <label for="payrollAllowanceMasterRecordId" class="form-label fw-semibold">
-                    Payroll Master Record <span class="text-danger">*</span>
+                    Employee Salary Setup <span class="text-danger">*</span>
                   </label>
                   <select id="payrollAllowanceMasterRecordId" class="form-select" required>
-                    <option value="">Select payroll master record</option>
+                    <option value="">Select employee salary setup</option>
                   </select>
                 </div>
 
@@ -3268,7 +3293,7 @@
                     <option value="GRADE_RULE">Inherited from Payroll Grade / Rule</option>
                   </select>
                   <div class="form-text">
-                    Use inherited setup only when the selected Payroll Master Record has a Payroll Grade / Level.
+                    Use inherited setup only when the selected Employee Salary Setup has a Payroll Grade / Level.
                   </div>
                 </div>
 
@@ -3282,13 +3307,13 @@
                   </label>
 
                   <input type="text" id="payrollStatutoryGradeLevelDisplay" class="form-control bg-light"
-                    placeholder="Select payroll master record first" readonly />
+                    placeholder="Select employee salary setup first" readonly />
 
                   <input type="hidden" id="payrollStatutoryGradeLevelId" />
                   <input type="hidden" id="payrollStatutoryGradeLevelSnapshot" />
 
                   <div id="payrollStatutoryGradeLevelHelp" class="form-text">
-                    This is pulled from the selected Payroll Master Record.
+                    This is pulled from the selected Employee Salary Setup.
                   </div>
                 </div>
 
@@ -3446,10 +3471,10 @@
               <div class="row g-4">
                 <div class="col-md-6 col-xl-4">
                   <label for="payrollOtherDeductionMasterRecordId" class="form-label fw-semibold">
-                    Payroll Master Record <span class="text-danger">*</span>
+                    Employee Salary Setup <span class="text-danger">*</span>
                   </label>
                   <select id="payrollOtherDeductionMasterRecordId" class="form-select" required>
-                    <option value="">Select payroll master record</option>
+                    <option value="">Select employee salary setup</option>
                   </select>
                 </div>
 
@@ -3915,17 +3940,26 @@
           <div class="mb-4" style="scroll-margin-top: 96px;">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
               <div>
+                <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5
+     This card is the payroll finalisation workspace.
+     Payroll records are finalised here; payslips remain a separate deliberate action
+     after finalised records exist. -->
                 <h2 class="section-heading h4 mb-1" id="payrollFormTitle">
-                  Create Payroll Record
+                  Finalise Payroll &amp; Payslips
                 </h2>
                 <p class="section-subtext mb-0" id="payrollFormSubtext">
-                  Enter payroll details for an employee. Core monetary fields use NGN.
+                  Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are
+                  sent separately after payroll records are finalised.
                 </p>
               </div>
 
+              <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5C
+     Keep the Payroll collapse/expand button on one line.
+     The long "Finalise Payroll & Payslips" heading can squeeze this button,
+     so prevent flex shrinking and text wrapping. -->
               <button type="button" id="togglePayrollRecordCardBtn"
-                class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
-                aria-controls="payrollRecordCardCollapse">
+                class="btn btn-outline-secondary dashboard-action-btn text-nowrap d-inline-flex align-items-center justify-content-center flex-shrink-0 align-self-start"
+                aria-expanded="true" aria-controls="payrollRecordCardCollapse">
                 <i class="bi bi-chevron-up me-2"></i>
                 <span>Collapse</span>
               </button>
@@ -3935,7 +3969,7 @@
           <div id="payrollRecordCardCollapse">
             <div class="dashboard-toolbar hr-form-toolbar mb-4">
               <span id="payrollFormModeBadge" class="badge rounded-pill text-bg-light border px-3 py-2">
-                Create Mode
+                Single Employee Mode
               </span>
 
               <button type="button" id="cancelPayrollEditBtn"
@@ -3947,7 +3981,7 @@
      Top shortcut for long payroll forms. It submits the same payroll form
      as the bottom Submit Payroll button, without duplicating save logic. -->
               <button type="button" id="topSubmitPayrollBtn" class="btn btn-primary dashboard-action-btn text-nowrap">
-                <i class="bi bi-send-check me-2"></i>Submit Payroll
+                <i class="bi bi-send-check me-2"></i>Finalise Single Employee
               </button>
 
               <button type="button" id="resetPayrollFormBtn" class="btn btn-outline-secondary dashboard-action-btn">
@@ -4021,9 +4055,12 @@
             <div id="batchPayrollReviewPanel" class="alert alert-light border d-none mb-4">
               <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
                 <div>
-                  <div class="fw-bold">Batch Payroll Review</div>
+                  <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5B
+     This is the all-active employee review area before batch finalisation. -->
+                  <div class="fw-bold">Finalise All Active Employees</div>
                   <div class="small text-secondary">
-                    Review the selected employees before payroll calculation is prepared.
+                    Review active employees, salary setup readiness, payroll period, and pay date before finalising
+                    payroll records.
                   </div>
                 </div>
 
@@ -4116,12 +4153,12 @@
               <div
                 class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mt-3 pt-3 border-top">
                 <div class="small text-secondary">
-                  Only employees marked as ready will be submitted into Payroll Records.
+                  Only employees marked as ready will be finalised into Payroll Records.
                 </div>
 
                 <button type="button" id="submitBatchPayrollBtn"
                   class="btn btn-primary dashboard-action-btn text-nowrap" disabled>
-                  <i class="bi bi-send-check me-2"></i>Submit Batch Payroll
+                  <i class="bi bi-send-check me-2"></i>Finalise All Active Employees
                 </button>
               </div>
             </div>
@@ -4146,10 +4183,10 @@
        This heading separates manual single payroll from CSV/batch payroll.
        It avoids HR thinking the manual employee dropdown belongs to the CSV import flow. -->
               <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
-                <div class="fw-bold">Manual Single Payroll Entry</div>
+                <div class="fw-bold">Single Employee Finalisation</div>
                 <div class="small text-secondary">
-                  Use this section only when creating or editing one payroll record manually.
-                  For CSV batch payroll, use the Batch Payroll CSV Import and Batch Payroll Review sections above.
+                  Use this section when finalising payroll for one employee. For all active employees, use the
+                  all-active employee option and review the Batch Payroll Review table before finalising.
                 </div>
               </div>
 
@@ -4171,19 +4208,19 @@
                      It prepares all active employees through Batch Payroll Review. -->
                 <div class="col-md-6 col-xl-4">
                   <label class="form-label fw-semibold">
-                    Batch Selection
+                    All Active Employees
                   </label>
 
                   <div class="border rounded-4 p-3 bg-light-subtle">
                     <div class="form-check">
                       <input type="checkbox" id="selectAllPayrollEmployeesFromCreateCard" class="form-check-input" />
                       <label for="selectAllPayrollEmployeesFromCreateCard" class="form-check-label fw-semibold">
-                        Select all active employees
+                        Prepare all active employees
                       </label>
                     </div>
 
                     <div class="form-text">
-                      Sends all active employees into Batch Payroll Review. Inactive employees are excluded.
+                      Sends active employees into Batch Payroll Review. HR must review readiness before finalising.
                     </div>
                   </div>
                 </div>
@@ -4605,7 +4642,7 @@
      Submit Payroll story while keeping the current save behaviour intact. -->
                       <button type="submit" id="savePayrollBtn" class="btn btn-primary dashboard-action-btn">
                         <i class="bi bi-send-check me-2"></i>
-                        <span id="savePayrollBtnText">Submit Payroll</span>
+                        <span id="savePayrollBtnText">Finalise Single Employee</span>
                       </button>
                     </div>
                   </div>
