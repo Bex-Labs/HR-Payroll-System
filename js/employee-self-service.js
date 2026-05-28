@@ -272,6 +272,19 @@
   }
 
   // -----------------------------------------------------------------------
+  // Card expand/collapse helper
+  // -----------------------------------------------------------------------
+  function setSsCardExpanded(btn, body, shouldExpand) {
+    if (!btn || !body) return;
+    body.classList.toggle("d-none", !shouldExpand);
+    btn.querySelector("i")?.classList.toggle("bi-chevron-down", !shouldExpand);
+    btn.querySelector("i")?.classList.toggle("bi-chevron-up", shouldExpand);
+    const label = btn.querySelector("span");
+    if (label) label.textContent = shouldExpand ? "Collapse" : "Expand";
+    btn.setAttribute("aria-expanded", String(shouldExpand));
+  }
+
+  // -----------------------------------------------------------------------
   // Leave Balances collapse
   // -----------------------------------------------------------------------
   function bindSsLeaveBalancesCardEvents() {
@@ -1518,6 +1531,18 @@
 
     // Default sub-section: leave
     switchSsSubSection("leave");
+
+    // Auto-expand key cards so the section does not look empty on first open
+    setSsCardExpanded(
+      ssState.dom.ssToggleLeaveBalancesCardBtn,
+      ssState.dom.ssLeaveBalancesCardCollapse,
+      true,
+    );
+    setSsCardExpanded(
+      ssState.dom.ssToggleLeaveHistoryCardBtn,
+      ssState.dom.ssLeaveHistoryCardCollapse,
+      true,
+    );
   }
 
   // -----------------------------------------------------------------------
