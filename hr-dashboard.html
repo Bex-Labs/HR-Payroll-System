@@ -884,42 +884,42 @@
                Without this wrapper, the stepper renders vertically and looks broken. -->
 
           <div id="employeeFormCardCollapse">
-                      <div class="bexhr-form-steps mb-4" id="employeeFormSteps">
-            <div class="bexhr-form-step form-step-done" data-step="1" title="Core Details">
-              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">1</span></div>
-              <span class="bexhr-step-label">Core Details</span>
+            <div class="bexhr-form-steps mb-4" id="employeeFormSteps">
+              <div class="bexhr-form-step form-step-done" data-step="1" title="Core Details">
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">1</span></div>
+                <span class="bexhr-step-label">Core Details</span>
+              </div>
+              <div class="bexhr-form-step-connector"></div>
+              <div class="bexhr-form-step" data-step="2" title="Reporting Lines">
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">2</span></div>
+                <span class="bexhr-step-label">Reporting</span>
+              </div>
+              <div class="bexhr-form-step-connector"></div>
+              <div class="bexhr-form-step" data-step="3" title="Dependants / Beneficiaries">
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">3</span></div>
+                <span class="bexhr-step-label">Dependants</span>
+              </div>
+              <div class="bexhr-form-step-connector"></div>
+              <div class="bexhr-form-step" data-step="4" title="Address Details">
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">4</span></div>
+                <span class="bexhr-step-label">Address</span>
+              </div>
+              <div class="bexhr-form-step-connector"></div>
+              <div class="bexhr-form-step" data-step="5" title="Next of Kin">
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">5</span></div>
+                <span class="bexhr-step-label">Next of Kin</span>
+              </div>
+              <div class="bexhr-form-step-connector"></div>
+              <div class="bexhr-form-step" data-step="6" title="Education">
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">6</span></div>
+                <span class="bexhr-step-label">Education</span>
+              </div>
+              <div class="bexhr-form-step-connector"></div>
+              <div class="bexhr-form-step" data-step="7" title="Documents">
+                <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">7</span></div>
+                <span class="bexhr-step-label">Documents</span>
+              </div>
             </div>
-            <div class="bexhr-form-step-connector"></div>
-            <div class="bexhr-form-step" data-step="2" title="Reporting Lines">
-              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">2</span></div>
-              <span class="bexhr-step-label">Reporting</span>
-            </div>
-            <div class="bexhr-form-step-connector"></div>
-            <div class="bexhr-form-step" data-step="3" title="Dependants / Beneficiaries">
-              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">3</span></div>
-              <span class="bexhr-step-label">Dependants</span>
-            </div>
-            <div class="bexhr-form-step-connector"></div>
-            <div class="bexhr-form-step" data-step="4" title="Address Details">
-              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">4</span></div>
-              <span class="bexhr-step-label">Address</span>
-            </div>
-            <div class="bexhr-form-step-connector"></div>
-            <div class="bexhr-form-step" data-step="5" title="Next of Kin">
-              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">5</span></div>
-              <span class="bexhr-step-label">Next of Kin</span>
-            </div>
-            <div class="bexhr-form-step-connector"></div>
-            <div class="bexhr-form-step" data-step="6" title="Education">
-              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">6</span></div>
-              <span class="bexhr-step-label">Education</span>
-            </div>
-            <div class="bexhr-form-step-connector"></div>
-            <div class="bexhr-form-step" data-step="7" title="Documents">
-              <div class="bexhr-step-dot"><i class="bi bi-check-lg"></i><span class="bexhr-step-num">7</span></div>
-              <span class="bexhr-step-label">Documents</span>
-            </div>
-          </div>
             <div class="dashboard-toolbar hr-form-toolbar mb-4">
               <!-- CREATE EMPLOYEE PROFILE HEADER REPAIR - STEP 3
                    Employee form badge must not reuse payrollFormModeBadge.
@@ -1048,6 +1048,21 @@
                   <input type="text" id="phoneNumber" class="form-control" placeholder="Enter phone number" />
                 </div>
 
+                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 2A
+                     Alternative Phone Number is optional HR contact data.
+                     It must stay separate from the primary phone number so HR has
+                     a backup contact without overwriting the employee's main number. -->
+                <div class="col-md-6 col-xl-4">
+                  <label for="alternativePhoneNumber" class="form-label fw-semibold">
+                    Alternative Phone Number
+                  </label>
+                  <input type="text" id="alternativePhoneNumber" class="form-control"
+                    placeholder="Enter alternative phone number" />
+                  <div class="form-text">
+                    Optional backup contact number for HR records.
+                  </div>
+                </div>
+
                 <!-- EMPLOYEE BIODATA COMPLETION - STEP 2A
      Personal Details stores stable HR biodata directly on the employee profile. -->
                 <div class="col-12">
@@ -1093,6 +1108,145 @@
                     Nationality
                   </label>
                   <input type="text" id="nationality" class="form-control" placeholder="Example: Nigerian" />
+                </div>
+
+                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 2B
+                     Origin Details are personal HR biodata, not employment setup.
+                     State and LGA are controlled values; Town remains free text
+                     because towns/villages/communities vary widely. -->
+                <div class="col-12">
+                  <h3 class="h6 fw-bold mb-2 mt-2">Origin Details</h3>
+                  <p class="text-secondary small mb-0">
+                    Capture state of origin, local government area, and town/community where required for HR records.
+                  </p>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="stateOfOrigin" class="form-label fw-semibold">
+                    State of Origin
+                  </label>
+                  <select id="stateOfOrigin" class="form-select">
+                    <option value="">Select state of origin</option>
+                  </select>
+                  <div class="form-text">
+                    Local Government Area will load after a state is selected.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="localGovernmentArea" class="form-label fw-semibold">
+                    Local Government Area
+                  </label>
+                  <select id="localGovernmentArea" class="form-select" disabled>
+                    <option value="">Select state first</option>
+                  </select>
+                  <div class="form-text">
+                    This list is controlled by the selected State of Origin.
+                  </div>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="town" class="form-label fw-semibold">
+                    Town / Village / Community
+                  </label>
+                  <input type="text" id="town" class="form-control" placeholder="Enter town, village, or community" />
+                </div>
+
+                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 2B
+                     Identity Verification records the employee's primary ID evidence.
+                     Validation and document mismatch checks will be wired in JavaScript
+                     after the UI fields are confirmed clean. -->
+                <div class="col-12">
+                  <h3 class="h6 fw-bold mb-2 mt-2">Identity Verification</h3>
+                  <p class="text-secondary small mb-0">
+                    Record the employee’s primary means of identification and supporting identity details.
+                  </p>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="meansOfIdentification" class="form-label fw-semibold">
+                    Means of Identification
+                  </label>
+                  <select id="meansOfIdentification" class="form-select">
+                    <option value="">Select means of identification</option>
+                    <option value="National ID / NIN Slip">National ID / NIN Slip</option>
+                    <option value="International Passport">International Passport</option>
+                    <option value="Driver's Licence">Driver's Licence</option>
+                    <option value="Voter's Card / PVC">Voter's Card / PVC</option>
+                    <option value="Birth Certificate">Birth Certificate</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                  <label for="identificationIssueState" class="form-label fw-semibold">
+                    Issuing State / Authority
+                  </label>
+                  <select id="identificationIssueState" class="form-select">
+                    <option value="">Select issuing state or authority</option>
+                  </select>
+                  <div class="form-text">
+                    Some identity documents are issued by a federal authority rather than a state.
+                  </div>
+                </div>
+
+                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
+                     NIN is only relevant when National ID / NIN Slip is selected.
+                     Keep this field hidden by default and let JavaScript show it
+                     only when the selected Means of Identification requires it. -->
+                <div id="ninFieldCol" class="col-md-6 col-xl-4 d-none">
+                  <label for="nin" class="form-label fw-semibold">
+                    NIN
+                  </label>
+                  <input type="text" id="nin" class="form-control" placeholder="Enter 11-digit NIN" inputmode="numeric"
+                    maxlength="11" />
+                  <div class="form-text">
+                    Required only when National ID / NIN Slip is used as the primary identification document.
+                  </div>
+                  <div class="invalid-feedback">
+                    NIN must be exactly 11 digits when provided.
+                  </div>
+                </div>
+
+                <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5B
+                     HR should not scroll down to Supporting Documents just to attach
+                     the selected Means of Identification evidence. This field is a
+                     second entry point into the same existing pending document pipeline,
+                     not a separate upload/save system. -->
+                <div class="col-12">
+                  <div class="border rounded-4 p-3 p-lg-4 bg-light-subtle">
+                    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-3">
+                      <div>
+                        <div class="fw-bold">Identification Evidence</div>
+                        <div class="small text-secondary">
+                          Upload the evidence file that matches the selected Means of Identification.
+                        </div>
+                      </div>
+
+                      <span class="badge rounded-pill text-bg-light border px-3 py-2">
+                        Uses pending uploads
+                      </span>
+                    </div>
+
+                    <div class="row g-3 align-items-end">
+                      <div class="col-lg-7">
+                        <label for="employeeIdentityEvidenceInput" class="form-label fw-semibold">
+                          Upload Identification Evidence
+                        </label>
+                        <input type="file" id="employeeIdentityEvidenceInput" class="form-control"
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" />
+                        <div class="form-text">
+                          Select Means of Identification first. The system will automatically classify this file as the matching identity document type.
+                        </div>
+                      </div>
+
+                      <div class="col-lg-5">
+                        <div class="alert alert-light border mb-0 small">
+                          The uploaded file will appear under <strong>Pending Uploads</strong> below and will be saved when the employee profile is created or updated.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="col-12">
@@ -1483,12 +1637,15 @@
                     <div class="row g-3">
                       <div class="col-12">
                         <label for="employeeCurrentAddressLine1" class="form-label fw-semibold">
-                          Current Address
+                          Address Line
                         </label>
+                        <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 2D
+     Keep the Current Address card title, but avoid repeating the same
+     wording as the field label. This makes the address block easier for HR to scan. -->
                         <!-- EMPLOYEE BIODATA COMPLETION - STEP 4I
-     Disable browser address autofill popup on HR employee address fields. -->
+Disable browser address autofill popup on HR employee address fields. -->
                         <input type="text" id="employeeCurrentAddressLine1" class="form-control"
-                          placeholder="Enter current address" autocomplete="new-password" />
+                          placeholder="Enter current residential address" autocomplete="new-password" />
                         <div class="invalid-feedback">Current address is required if other current address details are
                           entered.</div>
                       </div>
@@ -1535,8 +1692,11 @@
                     <div class="row g-3">
                       <div class="col-12">
                         <label for="employeePermanentAddressLine1" class="form-label fw-semibold">
-                          Permanent Address
+                          Address Line
                         </label>
+                        <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 2D
+     Keep the Permanent Address card title, but avoid repeating the same
+     wording as the field label. -->
                         <input type="text" id="employeePermanentAddressLine1" class="form-control"
                           placeholder="Enter permanent/home address" autocomplete="new-password" />
                         <div class="invalid-feedback">Permanent address is required if other permanent address details
@@ -1868,6 +2028,12 @@
                             <option value="CV / Resume">CV / Resume</option>
                             <option value="National ID">National ID</option>
                             <option value="International Passport">International Passport</option>
+                            <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 2C
+                                 Add identity evidence types that match the new
+                                 Means of Identification options. JavaScript
+                                 filename restriction will be extended later. -->
+                            <option value="Driver's Licence">Driver's Licence</option>
+                            <option value="Voter's Card / PVC">Voter's Card / PVC</option>
                             <option value="Offer Letter">Offer Letter</option>
                             <option value="Employment Contract">Employment Contract</option>
                             <option value="Other">Other</option>
@@ -1977,6 +2143,17 @@
                   <span id="employeePayrollSelectionSummary" class="text-secondary small">
                     0 employees selected for this month.
                   </span>
+                </div>
+
+                <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 2A
+                     Download a safe HR employee list export.
+                     This is intentionally list-level only and excludes sensitive
+                     identity values such as NIN and document links. -->
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                  <button type="button" id="downloadEmployeeListCsvBtn"
+                    class="btn btn-outline-success dashboard-action-btn">
+                    <i class="bi bi-download me-2"></i>Download Employee List
+                  </button>
                 </div>
               </div>
 
@@ -4990,6 +5167,44 @@
           <button type="button" id="closePayslipPreviewFooterBtn"
             class="btn btn-outline-secondary dashboard-action-btn">
             Close Preview
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+       Read-only HR view of the employee's filled form.
+       This is intentionally separate from Edit Employee Profile so HR can
+       review records without accidentally changing saved employee data. -->
+  <div id="employeeFilledFormModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
+    style="z-index: 1055; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
+      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 980px; max-height: 92vh; overflow: auto;">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+          <div>
+            <h2 id="employeeFilledFormTitle" class="h4 mb-1">Employee Filled Form</h2>
+            <p class="text-secondary mb-0">
+              Read-only HR view of the employee information currently held on record.
+            </p>
+          </div>
+
+          <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Close employee filled form"
+            onclick="window.hrCloseEmployeeFilledForm?.()">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div id="employeeFilledFormContent" class="card-body p-4">
+          <div class="text-center text-secondary py-4">
+            Select an employee record to view the filled form.
+          </div>
+        </div>
+
+        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+          <button type="button" class="btn btn-outline-secondary dashboard-action-btn"
+            onclick="window.hrCloseEmployeeFilledForm?.()">
+            Close View
           </button>
         </div>
       </div>

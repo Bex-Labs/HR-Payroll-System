@@ -769,10 +769,10 @@
             </div>
 
             <div id="adminUserCompanyAssignmentCollapse">
-              <!-- ADMIN COMPANY USER BOOTSTRAP - STEP 1C
-       Platform Admin can invite a company-scoped HR/payroll/manager/employee user
-       directly into a selected company workspace. This avoids manual Supabase user
-       creation and does not require Admin to log into another company. -->
+              <!-- ADMIN COMPANY USER BOOTSTRAP - STEP 1E
+       Platform Admin can invite a company-scoped HR, manager, or employee user
+       directly into a selected company workspace. Payroll is intentionally not
+       exposed here because company bootstrap should remain access-light. -->
               <div class="alert alert-light border rounded-4 mb-4">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
                   <div>
@@ -780,7 +780,7 @@
                       Invite company user
                     </div>
                     <div class="small text-secondary">
-                      Create a company-scoped login account for HR, payroll, manager, or employee access.
+                      Create a company-scoped login account for HR, manager, or employee access.
                       Use this when a newly created company needs its first HR user.
                     </div>
                   </div>
@@ -819,8 +819,10 @@
                       Role <span class="text-danger">*</span>
                     </label>
                     <select id="companyUserRole" class="form-select" required>
+                      <!-- ADMIN COMPANY USER BOOTSTRAP - STEP 1E
+       Admin bootstrap roles are restricted to HR, Manager, and Employee.
+       Payroll access should be controlled separately if needed later. -->
                       <option value="hr" selected>HR</option>
-                      <option value="payroll">Payroll</option>
                       <option value="manager">Manager</option>
                       <option value="employee">Employee</option>
                     </select>
@@ -845,15 +847,15 @@
 
                   <div class="col-lg-6">
                     <label for="companyUserDepartment" class="form-label fw-semibold">
-                      Department <span class="text-danger">*</span>
+                      Department <span class="text-secondary small">(optional)</span>
                     </label>
-                    <select id="companyUserDepartment" class="form-select" required disabled>
+                    <select id="companyUserDepartment" class="form-select" disabled>
                       <option value="">Select a company first</option>
                     </select>
                     <div class="form-text">
-                      Loaded from the selected company’s department list.
+                      Optional during first HR bootstrap. HR can maintain company departments after access is created.
                     </div>
-                    <div class="invalid-feedback">Select a department.</div>
+                    <div class="invalid-feedback">Select a department or leave it blank for first-user setup.</div>
                   </div>
 
                   <div class="col-12">

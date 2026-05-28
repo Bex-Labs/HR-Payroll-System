@@ -385,6 +385,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       startEmployeeEdit(employeeId);
     };
 
+    // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+    // Expose read-only filled-form review actions used by the Employee List
+    // and the read-only modal. This must sit beside the other global HR row
+    // action handlers because the employee table uses inline onclick handlers.
+    window.hrViewEmployeeFilledForm = viewEmployeeFilledForm;
+    window.hrCloseEmployeeFilledForm = closeEmployeeFilledFormModal;
+
     // MANAGER ROLE ASSIGNMENT
     // Expose the manager role toggle for the employee list action button.
     window.hrToggleManagerRole = (employeeId) => {
@@ -526,6 +533,1104 @@ const TENANT_CONTEXT_STORAGE_KEY = "hrPayrollTenantContext";
 // Remembers only the active HR workspace tab during browser refresh.
 // This must stay sessionStorage-based so logout/new sessions return to Profile.
 const HR_DASHBOARD_WORKSPACE_MEMORY_PREFIX = "hrPayroll:lastHrWorkspace";
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
+// Controlled Nigerian state list used by State of Origin and issuing-state fields.
+// Keep this in JavaScript, not hardcoded inside the HTML, so the form can be
+// populated consistently during create, reset, and edit modes.
+const NIGERIAN_STATE_OPTIONS = [
+  "Abia",
+  "Adamawa",
+  "Akwa Ibom",
+  "Anambra",
+  "Bauchi",
+  "Bayelsa",
+  "Benue",
+  "Borno",
+  "Cross River",
+  "Delta",
+  "Ebonyi",
+  "Edo",
+  "Ekiti",
+  "Enugu",
+  "Federal Capital Territory",
+  "Gombe",
+  "Imo",
+  "Jigawa",
+  "Kaduna",
+  "Kano",
+  "Katsina",
+  "Kebbi",
+  "Kogi",
+  "Kwara",
+  "Lagos",
+  "Nasarawa",
+  "Niger",
+  "Ogun",
+  "Ondo",
+  "Osun",
+  "Oyo",
+  "Plateau",
+  "Rivers",
+  "Sokoto",
+  "Taraba",
+  "Yobe",
+  "Zamfara",
+];
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
+// Issuing authority options change based on the selected means of identification.
+// This avoids forcing a state for documents that are normally federal/authority-issued.
+function getIdentityIssuingAuthorityOptions(meansOfIdentification = "") {
+  const selectedType = String(meansOfIdentification || "").trim();
+
+  if (selectedType === "National ID / NIN Slip") {
+    return ["Federal / NIMC"];
+  }
+
+  if (selectedType === "International Passport") {
+    return ["Federal / Nigerian Immigration Service"];
+  }
+
+  if (selectedType === "Driver's Licence") {
+    return ["Federal Road Safety Corps", ...NIGERIAN_STATE_OPTIONS];
+  }
+
+  if (selectedType === "Voter's Card / PVC") {
+    return ["Independent National Electoral Commission", ...NIGERIAN_STATE_OPTIONS];
+  }
+
+  if (selectedType === "Birth Certificate") {
+    return ["National Population Commission", ...NIGERIAN_STATE_OPTIONS];
+  }
+
+  return [
+    "Federal / Other Authority",
+    ...NIGERIAN_STATE_OPTIONS,
+  ];
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
+// Shared select builder for controlled HR biodata dropdowns.
+// It preserves a saved value during edit mode even if the value is no longer
+// in the controlled list, preventing older employee records from being blanked.
+function populateControlledSelectOptions(selectElement, options = [], placeholder = "Select option", preferredValue = "") {
+  if (!selectElement) return;
+
+  const currentValue = String(
+    preferredValue || selectElement.value || "",
+  ).trim();
+
+  selectElement.innerHTML = "";
+
+  const placeholderOption = document.createElement("option");
+  placeholderOption.value = "";
+  placeholderOption.textContent = placeholder;
+  selectElement.appendChild(placeholderOption);
+
+  options.forEach((optionValue) => {
+    const cleanValue = String(optionValue || "").trim();
+    if (!cleanValue) return;
+
+    const option = document.createElement("option");
+    option.value = cleanValue;
+    option.textContent = cleanValue;
+    selectElement.appendChild(option);
+  });
+
+  if (currentValue) {
+    const matchingOption = Array.from(selectElement.options).find(
+      (option) => normalizeText(option.value) === normalizeText(currentValue),
+    );
+
+    if (matchingOption) {
+      selectElement.value = matchingOption.value;
+    } else {
+      const savedOption = document.createElement("option");
+      savedOption.value = currentValue;
+      savedOption.textContent = `${currentValue} (saved value)`;
+      selectElement.appendChild(savedOption);
+      selectElement.value = currentValue;
+    }
+  }
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3B
+// Controlled Nigerian Local Government Area list by State of Origin.
+// This is used only for the employee origin dropdown relationship.
+// Keep it as one source of truth so we do not duplicate LGA options in HTML.
+const NIGERIAN_LGA_OPTIONS_BY_STATE = Object.freeze({
+  Abia: [
+    "Aba North",
+    "Aba South",
+    "Arochukwu",
+    "Bende",
+    "Ikwuano",
+    "Isiala Ngwa North",
+    "Isiala Ngwa South",
+    "Isuikwuato",
+    "Obi Ngwa",
+    "Ohafia",
+    "Osisioma Ngwa",
+    "Ugwunagbo",
+    "Ukwa East",
+    "Ukwa West",
+    "Umuahia North",
+    "Umuahia South",
+    "Umu Nneochi",
+  ],
+  Adamawa: [
+    "Demsa",
+    "Fufore",
+    "Ganye",
+    "Girei",
+    "Gombi",
+    "Guyuk",
+    "Hong",
+    "Jada",
+    "Lamurde",
+    "Madagali",
+    "Maiha",
+    "Mayo Belwa",
+    "Michika",
+    "Mubi North",
+    "Mubi South",
+    "Numan",
+    "Shelleng",
+    "Song",
+    "Toungo",
+    "Yola North",
+    "Yola South",
+  ],
+  "Akwa Ibom": [
+    "Abak",
+    "Eastern Obolo",
+    "Eket",
+    "Esit Eket",
+    "Essien Udim",
+    "Etim Ekpo",
+    "Etinan",
+    "Ibeno",
+    "Ibesikpo Asutan",
+    "Ibiono-Ibom",
+    "Ika",
+    "Ikono",
+    "Ikot Abasi",
+    "Ikot Ekpene",
+    "Ini",
+    "Itu",
+    "Mbo",
+    "Mkpat-Enin",
+    "Nsit-Atai",
+    "Nsit-Ibom",
+    "Nsit-Ubium",
+    "Obot Akara",
+    "Okobo",
+    "Onna",
+    "Oron",
+    "Oruk Anam",
+    "Udung-Uko",
+    "Ukanafun",
+    "Uruan",
+    "Urue-Offong/Oruko",
+    "Uyo",
+  ],
+  Anambra: [
+    "Aguata",
+    "Anambra East",
+    "Anambra West",
+    "Anaocha",
+    "Awka North",
+    "Awka South",
+    "Ayamelum",
+    "Dunukofia",
+    "Ekwusigo",
+    "Idemili North",
+    "Idemili South",
+    "Ihiala",
+    "Njikoka",
+    "Nnewi North",
+    "Nnewi South",
+    "Ogbaru",
+    "Onitsha North",
+    "Onitsha South",
+    "Orumba North",
+    "Orumba South",
+    "Oyi",
+  ],
+  Bauchi: [
+    "Alkaleri",
+    "Bauchi",
+    "Bogoro",
+    "Damban",
+    "Darazo",
+    "Dass",
+    "Gamawa",
+    "Ganjuwa",
+    "Giade",
+    "Itas/Gadau",
+    "Jama'are",
+    "Katagum",
+    "Kirfi",
+    "Misau",
+    "Ningi",
+    "Shira",
+    "Tafawa Balewa",
+    "Toro",
+    "Warji",
+    "Zaki",
+  ],
+  Bayelsa: [
+    "Brass",
+    "Ekeremor",
+    "Kolokuma/Opokuma",
+    "Nembe",
+    "Ogbia",
+    "Sagbama",
+    "Southern Ijaw",
+    "Yenagoa",
+  ],
+  Benue: [
+    "Ado",
+    "Agatu",
+    "Apa",
+    "Buruku",
+    "Gboko",
+    "Guma",
+    "Gwer East",
+    "Gwer West",
+    "Katsina-Ala",
+    "Konshisha",
+    "Kwande",
+    "Logo",
+    "Makurdi",
+    "Obi",
+    "Ogbadibo",
+    "Ohimini",
+    "Oju",
+    "Okpokwu",
+    "Otukpo",
+    "Tarka",
+    "Ukum",
+    "Ushongo",
+    "Vandeikya",
+  ],
+  Borno: [
+    "Abadam",
+    "Askira/Uba",
+    "Bama",
+    "Bayo",
+    "Biu",
+    "Chibok",
+    "Damboa",
+    "Dikwa",
+    "Gubio",
+    "Guzamala",
+    "Gwoza",
+    "Hawul",
+    "Jere",
+    "Kaga",
+    "Kala/Balge",
+    "Konduga",
+    "Kukawa",
+    "Kwaya Kusar",
+    "Mafa",
+    "Magumeri",
+    "Maiduguri",
+    "Marte",
+    "Mobbar",
+    "Monguno",
+    "Ngala",
+    "Nganzai",
+    "Shani",
+  ],
+  "Cross River": [
+    "Abi",
+    "Akamkpa",
+    "Akpabuyo",
+    "Bakassi",
+    "Bekwarra",
+    "Biase",
+    "Boki",
+    "Calabar Municipal",
+    "Calabar South",
+    "Etung",
+    "Ikom",
+    "Obanliku",
+    "Obubra",
+    "Obudu",
+    "Odukpani",
+    "Ogoja",
+    "Yakurr",
+    "Yala",
+  ],
+  Delta: [
+    "Aniocha North",
+    "Aniocha South",
+    "Bomadi",
+    "Burutu",
+    "Ethiope East",
+    "Ethiope West",
+    "Ika North East",
+    "Ika South",
+    "Isoko North",
+    "Isoko South",
+    "Ndokwa East",
+    "Ndokwa West",
+    "Okpe",
+    "Oshimili North",
+    "Oshimili South",
+    "Patani",
+    "Sapele",
+    "Udu",
+    "Ughelli North",
+    "Ughelli South",
+    "Ukwuani",
+    "Uvwie",
+    "Warri North",
+    "Warri South",
+    "Warri South West",
+  ],
+  Ebonyi: [
+    "Abakaliki",
+    "Afikpo",
+    "Edda",
+    "Ebonyi",
+    "Ezza North",
+    "Ezza South",
+    "Ikwo",
+    "Ishielu",
+    "Ivo",
+    "Izzi",
+    "Ohaozara",
+    "Ohaukwu",
+    "Onicha",
+  ],
+  Edo: [
+    "Akoko-Edo",
+    "Egor",
+    "Esan Central",
+    "Esan North-East",
+    "Esan South-East",
+    "Esan West",
+    "Etsako Central",
+    "Etsako East",
+    "Etsako West",
+    "Igueben",
+    "Ikpoba Okha",
+    "Orhionmwon",
+    "Oredo",
+    "Ovia North-East",
+    "Ovia South-West",
+    "Owan East",
+    "Owan West",
+    "Uhunmwonde",
+  ],
+  Ekiti: [
+    "Ado Ekiti",
+    "Efon",
+    "Ekiti East",
+    "Ekiti South-West",
+    "Ekiti West",
+    "Emure",
+    "Gbonyin",
+    "Ido Osi",
+    "Ijero",
+    "Ikere",
+    "Ikole",
+    "Ilejemeje",
+    "Irepodun/Ifelodun",
+    "Ise/Orun",
+    "Moba",
+    "Oye",
+  ],
+  Enugu: [
+    "Aninri",
+    "Awgu",
+    "Enugu East",
+    "Enugu North",
+    "Enugu South",
+    "Ezeagu",
+    "Igbo Etiti",
+    "Igbo Eze North",
+    "Igbo Eze South",
+    "Isi Uzo",
+    "Nkanu East",
+    "Nkanu West",
+    "Nsukka",
+    "Oji River",
+    "Udenu",
+    "Udi",
+    "Uzo-Uwani",
+  ],
+  "Federal Capital Territory": [
+    "Abaji",
+    "Abuja Municipal Area Council",
+    "Bwari",
+    "Gwagwalada",
+    "Kuje",
+    "Kwali",
+  ],
+  Gombe: [
+    "Akko",
+    "Balanga",
+    "Billiri",
+    "Dukku",
+    "Funakaye",
+    "Gombe",
+    "Kaltungo",
+    "Kwami",
+    "Nafada",
+    "Shongom",
+    "Yamaltu/Deba",
+  ],
+  Imo: [
+    "Aboh Mbaise",
+    "Ahiazu Mbaise",
+    "Ehime Mbano",
+    "Ezinihitte",
+    "Ideato North",
+    "Ideato South",
+    "Ihitte/Uboma",
+    "Ikeduru",
+    "Isiala Mbano",
+    "Isu",
+    "Mbaitoli",
+    "Ngor Okpala",
+    "Njaba",
+    "Nkwerre",
+    "Nwangele",
+    "Obowo",
+    "Oguta",
+    "Ohaji/Egbema",
+    "Okigwe",
+    "Onuimo",
+    "Orlu",
+    "Orsu",
+    "Oru East",
+    "Oru West",
+    "Owerri Municipal",
+    "Owerri North",
+    "Owerri West",
+  ],
+  Jigawa: [
+    "Auyo",
+    "Babura",
+    "Biriniwa",
+    "Birnin Kudu",
+    "Buji",
+    "Dutse",
+    "Gagarawa",
+    "Garki",
+    "Gumel",
+    "Guri",
+    "Gwaram",
+    "Gwiwa",
+    "Hadejia",
+    "Jahun",
+    "Kafin Hausa",
+    "Kazaure",
+    "Kiri Kasama",
+    "Kiyawa",
+    "Kaugama",
+    "Maigatari",
+    "Malam Madori",
+    "Miga",
+    "Ringim",
+    "Roni",
+    "Sule Tankarkar",
+    "Taura",
+    "Yankwashi",
+  ],
+  Kaduna: [
+    "Birnin Gwari",
+    "Chikun",
+    "Giwa",
+    "Igabi",
+    "Ikara",
+    "Jaba",
+    "Jema'a",
+    "Kachia",
+    "Kaduna North",
+    "Kaduna South",
+    "Kagarko",
+    "Kajuru",
+    "Kaura",
+    "Kauru",
+    "Kubau",
+    "Kudan",
+    "Lere",
+    "Makarfi",
+    "Sabon Gari",
+    "Sanga",
+    "Soba",
+    "Zangon Kataf",
+    "Zaria",
+  ],
+  Kano: [
+    "Ajingi",
+    "Albasu",
+    "Bagwai",
+    "Bebeji",
+    "Bichi",
+    "Bunkure",
+    "Dala",
+    "Dambatta",
+    "Dawakin Kudu",
+    "Dawakin Tofa",
+    "Doguwa",
+    "Fagge",
+    "Gabasawa",
+    "Garko",
+    "Garun Mallam",
+    "Gaya",
+    "Gezawa",
+    "Gwale",
+    "Gwarzo",
+    "Kabo",
+    "Kano Municipal",
+    "Karaye",
+    "Kibiya",
+    "Kiru",
+    "Kumbotso",
+    "Kunchi",
+    "Kura",
+    "Madobi",
+    "Makoda",
+    "Minjibir",
+    "Nasarawa",
+    "Rano",
+    "Rimin Gado",
+    "Rogo",
+    "Shanono",
+    "Sumaila",
+    "Takai",
+    "Tarauni",
+    "Tofa",
+    "Tsanyawa",
+    "Tudun Wada",
+    "Ungogo",
+    "Warawa",
+    "Wudil",
+  ],
+  Katsina: [
+    "Bakori",
+    "Batagarawa",
+    "Batsari",
+    "Baure",
+    "Bindawa",
+    "Charanchi",
+    "Dandume",
+    "Danja",
+    "Dan Musa",
+    "Daura",
+    "Dutsi",
+    "Dutsin Ma",
+    "Faskari",
+    "Funtua",
+    "Ingawa",
+    "Jibia",
+    "Kafur",
+    "Kaita",
+    "Kankara",
+    "Kankia",
+    "Katsina",
+    "Kurfi",
+    "Kusada",
+    "Mai'Adua",
+    "Malumfashi",
+    "Mani",
+    "Mashi",
+    "Matazu",
+    "Musawa",
+    "Rimi",
+    "Sabuwa",
+    "Safana",
+    "Sandamu",
+    "Zango",
+  ],
+  Kebbi: [
+    "Aleiro",
+    "Arewa Dandi",
+    "Argungu",
+    "Augie",
+    "Bagudo",
+    "Birnin Kebbi",
+    "Bunza",
+    "Dandi",
+    "Fakai",
+    "Gwandu",
+    "Jega",
+    "Kalgo",
+    "Koko/Besse",
+    "Maiyama",
+    "Ngaski",
+    "Sakaba",
+    "Shanga",
+    "Suru",
+    "Wasagu/Danko",
+    "Yauri",
+    "Zuru",
+  ],
+  Kogi: [
+    "Adavi",
+    "Ajaokuta",
+    "Ankpa",
+    "Bassa",
+    "Dekina",
+    "Ibaji",
+    "Idah",
+    "Igalamela-Odolu",
+    "Ijumu",
+    "Kabba/Bunu",
+    "Kogi",
+    "Lokoja",
+    "Mopa-Muro",
+    "Ofu",
+    "Ogori/Magongo",
+    "Okehi",
+    "Okene",
+    "Olamaboro",
+    "Omala",
+    "Yagba East",
+    "Yagba West",
+  ],
+  Kwara: [
+    "Asa",
+    "Baruten",
+    "Edu",
+    "Ekiti",
+    "Ifelodun",
+    "Ilorin East",
+    "Ilorin South",
+    "Ilorin West",
+    "Irepodun",
+    "Isin",
+    "Kaiama",
+    "Moro",
+    "Offa",
+    "Oke Ero",
+    "Oyun",
+    "Pategi",
+  ],
+  Lagos: [
+    "Agege",
+    "Ajeromi-Ifelodun",
+    "Alimosho",
+    "Amuwo-Odofin",
+    "Apapa",
+    "Badagry",
+    "Epe",
+    "Eti Osa",
+    "Ibeju-Lekki",
+    "Ifako-Ijaiye",
+    "Ikeja",
+    "Ikorodu",
+    "Kosofe",
+    "Lagos Island",
+    "Lagos Mainland",
+    "Mushin",
+    "Ojo",
+    "Oshodi-Isolo",
+    "Shomolu",
+    "Surulere",
+  ],
+  Nasarawa: [
+    "Akwanga",
+    "Awe",
+    "Doma",
+    "Karu",
+    "Keana",
+    "Keffi",
+    "Kokona",
+    "Lafia",
+    "Nasarawa",
+    "Nasarawa Eggon",
+    "Obi",
+    "Toto",
+    "Wamba",
+  ],
+  Niger: [
+    "Agaie",
+    "Agwara",
+    "Bida",
+    "Borgu",
+    "Bosso",
+    "Chanchaga",
+    "Edati",
+    "Gbako",
+    "Gurara",
+    "Katcha",
+    "Kontagora",
+    "Lapai",
+    "Lavun",
+    "Magama",
+    "Mariga",
+    "Mashegu",
+    "Mokwa",
+    "Munya",
+    "Paikoro",
+    "Rafi",
+    "Rijau",
+    "Shiroro",
+    "Suleja",
+    "Tafa",
+    "Wushishi",
+  ],
+  Ogun: [
+    "Abeokuta North",
+    "Abeokuta South",
+    "Ado-Odo/Ota",
+    "Egbado North",
+    "Egbado South",
+    "Ewekoro",
+    "Ifo",
+    "Ijebu East",
+    "Ijebu North",
+    "Ijebu North East",
+    "Ijebu Ode",
+    "Ikenne",
+    "Imeko Afon",
+    "Ipokia",
+    "Obafemi Owode",
+    "Odeda",
+    "Odogbolu",
+    "Ogun Waterside",
+    "Remo North",
+    "Sagamu",
+  ],
+  Ondo: [
+    "Akoko North-East",
+    "Akoko North-West",
+    "Akoko South-East",
+    "Akoko South-West",
+    "Akure North",
+    "Akure South",
+    "Ese Odo",
+    "Idanre",
+    "Ifedore",
+    "Ilaje",
+    "Ile Oluji/Okeigbo",
+    "Irele",
+    "Odigbo",
+    "Okitipupa",
+    "Ondo East",
+    "Ondo West",
+    "Ose",
+    "Owo",
+  ],
+  Osun: [
+    "Aiyedaade",
+    "Aiyedire",
+    "Atakunmosa East",
+    "Atakunmosa West",
+    "Boluwaduro",
+    "Boripe",
+    "Ede North",
+    "Ede South",
+    "Egbedore",
+    "Ejigbo",
+    "Ife Central",
+    "Ife East",
+    "Ife North",
+    "Ife South",
+    "Ifedayo",
+    "Ifelodun",
+    "Ila",
+    "Ilesa East",
+    "Ilesa West",
+    "Irepodun",
+    "Irewole",
+    "Isokan",
+    "Iwo",
+    "Obokun",
+    "Odo Otin",
+    "Ola Oluwa",
+    "Olorunda",
+    "Oriade",
+    "Orolu",
+    "Osogbo",
+  ],
+  Oyo: [
+    "Afijio",
+    "Akinyele",
+    "Atiba",
+    "Atisbo",
+    "Egbeda",
+    "Ibadan North",
+    "Ibadan North-East",
+    "Ibadan North-West",
+    "Ibadan South-East",
+    "Ibadan South-West",
+    "Ibarapa Central",
+    "Ibarapa East",
+    "Ibarapa North",
+    "Ido",
+    "Irepo",
+    "Iseyin",
+    "Itesiwaju",
+    "Iwajowa",
+    "Kajola",
+    "Lagelu",
+    "Ogbomosho North",
+    "Ogbomosho South",
+    "Ogo Oluwa",
+    "Olorunsogo",
+    "Oluyole",
+    "Ona Ara",
+    "Orelope",
+    "Ori Ire",
+    "Oyo East",
+    "Oyo West",
+    "Saki East",
+    "Saki West",
+    "Surulere",
+  ],
+  Plateau: [
+    "Barkin Ladi",
+    "Bassa",
+    "Bokkos",
+    "Jos East",
+    "Jos North",
+    "Jos South",
+    "Kanam",
+    "Kanke",
+    "Langtang North",
+    "Langtang South",
+    "Mangu",
+    "Mikang",
+    "Pankshin",
+    "Qua'an Pan",
+    "Riyom",
+    "Shendam",
+    "Wase",
+  ],
+  Rivers: [
+    "Abua/Odual",
+    "Ahoada East",
+    "Ahoada West",
+    "Akuku-Toru",
+    "Andoni",
+    "Asari-Toru",
+    "Bonny",
+    "Degema",
+    "Eleme",
+    "Emohua",
+    "Etche",
+    "Gokana",
+    "Ikwerre",
+    "Khana",
+    "Obio/Akpor",
+    "Ogba/Egbema/Ndoni",
+    "Ogu/Bolo",
+    "Okrika",
+    "Omuma",
+    "Opobo/Nkoro",
+    "Oyigbo",
+    "Port Harcourt",
+    "Tai",
+  ],
+  Sokoto: [
+    "Binji",
+    "Bodinga",
+    "Dange Shuni",
+    "Gada",
+    "Goronyo",
+    "Gudu",
+    "Gwadabawa",
+    "Illela",
+    "Isa",
+    "Kebbe",
+    "Kware",
+    "Rabah",
+    "Sabon Birni",
+    "Shagari",
+    "Silame",
+    "Sokoto North",
+    "Sokoto South",
+    "Tambuwal",
+    "Tangaza",
+    "Tureta",
+    "Wamako",
+    "Wurno",
+    "Yabo",
+  ],
+  Taraba: [
+    "Ardo Kola",
+    "Bali",
+    "Donga",
+    "Gashaka",
+    "Gassol",
+    "Ibi",
+    "Jalingo",
+    "Karim Lamido",
+    "Kurmi",
+    "Lau",
+    "Sardauna",
+    "Takum",
+    "Ussa",
+    "Wukari",
+    "Yorro",
+    "Zing",
+  ],
+  Yobe: [
+    "Bade",
+    "Bursari",
+    "Damaturu",
+    "Fika",
+    "Fune",
+    "Geidam",
+    "Gujba",
+    "Gulani",
+    "Jakusko",
+    "Karasuwa",
+    "Machina",
+    "Nangere",
+    "Nguru",
+    "Potiskum",
+    "Tarmuwa",
+    "Yunusari",
+    "Yusufari",
+  ],
+  Zamfara: [
+    "Anka",
+    "Bakura",
+    "Birnin Magaji/Kiyaw",
+    "Bukkuyum",
+    "Bungudu",
+    "Gummi",
+    "Gusau",
+    "Kaura Namoda",
+    "Maradun",
+    "Maru",
+    "Shinkafi",
+    "Talata Mafara",
+    "Tsafe",
+    "Zurmi",
+  ],
+});
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3B
+// Resolve LGAs using the selected State of Origin.
+// Normalised comparison protects the form if a saved state value has
+// small spacing/casing differences.
+function getLocalGovernmentAreasForState(stateName = "") {
+  const selectedState = String(stateName || "").trim();
+
+  if (!selectedState) return [];
+
+  const matchedStateKey = Object.keys(NIGERIAN_LGA_OPTIONS_BY_STATE).find(
+    (stateKey) => normalizeText(stateKey) === normalizeText(selectedState),
+  );
+
+  return matchedStateKey
+    ? NIGERIAN_LGA_OPTIONS_BY_STATE[matchedStateKey]
+    : [];
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3B
+// Keep Local Government Area disabled until State of Origin is selected.
+// When State of Origin changes, the LGA list is rebuilt and any old LGA
+// selection is cleared unless a preferred edit-mode value is supplied.
+function syncLocalGovernmentAreaOptions(preferredValue = "") {
+  const selectedState = String(state.dom.stateOfOrigin?.value || "").trim();
+  const lgaOptions = getLocalGovernmentAreasForState(selectedState);
+
+  populateControlledSelectOptions(
+    state.dom.localGovernmentArea,
+    lgaOptions,
+    selectedState ? "Select local government area" : "Select state first",
+    preferredValue,
+  );
+
+  if (state.dom.localGovernmentArea) {
+    state.dom.localGovernmentArea.disabled = !selectedState;
+  }
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
+// Populate State of Origin. Local Government Area will be wired in the next
+// controlled-data step after the full LGA reference list is added safely.
+function populateStateOfOriginOptions(preferredValue = "") {
+  populateControlledSelectOptions(
+    state.dom.stateOfOrigin,
+    NIGERIAN_STATE_OPTIONS,
+    "Select state of origin",
+    preferredValue,
+  );
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
+// Populate Issuing State / Authority based on the selected ID type.
+function syncIdentificationIssueStateOptions(preferredValue = "", { clearCurrentValue = false } = {}) {
+  const selectedMeans = String(
+    state.dom.meansOfIdentification?.value || "",
+  ).trim();
+
+  const options = selectedMeans
+    ? getIdentityIssuingAuthorityOptions(selectedMeans)
+    : [];
+
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6B
+  // When HR manually changes Means of Identification, clear any old issuing
+  // authority so values like "Federal / NIMC" are not accidentally saved
+  // against Passport, Voter's Card/PVC, Driver's Licence, Birth Certificate, or Other.
+  // Edit mode can still pass a preferred saved value deliberately.
+  if (clearCurrentValue && state.dom.identificationIssueState) {
+    state.dom.identificationIssueState.value = "";
+  }
+
+  populateControlledSelectOptions(
+    state.dom.identificationIssueState,
+    options,
+    selectedMeans
+      ? "Select issuing state or authority"
+      : "Select means of identification first",
+    preferredValue,
+  );
+
+  if (state.dom.identificationIssueState) {
+    state.dom.identificationIssueState.disabled = !selectedMeans;
+  }
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
+// NIN is required only for National ID / NIN Slip.
+// Other identity documents should not expose or save NIN data.
+function isNinRequiredForMeansOfIdentification(meansOfIdentification = "") {
+  return String(meansOfIdentification || "").trim() === "National ID / NIN Slip";
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
+// Show NIN only when required. When HR switches away from National ID / NIN Slip,
+// clear the field so stale sensitive NIN data is not accidentally saved.
+function syncNinFieldVisibility({ clearWhenHidden = false } = {}) {
+  const selectedMeans = String(
+    state.dom.meansOfIdentification?.value || "",
+  ).trim();
+
+  const shouldShowNin = isNinRequiredForMeansOfIdentification(selectedMeans);
+
+  state.dom.ninFieldCol?.classList.toggle("d-none", !shouldShowNin);
+
+  if (state.dom.nin) {
+    state.dom.nin.required = shouldShowNin;
+    state.dom.nin.classList.remove("is-invalid");
+
+    if (!shouldShowNin && clearWhenHidden) {
+      state.dom.nin.value = "";
+    }
+  }
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
+// Initial dropdown setup for new employee form load/reset.
+function populateEmployeeOriginAndIdentityDropdowns() {
+  populateStateOfOriginOptions();
+  syncLocalGovernmentAreaOptions();
+  syncIdentificationIssueStateOptions();
+  syncNinFieldVisibility({ clearWhenHidden: true });
+}
 
 const state = {
   currentUser: null,
@@ -2215,6 +3320,22 @@ function cacheDomElements() {
     gender: document.getElementById("gender"),
     maritalStatus: document.getElementById("maritalStatus"),
     nationality: document.getElementById("nationality"),
+
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
+    // Cache optional origin/contact/identity fields added to the employee form.
+    // Save/edit/reset wiring comes after dropdown behaviour is confirmed.
+    alternativePhoneNumber: document.getElementById("alternativePhoneNumber"),
+    stateOfOrigin: document.getElementById("stateOfOrigin"),
+    localGovernmentArea: document.getElementById("localGovernmentArea"),
+    town: document.getElementById("town"),
+    meansOfIdentification: document.getElementById("meansOfIdentification"),
+    identificationIssueState: document.getElementById("identificationIssueState"),
+
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
+    // NIN field wrapper is shown only when National ID / NIN Slip is selected.
+    ninFieldCol: document.getElementById("ninFieldCol"),
+    nin: document.getElementById("nin"),
+
     exitDate: document.getElementById("exitDate"),
     hmoProvider: document.getElementById("hmoProvider"),
     hmoPlan: document.getElementById("hmoPlan"),
@@ -2330,6 +3451,11 @@ function cacheDomElements() {
 
     employeeDocumentsInput: document.getElementById("employeeDocumentsInput"),
 
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5B
+    // In-context identity evidence upload. This is not a separate document
+    // storage system; it feeds the same pendingFiles pipeline as Supporting Documents.
+    employeeIdentityEvidenceInput: document.getElementById("employeeIdentityEvidenceInput"),
+
     // DESCRIPTION ITEM 10 - STEP 1
     // Cache the document type selector so the next step can persist
     // the selected classification with each uploaded file.
@@ -2348,6 +3474,11 @@ function cacheDomElements() {
     attachedDocumentsList: document.getElementById("attachedDocumentsList"),
 
     employeeSearchInput: document.getElementById("employeeSearchInput"),
+
+    // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 2A
+    // Safe employee list CSV export. This is separate from batch employee import
+    // and separate from payroll bank/payment CSV export.
+    downloadEmployeeListCsvBtn: document.getElementById("downloadEmployeeListCsvBtn"),
     // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1B
     // Cache the Batch Employee Import UI elements added to the Employees workspace.
     // This only connects the existing HTML elements to JavaScript.
@@ -6857,6 +7988,14 @@ function bindEvents() {
   state.dom.employeeSearchInput?.addEventListener("input", () => {
     applyEmployeeSearch();
   });
+
+  // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 2A
+  // Export all loaded employee records for the current HR tenant/workspace.
+  // Search filtering does not limit this export because the button says
+  // Download Employee List, not Download Visible Search Results.
+  state.dom.downloadEmployeeListCsvBtn?.addEventListener("click", () => {
+    downloadEmployeeListCsv();
+  });
   // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1C
   // Wire only the safe actions first:
   // - Download Employee Template
@@ -6905,6 +8044,17 @@ function bindEvents() {
     state.dom.gender,
     state.dom.maritalStatus,
     state.dom.nationality,
+
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 4A
+    // Clear validation styling from optional origin/contact/identity fields.
+    state.dom.alternativePhoneNumber,
+    state.dom.stateOfOrigin,
+    state.dom.localGovernmentArea,
+    state.dom.town,
+    state.dom.meansOfIdentification,
+    state.dom.identificationIssueState,
+    state.dom.nin,
+
     state.dom.exitDate,
     state.dom.hmoProvider,
     state.dom.hmoPlan,
@@ -6983,6 +8133,28 @@ function bindEvents() {
   });
 
   state.dom.confirmHrRoleAssignment?.addEventListener("change", () => {
+    updateEmployeeSaveButtonState();
+  });
+
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3A
+  // Populate controlled dropdowns after DOM cache is ready.
+  // Means of Identification controls the issuing authority options.
+  populateEmployeeOriginAndIdentityDropdowns();
+
+  state.dom.stateOfOrigin?.addEventListener("change", () => {
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 3B
+    // State of Origin controls the LGA list. Clear stale LGA selection when
+    // HR changes the state so the saved origin details stay consistent.
+    syncLocalGovernmentAreaOptions();
+  });
+
+  state.dom.meansOfIdentification?.addEventListener("change", () => {
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6B
+    // Means of Identification controls issuing authority and NIN visibility.
+    // Always clear the previous issuing authority after a manual type change
+    // so HR cannot save a stale saved value by mistake.
+    syncIdentificationIssueStateOptions("", { clearCurrentValue: true });
+    syncNinFieldVisibility({ clearWhenHidden: true });
     updateEmployeeSaveButtonState();
   });
 
@@ -7117,6 +8289,13 @@ function bindEvents() {
 
   state.dom.employeeDocumentsInput?.addEventListener("change", (event) => {
     addPendingFiles(event.target.files);
+  });
+
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5B
+  // Uploading identity evidence beside Means of Identification stages the file
+  // into the same pending upload list with the correct document type.
+  state.dom.employeeIdentityEvidenceInput?.addEventListener("change", (event) => {
+    addIdentityEvidenceToPendingFiles(event.target.files);
   });
 
   state.dom.clearPendingDocumentsBtn?.addEventListener("click", () => {
@@ -10745,7 +11924,10 @@ function renderEmployeeDependantRecords(records = []) {
         : "";
 
       return `
-        <div class="list-group-item">
+        <!-- EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6C
+             Mark each rendered beneficiary/dependant row so the form progress
+             stepper can reliably detect saved/staged dependant records. -->
+        <div class="list-group-item" data-dependant-record="true">
           <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
             <div>
               <div class="fw-semibold">${fullName}</div>
@@ -11502,9 +12684,14 @@ function updateEmployeeFormSteps() {
     true,
     // Step 2: Reporting Lines — primary line manager selected
     hasVal(state.dom.assignedLineManagerEmployeeId),
-    // Step 3: Dependants — at least one dependant full name entered
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6C
+    // Step 3: Dependants — complete when HR has either started a visible
+    // dependant row or has saved/staged dependant records in the list.
+    // The old selector checked [data-dependant-id], but rendered rows do not
+    // have database IDs because rows are staged/replaced on employee save.
     hasVal(state.dom.employeeDependantFullName) ||
-    Boolean(state.dom.employeeDependantsRecordsList?.querySelector("[data-dependant-id]")),
+    Boolean(state.pendingEmployeeDependants?.length) ||
+    Boolean(state.dom.employeeDependantsRecordsList?.querySelector("[data-dependant-record]")),
     // Step 4: Address — current address line 1 entered
     hasVal(state.dom.employeeCurrentAddressLine1) || hasVal(state.dom.employeePermanentAddressLine1),
     // Step 5: Next of Kin — full name entered
@@ -11584,18 +12771,59 @@ function getPayrollGradeLevelLabel(grade = {}) {
 // These are controlled setup records, not hardcoded dropdown values.
 async function loadPayrollGradeLevels() {
   const supabase = getSupabaseClient();
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
 
-  const { data, error } = await supabase
+  // ALPATECH TENANT-SPECIFIC RULES - STEP 3
+  // Payroll Grade / Level records must be tenant-aware.
+  // First load grades owned by the active company/tenant. This makes ALPATECH
+  // see only its ALPATECH grade structure without affecting Pinehearst, BEX,
+  // or any future company workspace.
+  const tenantGradeQuery = await supabase
     .from("payroll_grade_levels")
-    .select("id, grade_code, grade_name, grade_description, salary_band_min, salary_band_max, status")
+    .select("id, tenant_id, grade_code, grade_name, grade_description, salary_band_min, salary_band_max, status")
+    .eq("tenant_id", tenantId)
     .eq("status", "Active")
     .order("grade_code", { ascending: true });
 
-  if (error) {
-    throw new Error(error.message || "Payroll grade levels could not be loaded.");
+  if (tenantGradeQuery.error) {
+    throw new Error(
+      tenantGradeQuery.error.message ||
+      "Tenant payroll grade levels could not be loaded.",
+    );
   }
 
-  state.payrollGradeLevels = Array.isArray(data) ? data : [];
+  const tenantGrades = Array.isArray(tenantGradeQuery.data)
+    ? tenantGradeQuery.data
+    : [];
+
+  if (tenantGrades.length) {
+    state.payrollGradeLevels = tenantGrades;
+    populatePayrollGradeLevelOptions();
+    return;
+  }
+
+  // ALPATECH TENANT-SPECIFIC RULES - STEP 3
+  // Fallback for existing companies that still use legacy/global grade records.
+  // This preserves current behaviour for non-ALPATECH tenants until their own
+  // tenant-owned grade structures are configured.
+  const legacyGradeQuery = await supabase
+    .from("payroll_grade_levels")
+    .select("id, tenant_id, grade_code, grade_name, grade_description, salary_band_min, salary_band_max, status")
+    .is("tenant_id", null)
+    .eq("status", "Active")
+    .order("grade_code", { ascending: true });
+
+  if (legacyGradeQuery.error) {
+    throw new Error(
+      legacyGradeQuery.error.message ||
+      "Legacy payroll grade levels could not be loaded.",
+    );
+  }
+
+  state.payrollGradeLevels = Array.isArray(legacyGradeQuery.data)
+    ? legacyGradeQuery.data
+    : [];
+
   populatePayrollGradeLevelOptions();
 }
 
@@ -11959,27 +13187,27 @@ async function handlePayrollMasterSave() {
 
     await refreshPayrollMasterWorkspace();
 
-showPageAlert(
-  "success",
-  isEditMode
-    ? `New Employee Salary Setup version was created successfully for effective date <strong>${escapeHtml(
-      payload.salary_effective_date,
-    )}</strong>.`
-    : `Employee Salary Setup was created successfully for effective date <strong>${escapeHtml(
-      payload.salary_effective_date,
-    )}</strong>.`,
-);
+    showPageAlert(
+      "success",
+      isEditMode
+        ? `New Employee Salary Setup version was created successfully for effective date <strong>${escapeHtml(
+          payload.salary_effective_date,
+        )}</strong>.`
+        : `Employee Salary Setup was created successfully for effective date <strong>${escapeHtml(
+          payload.salary_effective_date,
+        )}</strong>.`,
+    );
 
     // DESCRIPTION ITEM 6 - STEP 6A
     // Payroll Master save now uses the same floating success notification
     // pattern already used by other HR/payroll setup cards.
-showDashboardToast(
-  "success",
-  isEditMode ? "Employee Salary Setup version created" : "Employee Salary Setup created",
-  isEditMode
-    ? "A new effective-dated Employee Salary Setup version has been created. The old version remains for historical payroll."
-    : "The employee salary setup has been saved successfully.",
-);
+    showDashboardToast(
+      "success",
+      isEditMode ? "Employee Salary Setup version created" : "Employee Salary Setup created",
+      isEditMode
+        ? "A new effective-dated Employee Salary Setup version has been created. The old version remains for historical payroll."
+        : "The employee salary setup has been saved successfully.",
+    );
 
     // HR SAVE/EDIT BEHAVIOUR - PAYROLL MASTER STEP 1
     // After create/update, clear the form and redirect to Payroll Master Records.
@@ -12008,25 +13236,25 @@ showDashboardToast(
       showDashboardToast(
         "warning",
         "Duplicate Employee Salary Setup",
-"This employee already has an Employee Salary Setup for the selected effective date. Use a different effective date for the new version.",
+        "This employee already has an Employee Salary Setup for the selected effective date. Use a different effective date for the new version.",
       );
 
       return;
     }
 
-showPageAlert(
-  "danger",
-  error.message || "Employee Salary Setup could not be saved.",
-);
+    showPageAlert(
+      "danger",
+      error.message || "Employee Salary Setup could not be saved.",
+    );
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 8C
-// Fix missing comma in the toast call. The missing comma caused a full
-// hr-dashboard.js parser failure, which broke the HR UI before startup.
-showDashboardToast(
-  "danger",
-  "Employee Salary Setup save failed",
-  error.message || "The employee salary setup could not be saved.",
-);
+    // PAYROLL WORKFLOW UX REPAIR - STEP 8C
+    // Fix missing comma in the toast call. The missing comma caused a full
+    // hr-dashboard.js parser failure, which broke the HR UI before startup.
+    showDashboardToast(
+      "danger",
+      "Employee Salary Setup save failed",
+      error.message || "The employee salary setup could not be saved.",
+    );
   } finally {
     setPayrollMasterSaveLoading(false, isEditMode);
   }
@@ -15296,17 +16524,17 @@ function clearBatchPayrollCsvImportUi() {
 
   setPayrollRecordToolbarForManualMode();
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 5
-// Manual mode is for one employee only.
-// Payslip sending remains a separate action after the payroll record is finalised.
-if (state.dom.payrollFormTitle) {
-  state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
-}
+  // PAYROLL WORKFLOW UX REPAIR - STEP 5
+  // Manual mode is for one employee only.
+  // Payslip sending remains a separate action after the payroll record is finalised.
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
+  }
 
-if (state.dom.payrollFormSubtext) {
-  state.dom.payrollFormSubtext.textContent =
-    "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
-}
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
+  }
 
   updateBatchPayrollCsvImportButtonState();
   updateSubmitBatchPayrollButtonState();
@@ -16301,17 +17529,17 @@ ${preparedRow.employee_override_applied
   state.dom.payrollCreateForm?.classList.add("d-none");
   setPayrollRecordToolbarForBatchMode();
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 5
-// Batch mode is for all active employees, but HR must still review the
-// Batch Payroll Review table before finalisation.
-if (state.dom.payrollFormTitle) {
-  state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
-}
+  // PAYROLL WORKFLOW UX REPAIR - STEP 5
+  // Batch mode is for all active employees, but HR must still review the
+  // Batch Payroll Review table before finalisation.
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
+  }
 
-if (state.dom.payrollFormSubtext) {
-  state.dom.payrollFormSubtext.textContent =
-    "Review active employees in Batch Payroll Review before finalising payroll records.";
-}
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Review active employees in Batch Payroll Review before finalising payroll records.";
+  }
 
   if (state.dom.batchPayrollSetupWarning) {
     if (skippedRows.length) {
@@ -19279,6 +20507,137 @@ async function loadEmployees() {
   }
 }
 
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 2A
+// Build a safe full-name value for employee list export.
+// This mirrors the list display without exposing unnecessary sensitive data.
+function getEmployeeListExportFullName(employee = {}) {
+  return [
+    employee.first_name,
+    employee.middle_name,
+    employee.last_name,
+  ]
+    .map((namePart) => String(namePart || "").trim())
+    .filter(Boolean)
+    .join(" ") || "Unnamed Employee";
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 2A
+// Create a safe filename segment from the company name.
+// This keeps downloaded files easy to identify without adding risky characters.
+function getSafeEmployeeListExportFileSegment(value = "") {
+  return String(value || "company")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "company";
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 2A
+// Download the HR employee list as CSV.
+// This is a list-level export only: no NIN, no identity numbers, no document URLs,
+// and no full document metadata. Those would need a separate compliance export.
+function downloadEmployeeListCsv() {
+  const records = Array.isArray(state.employees) ? state.employees : [];
+
+  if (!records.length) {
+    showPageAlert(
+      "warning",
+      "No employee records are available to download.",
+    );
+
+    showDashboardToast(
+      "warning",
+      "No employees exported",
+      "There are no employee records available in this HR workspace.",
+    );
+
+    return;
+  }
+
+  const documentCountMap = buildEmployeeDocumentCountMap();
+
+  // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 2B
+  // Keep the HR employee list export clean and report-friendly.
+  // Full Name is enough for a normal HR list export; split name fields belong
+  // in import templates or technical migration extracts, not this download.
+  const headers = [
+    "Employee Number",
+    "Full Name",
+    "Work Email",
+    "Phone Number",
+    "Alternative Phone Number",
+    "Department",
+    "Job Title",
+    "Status",
+    "System Role",
+    "Line Manager",
+    "Approver Email",
+    "Employment Date",
+    "Account Linkage",
+    "Document Count",
+  ];
+
+  const rows = sortEmployeeRecordsByLatestActivity(records).map((employee) => {
+    const employeeId = String(employee.id || "").trim();
+    const documentCount = documentCountMap.get(employeeId) || 0;
+    const accountLinkage = getEmployeeAccountLinkage(employee);
+
+    return [
+      employee.employee_number || "",
+      getEmployeeListExportFullName(employee),
+      employee.work_email || "",
+      employee.phone_number || "",
+      employee.alternative_phone_number || "",
+      employee.department || "",
+      employee.job_title || "",
+      formatStatusLabel(employee.status || ""),
+      formatEmployeeSystemRoleLabel(employee.system_role || ""),
+      employee.line_manager || "",
+      employee.approver_email || "",
+      formatDate(employee.employment_date),
+      accountLinkage.label || "",
+      documentCount,
+    ];
+  });
+
+  const csvContent = [headers, ...rows]
+    .map((row) => row.map(escapeBatchEmployeeCsvCell).join(","))
+    .join("\n");
+
+  const blob = new Blob([csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  const companySegment = getSafeEmployeeListExportFileSegment(
+    getAdminControlledOrganizationName(),
+  );
+
+  link.href = url;
+  link.download = `${companySegment}_employee_list_${new Date()
+    .toISOString()
+    .slice(0, 10)}.csv`;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+
+  showPageAlert(
+    "success",
+    `${records.length} employee record(s) exported successfully.`,
+  );
+
+  showDashboardToast(
+    "success",
+    "Employee list downloaded",
+    `${records.length} employee record(s) exported to CSV.`,
+  );
+}
+
 function applyEmployeeSearch() {
   const searchTerm = normalizeText(state.dom.employeeSearchInput?.value || "");
 
@@ -19699,21 +21058,21 @@ function clearCreatePayrollCardSelectAllSelection({ hideReview = false } = {}) {
     state.dom.payrollCreateForm?.classList.remove("d-none");
     setPayrollRecordToolbarForManualMode();
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 5B
-// Manual mode is now labelled as single employee payroll finalisation.
-// This is wording only; payroll save/finalisation logic remains unchanged.
-if (state.dom.payrollFormTitle) {
-  state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
-}
+    // PAYROLL WORKFLOW UX REPAIR - STEP 5B
+    // Manual mode is now labelled as single employee payroll finalisation.
+    // This is wording only; payroll save/finalisation logic remains unchanged.
+    if (state.dom.payrollFormTitle) {
+      state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
+    }
 
-if (state.dom.payrollFormSubtext) {
-  state.dom.payrollFormSubtext.textContent =
-    "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
-}
+    if (state.dom.payrollFormSubtext) {
+      state.dom.payrollFormSubtext.textContent =
+        "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
+    }
 
-if (state.dom.payrollFormModeBadge) {
-  state.dom.payrollFormModeBadge.textContent = "Single Employee Mode";
-}
+    if (state.dom.payrollFormModeBadge) {
+      state.dom.payrollFormModeBadge.textContent = "Single Employee Mode";
+    }
   }
 
   updateSubmitBatchPayrollButtonState();
@@ -19764,17 +21123,17 @@ function handleCreatePayrollCardSelectAllEmployees(isChecked) {
   // Use the same batch toolbar behaviour as CSV import / Run Payroll.
   setPayrollRecordToolbarForBatchMode();
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 5
-// All-active employee mode uses the existing Batch Payroll Review table
-// so HR can review readiness before finalising records.
-if (state.dom.payrollFormTitle) {
-  state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
-}
+  // PAYROLL WORKFLOW UX REPAIR - STEP 5
+  // All-active employee mode uses the existing Batch Payroll Review table
+  // so HR can review readiness before finalising records.
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
+  }
 
-if (state.dom.payrollFormSubtext) {
-  state.dom.payrollFormSubtext.textContent =
-    "Review active employees in Batch Payroll Review before finalising payroll records.";
-}
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Review active employees in Batch Payroll Review before finalising payroll records.";
+  }
 
   state.isRunPayrollSelectionMode = true;
   state.selectedEmployeesForPayroll = new Set(activeEmployeeIds);
@@ -19788,20 +21147,20 @@ if (state.dom.payrollFormSubtext) {
   state.dom.payrollCreateForm?.classList.add("d-none");
   setPayrollRecordToolbarForBatchMode();
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 5B
-// Batch mode is all-active employee payroll finalisation review.
-if (state.dom.payrollFormTitle) {
-  state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
-}
+  // PAYROLL WORKFLOW UX REPAIR - STEP 5B
+  // Batch mode is all-active employee payroll finalisation review.
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
+  }
 
-if (state.dom.payrollFormSubtext) {
-  state.dom.payrollFormSubtext.textContent =
-    "Review active employees in Batch Payroll Review before finalising payroll records.";
-}
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Review active employees in Batch Payroll Review before finalising payroll records.";
+  }
 
-if (state.dom.payrollFormModeBadge) {
-  state.dom.payrollFormModeBadge.textContent = "All Active Employees Mode";
-}
+  if (state.dom.payrollFormModeBadge) {
+    state.dom.payrollFormModeBadge.textContent = "All Active Employees Mode";
+  }
 
   syncSelectAllEmployeesForPayrollCheckbox();
   updateSubmitBatchPayrollButtonState();
@@ -19829,20 +21188,20 @@ function setCreatePayrollBatchModeUi() {
   state.dom.payrollCreateForm?.classList.add("d-none");
   setPayrollRecordToolbarForBatchMode();
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 5B
-// All-active employee mode must not revert to old Create Payroll Batch wording.
-if (state.dom.payrollFormTitle) {
-  state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
-}
+  // PAYROLL WORKFLOW UX REPAIR - STEP 5B
+  // All-active employee mode must not revert to old Create Payroll Batch wording.
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Finalise All Active Employees";
+  }
 
-if (state.dom.payrollFormSubtext) {
-  state.dom.payrollFormSubtext.textContent =
-    "Review active employees in Batch Payroll Review before finalising payroll records.";
-}
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Review active employees in Batch Payroll Review before finalising payroll records.";
+  }
 
-if (state.dom.payrollFormModeBadge) {
-  state.dom.payrollFormModeBadge.textContent = "All Active Employees Mode";
-}
+  if (state.dom.payrollFormModeBadge) {
+    state.dom.payrollFormModeBadge.textContent = "All Active Employees Mode";
+  }
 }
 
 // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I FINAL
@@ -19851,21 +21210,21 @@ function setCreatePayrollManualModeUi() {
   state.dom.payrollCreateForm?.classList.remove("d-none");
   setPayrollRecordToolbarForManualMode();
 
-// PAYROLL WORKFLOW UX REPAIR - STEP 5D
-// Manual mode is now single-employee payroll finalisation.
-// Do not revert the card back to old "Create Payroll Record" wording.
-if (state.dom.payrollFormTitle) {
-  state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
-}
+  // PAYROLL WORKFLOW UX REPAIR - STEP 5D
+  // Manual mode is now single-employee payroll finalisation.
+  // Do not revert the card back to old "Create Payroll Record" wording.
+  if (state.dom.payrollFormTitle) {
+    state.dom.payrollFormTitle.textContent = "Finalise Payroll & Payslips";
+  }
 
-if (state.dom.payrollFormSubtext) {
-  state.dom.payrollFormSubtext.textContent =
-    "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
-}
+  if (state.dom.payrollFormSubtext) {
+    state.dom.payrollFormSubtext.textContent =
+      "Finalise payroll for one employee or prepare all active employees for payroll review. Payslips are sent separately after payroll records are finalised.";
+  }
 
-if (state.dom.payrollFormModeBadge) {
-  state.dom.payrollFormModeBadge.textContent = "Single Employee Mode";
-}
+  if (state.dom.payrollFormModeBadge) {
+    state.dom.payrollFormModeBadge.textContent = "Single Employee Mode";
+  }
 }
 
 // HRP-84 - BATCH PAYROLL EMPLOYEE CHECKBOXES - STEP 1I FINAL
@@ -20067,7 +21426,7 @@ function renderBatchPayrollSetupWarning(selectedEmployees = []) {
 
   const extraCount = affectedEmployees.length - affectedNames.length;
 
-warning.innerHTML = `
+  warning.innerHTML = `
     <!-- PAYROLL WORKFLOW UX REPAIR - STEP 5B
          Use the new Employee Salary Setup wording in batch readiness warnings. -->
     <div class="fw-semibold">Employee salary setup is incomplete.</div>
@@ -21033,6 +22392,500 @@ function renderEmployeeRecordsLoadingState() {
   `;
 }
 
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Build the full employee name from saved employee fields.
+// This is display-only and does not change the employee record.
+function getEmployeeFilledFormFullName(employee = {}) {
+  return [
+    employee.first_name,
+    employee.middle_name,
+    employee.last_name,
+  ]
+    .map((namePart) => String(namePart || "").trim())
+    .filter(Boolean)
+    .join(" ") || "Unnamed Employee";
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Keep sensitive NIN readable enough for HR recognition without exposing
+// the full value in the read-only filled-form view.
+function maskEmployeeFilledFormNin(value = "") {
+  const digits = String(value || "").replace(/\D/g, "");
+
+  if (!digits) return "--";
+  if (digits.length <= 4) return "*******" + digits;
+
+  return `*******${digits.slice(-4)}`;
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Standard read-only field renderer used by the employee filled-form modal.
+function renderEmployeeFilledFormField(label, value, options = {}) {
+  const { date = false, dateTime = false, sensitive = false } = options;
+
+  let displayValue = value;
+
+  if (sensitive) {
+    displayValue = maskEmployeeFilledFormNin(value);
+  } else if (dateTime) {
+    displayValue = formatDateTime(value);
+  } else if (date) {
+    displayValue = formatDate(value);
+  } else if (value === null || value === undefined || String(value).trim() === "") {
+    displayValue = "--";
+  }
+
+  return `
+    <div class="col-md-6 col-xl-4">
+      <div class="small text-secondary mb-1">${escapeHtml(label)}</div>
+      <div class="fw-semibold text-break">${escapeHtml(displayValue)}</div>
+    </div>
+  `;
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Section wrapper for the read-only filled form.
+function renderEmployeeFilledFormSection(title, fieldsHtml, helperText = "") {
+  return `
+    <section class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+      <div class="mb-3">
+        <h3 class="h6 fw-bold mb-1">${escapeHtml(title)}</h3>
+        ${helperText
+      ? `<p class="text-secondary small mb-0">${escapeHtml(helperText)}</p>`
+      : ""
+    }
+      </div>
+
+      <div class="row g-3">
+        ${fieldsHtml}
+      </div>
+    </section>
+  `;
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Render child rows such as addresses, education, beneficiaries, and documents.
+function renderEmployeeFilledFormList(records = [], emptyText = "", renderRecord) {
+  if (!Array.isArray(records) || records.length === 0) {
+    return `
+      <div class="alert alert-light border mb-0">
+        ${escapeHtml(emptyText || "No records available.")}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="list-group">
+      ${records
+      .map((record) => `
+          <div class="list-group-item">
+            ${renderRecord(record)}
+          </div>
+        `)
+      .join("")}
+    </div>
+  `;
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Load the same child HR records that edit mode uses, but for read-only review.
+// This keeps the modal aligned with the actual saved employee profile.
+async function loadEmployeeFilledFormRelatedData(employeeId) {
+  const employeeKey = String(employeeId || "").trim();
+
+  if (!employeeKey) {
+    return {
+      addresses: [],
+      nextOfKin: [],
+      education: [],
+      dependants: [],
+      documents: [],
+    };
+  }
+
+  const supabase = getSupabaseClient();
+
+  const [
+    addressesResult,
+    nextOfKinResult,
+    educationResult,
+    dependantsResult,
+    documentsResult,
+  ] = await Promise.all([
+    supabase
+      .from("employee_addresses")
+      .select("*")
+      .eq("employee_id", employeeKey)
+      .order("address_type", { ascending: true })
+      .order("created_at", { ascending: true }),
+
+    supabase
+      .from("employee_next_of_kin")
+      .select("*")
+      .eq("employee_id", employeeKey)
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true }),
+
+    supabase
+      .from("employee_education_records")
+      .select("*")
+      .eq("employee_id", employeeKey)
+      .order("is_highest_qualification", { ascending: false })
+      .order("created_at", { ascending: true }),
+
+    supabase
+      .from("employee_dependants")
+      .select("*")
+      .eq("employee_id", employeeKey)
+      .order("created_at", { ascending: true }),
+
+    applyCurrentTenantFilter(
+      supabase
+        .from("employee_documents")
+        .select("*")
+        .eq("employee_id", employeeKey),
+    ).order("uploaded_at", { ascending: false }),
+  ]);
+
+  const firstError =
+    addressesResult.error ||
+    nextOfKinResult.error ||
+    educationResult.error ||
+    dependantsResult.error ||
+    documentsResult.error;
+
+  if (firstError) {
+    throw new Error(firstError.message || "Employee filled form details could not be loaded.");
+  }
+
+  return {
+    addresses: Array.isArray(addressesResult.data) ? addressesResult.data : [],
+    nextOfKin: Array.isArray(nextOfKinResult.data) ? nextOfKinResult.data : [],
+    education: Array.isArray(educationResult.data) ? educationResult.data : [],
+    dependants: Array.isArray(dependantsResult.data) ? dependantsResult.data : [],
+    documents: Array.isArray(documentsResult.data) ? documentsResult.data : [],
+  };
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Build the complete read-only employee filled-form HTML.
+function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
+  const fullName = getEmployeeFilledFormFullName(employee);
+  const accountLinkage = getEmployeeAccountLinkage(employee);
+
+  // HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1C
+  // Match the payslip preview behaviour by using the Admin-controlled company
+  // name and saved organization contact details in the read-only employee form.
+  // This is display-only and does not change employee, payroll, or setup data.
+  const organization = state.organizationSettings || {};
+  const organizationName = getAdminControlledOrganizationName();
+
+  const organizationContactLines = [
+    organization.organization_email,
+    organization.phone_number,
+    organization.payroll_contact_email
+      ? `Payroll: ${organization.payroll_contact_email}`
+      : "",
+  ].filter(Boolean);
+
+  const organizationAddress = [
+    organization.address_line,
+    organization.city,
+    organization.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const organizationRegistrationLines = [
+    organization.tax_identification_number
+      ? `Tax ID / TIN: ${organization.tax_identification_number}`
+      : "",
+    organization.registration_number
+      ? `Registration No: ${organization.registration_number}`
+      : "",
+  ].filter(Boolean);
+
+  const addresses = Array.isArray(relatedData.addresses) ? relatedData.addresses : [];
+  const nextOfKin = Array.isArray(relatedData.nextOfKin) ? relatedData.nextOfKin : [];
+  const education = Array.isArray(relatedData.education) ? relatedData.education : [];
+  const dependants = Array.isArray(relatedData.dependants) ? relatedData.dependants : [];
+  const documents = Array.isArray(relatedData.documents) ? relatedData.documents : [];
+
+  return `
+    <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1C
+         Company identity header mirrors the payslip design source of truth.
+         The company name comes from Admin-controlled company identity, while
+         contact/address/registration details come from saved organization setup. -->
+    <section class="border rounded-4 p-3 p-lg-4 bg-white mb-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+        <div>
+          <div class="small text-secondary text-uppercase fw-semibold mb-1">
+            Employee Filled Form
+          </div>
+          <h3 class="h4 fw-bold mb-1">${escapeHtml(organizationName)}</h3>
+          <div class="text-secondary small">
+            ${organizationAddress ? escapeHtml(organizationAddress) : "Company address not set"}
+          </div>
+          ${organizationContactLines.length
+      ? `<div class="text-secondary small mt-1">${escapeHtml(organizationContactLines.join(" • "))}</div>`
+      : ""
+    }
+          ${organizationRegistrationLines.length
+      ? `<div class="text-secondary small mt-1">${escapeHtml(organizationRegistrationLines.join(" • "))}</div>`
+      : ""
+    }
+        </div>
+
+        <div class="text-lg-end">
+          <div class="fw-semibold">${escapeHtml(fullName)}</div>
+          <div class="text-secondary small">
+            Employee No: ${escapeHtml(employee.employee_number || "--")}
+          </div>
+          <span class="badge rounded-pill text-bg-light border mt-2">
+            Read-only HR record
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <div class="alert alert-info border mb-4">
+      <div class="fw-semibold mb-1">Read-only HR review</div>
+      <div class="small">
+        This view shows the employee's saved HR form data. Use Edit Employee Profile only when a correction is approved.
+      </div>
+    </div>
+
+    ${renderEmployeeFilledFormSection(
+      "Core Details",
+      [
+        renderEmployeeFilledFormField("Employee Number", employee.employee_number),
+        renderEmployeeFilledFormField("Full Name", fullName),
+        renderEmployeeFilledFormField("Work Email", employee.work_email),
+        renderEmployeeFilledFormField("Personal Email", employee.personal_email),
+        renderEmployeeFilledFormField("Phone Number", employee.phone_number),
+        renderEmployeeFilledFormField("Alternative Phone Number", employee.alternative_phone_number),
+        renderEmployeeFilledFormField("Status", formatStatusLabel(employee.status)),
+        renderEmployeeFilledFormField("System Role", formatEmployeeSystemRoleLabel(employee.system_role)),
+        renderEmployeeFilledFormField("Account Linkage", accountLinkage.label),
+      ].join(""),
+      "Primary employee identity and contact information.",
+    )}
+
+    ${renderEmployeeFilledFormSection(
+      "Personal, Origin & Identity Details",
+      [
+        renderEmployeeFilledFormField("Date of Birth", employee.date_of_birth, { date: true }),
+        renderEmployeeFilledFormField("Sex / Gender", employee.gender),
+        renderEmployeeFilledFormField("Marital Status", employee.marital_status),
+        renderEmployeeFilledFormField("Nationality", employee.nationality),
+        renderEmployeeFilledFormField("State of Origin", employee.state_of_origin),
+        renderEmployeeFilledFormField("Local Government Area", employee.local_government_area),
+        renderEmployeeFilledFormField("Town / Village / Community", employee.town),
+        renderEmployeeFilledFormField("Means of Identification", employee.means_of_identification),
+        renderEmployeeFilledFormField("Issuing State / Authority", employee.identification_issue_state),
+        renderEmployeeFilledFormField("NIN", employee.nin, { sensitive: true }),
+      ].join(""),
+      "Sensitive identity data is shown in controlled HR view only.",
+    )}
+
+    ${renderEmployeeFilledFormSection(
+      "Employment Details",
+      [
+        renderEmployeeFilledFormField("Department", employee.department),
+        renderEmployeeFilledFormField("Job Title", employee.job_title),
+        renderEmployeeFilledFormField("Employment Date", employee.employment_date, { date: true }),
+        renderEmployeeFilledFormField("Exit Date", employee.exit_date, { date: true }),
+        renderEmployeeFilledFormField("Primary Line Manager", employee.line_manager),
+        renderEmployeeFilledFormField("Primary Approver Email", employee.approver_email),
+        renderEmployeeFilledFormField("HMO Provider", employee.hmo_provider),
+        renderEmployeeFilledFormField("HMO Plan", employee.hmo_plan),
+        renderEmployeeFilledFormField("HMO Number", employee.hmo_number),
+      ].join(""),
+      "Employment and HR administration details.",
+    )}
+
+    <section class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+      <div class="mb-3">
+        <h3 class="h6 fw-bold mb-1">Address Details</h3>
+        <p class="text-secondary small mb-0">Saved current and permanent address records.</p>
+      </div>
+
+      ${renderEmployeeFilledFormList(
+      addresses,
+      "No address records saved for this employee.",
+      (address) => `
+          <div class="fw-semibold">${escapeHtml(address.address_type || "Address")}</div>
+          <div class="text-secondary small text-break">
+            ${escapeHtml(address.address_line_1 || "--")}
+          </div>
+          <div class="text-secondary small text-break">
+            ${escapeHtml([
+        address.city,
+        address.state_region,
+        address.country,
+        address.postal_code,
+      ].filter(Boolean).join(", ") || "--")}
+          </div>
+        `,
+    )}
+    </section>
+
+    <section class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+      <div class="mb-3">
+        <h3 class="h6 fw-bold mb-1">Next of Kin</h3>
+        <p class="text-secondary small mb-0">Emergency contact details held by HR.</p>
+      </div>
+
+      ${renderEmployeeFilledFormList(
+      nextOfKin,
+      "No next of kin record saved for this employee.",
+      (kin) => `
+          <div class="fw-semibold">${escapeHtml(kin.full_name || "--")}</div>
+          <div class="text-secondary small">
+            ${escapeHtml(kin.relationship || "--")} • ${escapeHtml(kin.phone_number || "--")}
+          </div>
+          <div class="text-secondary small text-break">${escapeHtml(kin.email || "--")}</div>
+          <div class="text-secondary small text-break">${escapeHtml(kin.address || "--")}</div>
+        `,
+    )}
+    </section>
+
+    <section class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+      <div class="mb-3">
+        <h3 class="h6 fw-bold mb-1">Beneficiaries / Dependants</h3>
+        <p class="text-secondary small mb-0">Saved benefit and HMO dependant records.</p>
+      </div>
+
+      ${renderEmployeeFilledFormList(
+      dependants,
+      "No beneficiary or dependant record saved for this employee.",
+      (dependant) => `
+          <div class="fw-semibold">${escapeHtml(dependant.full_name || "--")}</div>
+          <div class="text-secondary small">
+            ${escapeHtml(dependant.relationship || "--")} • ${escapeHtml(dependant.coverage_type || "--")}
+          </div>
+          <div class="text-secondary small">
+            DOB: ${formatDate(dependant.date_of_birth)} • Phone: ${escapeHtml(dependant.phone_number || "--")}
+          </div>
+        `,
+    )}
+    </section>
+
+    <section class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-4">
+      <div class="mb-3">
+        <h3 class="h6 fw-bold mb-1">Education / Academic Qualification</h3>
+        <p class="text-secondary small mb-0">Saved education records.</p>
+      </div>
+
+      ${renderEmployeeFilledFormList(
+      education,
+      "No education record saved for this employee.",
+      (record) => `
+          <div class="fw-semibold">
+            ${escapeHtml(record.qualification || "--")}
+            ${record.is_highest_qualification ? '<span class="badge text-bg-primary ms-2">Highest</span>' : ""}
+          </div>
+          <div class="text-secondary small text-break">${escapeHtml(record.institution_name || "--")}</div>
+          <div class="text-secondary small">
+            ${escapeHtml(record.field_of_study || "--")} • ${escapeHtml(record.graduation_year || "--")} • ${escapeHtml(record.education_status || "Completed")}
+          </div>
+        `,
+    )}
+    </section>
+
+    <section class="border rounded-4 p-3 p-lg-4 bg-light-subtle mb-0">
+      <div class="mb-3">
+        <h3 class="h6 fw-bold mb-1">Supporting Documents</h3>
+        <p class="text-secondary small mb-0">Saved document metadata. Open/download remains controlled from the employee edit document area.</p>
+      </div>
+
+      ${renderEmployeeFilledFormList(
+      documents,
+      "No supporting documents saved for this employee.",
+      (documentRow) => `
+          <div class="fw-semibold text-break">${escapeHtml(documentRow.file_name || "--")}</div>
+          <div class="text-secondary small">
+            ${escapeHtml(documentRow.document_type || "Unclassified")} •
+            ${escapeHtml(documentRow.mime_type || "Unknown type")} •
+            ${formatBytes(documentRow.file_size_bytes)} •
+            ${formatDateTime(documentRow.uploaded_at)}
+          </div>
+        `,
+    )}
+    </section>
+  `;
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Open the filled-form modal for the selected employee.
+async function viewEmployeeFilledForm(employeeId) {
+  const employeeKey = String(employeeId || "").trim();
+
+  const employee = (state.employees || []).find(
+    (item) => String(item.id || "").trim() === employeeKey,
+  );
+
+  if (!employee) {
+    showPageAlert(
+      "warning",
+      "The selected employee record could not be found. Please refresh and try again.",
+    );
+    return;
+  }
+
+  const modal = document.getElementById("employeeFilledFormModal");
+  const title = document.getElementById("employeeFilledFormTitle");
+  const content = document.getElementById("employeeFilledFormContent");
+
+  if (!modal || !content) {
+    showPageAlert(
+      "warning",
+      "The employee filled form view is not available. Please refresh and try again.",
+    );
+    return;
+  }
+
+  clearPageAlert();
+
+  if (title) {
+    title.textContent = `Employee Filled Form - ${getEmployeeFilledFormFullName(employee)}`;
+  }
+
+  content.innerHTML = `
+    <div class="text-center text-secondary py-5">
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Loading employee filled form...
+    </div>
+  `;
+
+  modal.classList.remove("d-none");
+  modal.setAttribute("aria-hidden", "false");
+
+  try {
+    const relatedData = await loadEmployeeFilledFormRelatedData(employeeKey);
+    content.innerHTML = renderEmployeeFilledFormPreview(employee, relatedData);
+  } catch (error) {
+    console.error("Error loading employee filled form:", error);
+
+    content.innerHTML = `
+      <div class="alert alert-warning mb-0">
+        ${escapeHtml(error.message || "Employee filled form could not be loaded.")}
+      </div>
+    `;
+  }
+}
+
+// HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+// Close the read-only employee filled-form modal.
+function closeEmployeeFilledFormModal() {
+  const modal = document.getElementById("employeeFilledFormModal");
+
+  if (!modal) return;
+
+  modal.classList.add("d-none");
+  modal.setAttribute("aria-hidden", "true");
+}
+
 function renderEmployeeRecords(employees) {
   const tbody = state.dom.employeeRecordsTableBody;
   if (!tbody) return;
@@ -21178,6 +23031,20 @@ function renderEmployeeRecords(employees) {
         <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
              Keep existing compact icon actions centred. -->
         <div class="d-inline-flex align-items-center gap-2 flex-nowrap">
+          <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+               View is read-only and available inside HR confines.
+               It does not depend on edit permission, so HR read-only roles can review
+               the filled form without changing employee data. -->
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-secondary"
+            title="View employee filled form"
+            aria-label="View employee filled form"
+            onclick="window.hrViewEmployeeFilledForm('${safeEmployeeId}')"
+          >
+            <i class="bi bi-eye"></i>
+          </button>
+
 <button
   type="button"
   class="btn btn-sm ${canMaintainPeople ? "btn-outline-primary" : "btn-outline-secondary"}"
@@ -21187,16 +23054,6 @@ function renderEmployeeRecords(employees) {
   onclick="window.hrEditEmployee('${safeEmployeeId}')"
 >
             <i class="bi bi-pencil-square"></i>
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-secondary"
-            title="View employee documents"
-            aria-label="View employee documents"
-            onclick="window.hrViewEmployeeDocuments('${safeEmployeeId}')"
-          >
-            <i class="bi bi-paperclip"></i>
           </button>
 
 <!-- MANAGER ROLE ASSIGNMENT AND DASHBOARD ROUTING - STEP 1F
@@ -21360,6 +23217,11 @@ function resetEmployeeForm() {
   // Reset the document type selector when returning the employee form to a clean state.
   if (state.dom.employeeDocumentType) state.dom.employeeDocumentType.value = "";
 
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 4A
+  // Rebuild controlled dropdown defaults after form reset.
+  // This keeps LGA and issuing authority disabled until their parent field is selected.
+  populateEmployeeOriginAndIdentityDropdowns();
+
   state.pendingFiles = [];
   state.attachedDocuments = [];
 
@@ -21428,6 +23290,36 @@ function enterEmployeeEditMode(employee) {
   if (state.dom.gender) state.dom.gender.value = employee.gender || "";
   if (state.dom.maritalStatus) state.dom.maritalStatus.value = employee.marital_status || "";
   if (state.dom.nationality) state.dom.nationality.value = employee.nationality || "";
+
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 4A
+  // Load saved origin/contact/identity values when HR edits an employee.
+  // Controlled dropdowns must be rebuilt before selecting saved values.
+  if (state.dom.alternativePhoneNumber) {
+    state.dom.alternativePhoneNumber.value = employee.alternative_phone_number || "";
+  }
+
+  populateStateOfOriginOptions(employee.state_of_origin || "");
+  syncLocalGovernmentAreaOptions(employee.local_government_area || "");
+
+  if (state.dom.town) {
+    state.dom.town.value = employee.town || "";
+  }
+
+  if (state.dom.meansOfIdentification) {
+    state.dom.meansOfIdentification.value = employee.means_of_identification || "";
+  }
+
+  syncIdentificationIssueStateOptions(employee.identification_issue_state || "");
+
+  if (state.dom.nin) {
+    state.dom.nin.value = employee.nin || "";
+  }
+
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
+  // In edit mode, show saved NIN only when the saved Means of Identification
+  // is National ID / NIN Slip. Otherwise hide and clear stale NIN from the form.
+  syncNinFieldVisibility({ clearWhenHidden: true });
+
   if (state.dom.exitDate) state.dom.exitDate.value = employee.exit_date || "";
   if (state.dom.hmoProvider) state.dom.hmoProvider.value = employee.hmo_provider || "";
   if (state.dom.hmoPlan) state.dom.hmoPlan.value = employee.hmo_plan || "";
@@ -21679,6 +23571,64 @@ function validateEmployeeForm() {
   // It must not block employee create/update, even when empty.
   state.dom.approverEmail?.classList.remove("is-invalid");
 
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 4A
+  // These new HR biodata fields are optional, but when HR enters them,
+  // they must remain internally consistent before employee save/update.
+  state.dom.alternativePhoneNumber?.classList.remove("is-invalid");
+  state.dom.nin?.classList.remove("is-invalid");
+
+  const primaryPhoneDigits = String(state.dom.phoneNumber?.value || "")
+    .replace(/\D/g, "");
+  const alternativePhoneDigits = String(state.dom.alternativePhoneNumber?.value || "")
+    .replace(/\D/g, "");
+
+  if (
+    primaryPhoneDigits &&
+    alternativePhoneDigits &&
+    primaryPhoneDigits === alternativePhoneDigits
+  ) {
+    state.dom.alternativePhoneNumber?.classList.add("is-invalid");
+    isValid = false;
+    if (!firstInvalidField) firstInvalidField = state.dom.alternativePhoneNumber;
+
+    showPageAlert(
+      "warning",
+      "Alternative Phone Number must be different from the primary Phone Number.",
+    );
+  }
+
+  const selectedMeansOfIdentification = String(
+    state.dom.meansOfIdentification?.value || "",
+  ).trim();
+
+  const isNinRequired = isNinRequiredForMeansOfIdentification(
+    selectedMeansOfIdentification,
+  );
+
+  const ninValue = String(state.dom.nin?.value || "").trim();
+
+  if (isNinRequired && !ninValue) {
+    state.dom.nin?.classList.add("is-invalid");
+    isValid = false;
+    if (!firstInvalidField) firstInvalidField = state.dom.nin;
+
+    showPageAlert(
+      "warning",
+      "NIN is required when National ID / NIN Slip is selected as the means of identification.",
+    );
+  }
+
+  if (isNinRequired && ninValue && !/^\d{11}$/.test(ninValue)) {
+    state.dom.nin?.classList.add("is-invalid");
+    isValid = false;
+    if (!firstInvalidField) firstInvalidField = state.dom.nin;
+
+    showPageAlert(
+      "warning",
+      "NIN must be exactly 11 digits.",
+    );
+  }
+
   if (!isValid && firstInvalidField?.focus) {
     firstInvalidField.focus();
   }
@@ -21703,6 +23653,20 @@ function buildEmployeePayload() {
     state.dom.employmentStatus?.value || "active",
   ).trim();
 
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 6A
+  // Save NIN only when the selected Means of Identification requires it.
+  // For Passport, Driver's Licence, Voter's Card/PVC, Birth Certificate, or Other,
+  // NIN should remain hidden and stored as null.
+  const selectedMeansOfIdentificationForPayload = String(
+    state.dom.meansOfIdentification?.value || "",
+  ).trim();
+
+  const ninForPayload = isNinRequiredForMeansOfIdentification(
+    selectedMeansOfIdentificationForPayload,
+  )
+    ? String(state.dom.nin?.value || "").trim()
+    : "";
+
   return {
     first_name: String(state.dom.firstName?.value || "").trim(),
 
@@ -21724,6 +23688,21 @@ function buildEmployeePayload() {
     gender: String(state.dom.gender?.value || "").trim() || null,
     marital_status: String(state.dom.maritalStatus?.value || "").trim() || null,
     nationality: String(state.dom.nationality?.value || "").trim() || null,
+
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 4A
+    // Save optional origin, contact, and identity fields directly on employees.
+    // Blank values are stored as null to keep employee records clean.
+    state_of_origin: String(state.dom.stateOfOrigin?.value || "").trim() || null,
+    local_government_area:
+      String(state.dom.localGovernmentArea?.value || "").trim() || null,
+    town: String(state.dom.town?.value || "").trim() || null,
+    alternative_phone_number:
+      String(state.dom.alternativePhoneNumber?.value || "").trim() || null,
+    means_of_identification:
+      selectedMeansOfIdentificationForPayload || null,
+    identification_issue_state:
+      String(state.dom.identificationIssueState?.value || "").trim() || null,
+    nin: ninForPayload || null,
 
     phone_number: String(state.dom.phoneNumber?.value || "").trim() || null,
     department: String(state.dom.department?.value || "").trim(),
@@ -21900,6 +23879,11 @@ function getEmployeeDocumentFilenameKeywords(documentType) {
     "cv resume": ["cv", "resume", "curriculum", "vitae"],
     "national id": ["national id", "national", "nin", "identity", "id card", "idcard"],
     "international passport": ["passport"],
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5A
+    // Extend the existing filename/document-type protection to the new
+    // identity evidence types. This keeps the same WAEC-vs-CV style restriction.
+    "driver's licence": ["driver", "licence", "license", "frsc"],
+    "voter's card pvc": ["voter", "pvc", "inec"],
     "offer letter": ["offer", "appointment"],
     "employment contract": ["contract", "agreement"],
   };
@@ -21962,15 +23946,136 @@ function getEmployeeDocumentTypeMismatchMessage(file, documentType) {
   return `${fileName} does not look like ${selectedType}. Please choose the correct document type or rename/upload the correct file.`;
 }
 
-function addPendingFiles(fileList) {
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5A
+// Maps the employee's selected Means of Identification to the matching
+// Supporting Document Type. This is a cross-check only for identity evidence;
+// it does not stop HR uploading normal supporting documents such as CV,
+// WAEC/NECO, offer letter, or employment contract.
+function getExpectedDocumentTypeForMeansOfIdentification(meansOfIdentification = "") {
+  const selectedMeans = String(meansOfIdentification || "").trim();
+
+  const expectedDocumentTypeByMeans = {
+    "National ID / NIN Slip": "National ID",
+    "International Passport": "International Passport",
+    "Driver's Licence": "Driver's Licence",
+    "Voter's Card / PVC": "Voter's Card / PVC",
+    "Birth Certificate": "Birth Certificate",
+  };
+
+  return expectedDocumentTypeByMeans[selectedMeans] || "";
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5A
+// If HR is uploading identity evidence, it must match the employee's selected
+// Means of Identification. Non-identity document types remain allowed because
+// Supporting Documents is used for several HR evidence categories.
+function getEmployeeIdentityDocumentTypeMismatchMessage(documentType = "") {
+  const selectedDocumentType = String(documentType || "").trim();
+  const selectedMeansOfIdentification = String(
+    state.dom.meansOfIdentification?.value || "",
+  ).trim();
+
+  if (!selectedDocumentType || !selectedMeansOfIdentification) {
+    return "";
+  }
+
+  const expectedDocumentType = getExpectedDocumentTypeForMeansOfIdentification(
+    selectedMeansOfIdentification,
+  );
+
+  if (!expectedDocumentType) {
+    return "";
+  }
+
+  const identityDocumentTypes = new Set([
+    "Birth Certificate",
+    "National ID",
+    "International Passport",
+    "Driver's Licence",
+    "Voter's Card / PVC",
+  ]);
+
+  if (!identityDocumentTypes.has(selectedDocumentType)) {
+    return "";
+  }
+
+  if (
+    normalizeEmployeeDocumentValidationText(selectedDocumentType) ===
+    normalizeEmployeeDocumentValidationText(expectedDocumentType)
+  ) {
+    return "";
+  }
+
+  return `Means of Identification is ${selectedMeansOfIdentification}. Upload identity evidence using Document Type ${expectedDocumentType}, not ${selectedDocumentType}.`;
+}
+
+// EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5B
+// Stage an identity evidence file from the Identity Verification section.
+// This improves HR workflow while still using the existing pendingFiles,
+// validation, render, and save/upload pipeline.
+function addIdentityEvidenceToPendingFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+
+  const selectedMeansOfIdentification = String(
+    state.dom.meansOfIdentification?.value || "",
+  ).trim();
+
+  if (!selectedMeansOfIdentification) {
+    showPageAlert(
+      "warning",
+      "Select Means of Identification before uploading identification evidence.",
+    );
+
+    if (state.dom.employeeIdentityEvidenceInput) {
+      state.dom.employeeIdentityEvidenceInput.value = "";
+    }
+
+    state.dom.meansOfIdentification?.focus();
+    return;
+  }
+
+  const expectedDocumentType = getExpectedDocumentTypeForMeansOfIdentification(
+    selectedMeansOfIdentification,
+  );
+
+  if (!expectedDocumentType) {
+    showPageAlert(
+      "warning",
+      "Use Supporting Documents for this identification type, or select a supported Means of Identification first.",
+    );
+
+    if (state.dom.employeeIdentityEvidenceInput) {
+      state.dom.employeeIdentityEvidenceInput.value = "";
+    }
+
+    state.dom.meansOfIdentification?.focus();
+    return;
+  }
+
+  addPendingFiles(files, expectedDocumentType);
+
+  if (state.dom.employeeIdentityEvidenceInput) {
+    state.dom.employeeIdentityEvidenceInput.value = "";
+  }
+}
+
+function addPendingFiles(fileList, documentTypeOverride = "") {
   const files = Array.from(fileList || []);
   if (!files.length) return;
 
   // DESCRIPTION ITEM 10 - STEP 2
   // Require HR to choose a document type before adding files,
   // so each pending upload carries a usable classification.
+  //
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5B
+  // Identity Evidence upload can pass a controlled document type automatically
+  // from Means of Identification. Supporting Documents still uses the visible
+  // Document Type dropdown.
   const selectedDocumentType = String(
-    state.dom.employeeDocumentType?.value || "",
+    documentTypeOverride ||
+    state.dom.employeeDocumentType?.value ||
+    "",
   ).trim();
 
   if (!selectedDocumentType) {
@@ -21981,6 +24086,10 @@ function addPendingFiles(fileList) {
 
     if (state.dom.employeeDocumentsInput) {
       state.dom.employeeDocumentsInput.value = "";
+    }
+
+    if (state.dom.employeeIdentityEvidenceInput) {
+      state.dom.employeeIdentityEvidenceInput.value = "";
     }
 
     state.dom.employeeDocumentType?.focus();
@@ -22016,6 +24125,18 @@ function addPendingFiles(fileList) {
       return;
     }
 
+    // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5A
+    // When HR is uploading identity evidence, the selected Document Type must
+    // match the employee's Means of Identification. This reuses the existing
+    // pending-file validation flow instead of creating duplicate upload logic.
+    const identityDocumentTypeMismatchMessage =
+      getEmployeeIdentityDocumentTypeMismatchMessage(selectedDocumentType);
+
+    if (identityDocumentTypeMismatchMessage) {
+      validationErrors.push(identityDocumentTypeMismatchMessage);
+      return;
+    }
+
     // EMPLOYEE BIODATA COMPLETION - STEP 6B
     // Block obvious mismatch between selected HR document type and filename.
     // This prevents cases like selecting CV / Resume but attaching birth_certificate.pdf.
@@ -22039,7 +24160,11 @@ function addPendingFiles(fileList) {
     state.dom.employeeDocumentsInput.value = "";
   }
 
-  if (state.dom.employeeDocumentType) {
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5B
+  // Only clear the visible Supporting Documents type selector when HR used
+  // the Supporting Documents upload. The Identity Evidence upload passes its
+  // type automatically and should not disturb a manually selected lower value.
+  if (!documentTypeOverride && state.dom.employeeDocumentType) {
     state.dom.employeeDocumentType.value = "";
   }
 
@@ -22059,6 +24184,12 @@ function clearPendingFiles() {
   // Reset both the file input and document type selector together.
   if (state.dom.employeeDocumentsInput) {
     state.dom.employeeDocumentsInput.value = "";
+  }
+
+  // EMPLOYEE ORIGIN AND IDENTITY DETAILS - STEP 5B
+  // Clear both upload entry points because they feed the same pending list.
+  if (state.dom.employeeIdentityEvidenceInput) {
+    state.dom.employeeIdentityEvidenceInput.value = "";
   }
 
   if (state.dom.employeeDocumentType) {
@@ -22475,12 +24606,145 @@ async function uploadPendingFilesForEmployee(employeeId) {
   renderAttachedDocuments();
 }
 
+// EMPLOYEE LOGIN INVITE WORDING - STEP 2A
+// Supabase Edge Functions can return a 409 Conflict when the email already
+// exists in Auth. That is not the same as a failed employee save.
+// HR should see that the employee was created and linked to an existing login,
+// not a misleading "invite failed" message.
+async function getEmployeeLoginProvisionErrorDetail(error) {
+  const fallbackMessage = String(error?.message || "").trim();
+  const response = error?.context || null;
+  const status = Number(response?.status || error?.status || 0);
+
+  let backendMessage = "";
+
+  if (response) {
+    try {
+      const body = await response.clone().json();
+
+      backendMessage = String(
+        body?.message ||
+        body?.error ||
+        body?.details ||
+        "",
+      ).trim();
+    } catch (jsonError) {
+      try {
+        backendMessage = String(await response.clone().text() || "").trim();
+      } catch (textError) {
+        backendMessage = "";
+      }
+    }
+  }
+
+  return {
+    status,
+    message: [backendMessage, fallbackMessage].filter(Boolean).join(" "),
+  };
+}
+
+// EMPLOYEE LOGIN INVITE WORDING - STEP 2A
+// Detect existing-login conflicts without treating them as broken HR records.
+function isExistingEmployeeLoginConflict(detail = {}) {
+  const status = Number(detail.status || 0);
+  const message = normalizeText(detail.message || "");
+
+  return (
+    status === 409 ||
+    message.includes("409") ||
+    message.includes("conflict") ||
+    message.includes("already exists") ||
+    message.includes("already registered") ||
+    message.includes("email already") ||
+    message.includes("user already") ||
+    message.includes("duplicate")
+  );
+}
+
+// EMPLOYEE LOGIN INVITE WORDING - STEP 2A
+// HR-readable message for employees whose login account already exists.
+function getExistingEmployeeLoginMessage(workEmail = "") {
+  const email = String(workEmail || "").trim();
+
+  return email
+    ? `Existing login account found for ${email}. Employee record was saved and linked. Ask the employee to sign in or use password reset if they cannot access the account.`
+    : "Existing login account found. Employee record was saved and linked. Ask the employee to sign in or use password reset if they cannot access the account.";
+}
+
+// EMPLOYEE LOGIN INVITE WORDING - STEP 2A
+// Reads the safest available error detail from a failed Supabase Edge Function
+// response. This is intentionally defensive because FunctionsHttpError may
+// expose the status/message differently depending on the Supabase client.
+async function getEmployeeLoginProvisionErrorDetail(error) {
+  const fallbackMessage = String(error?.message || "").trim();
+  const response = error?.context || null;
+  const status = Number(response?.status || error?.status || 0);
+
+  let backendMessage = "";
+
+  if (response && typeof response.clone === "function") {
+    try {
+      const body = await response.clone().json();
+
+      backendMessage = String(
+        body?.message ||
+        body?.error ||
+        body?.details ||
+        "",
+      ).trim();
+    } catch (jsonError) {
+      try {
+        backendMessage = String(await response.clone().text() || "").trim();
+      } catch (textError) {
+        backendMessage = "";
+      }
+    }
+  }
+
+  return {
+    status,
+    message: [backendMessage, fallbackMessage].filter(Boolean).join(" "),
+  };
+}
+
+// EMPLOYEE LOGIN INVITE WORDING - STEP 2A
+// Existing Auth/Profile account conflicts are not the same as duplicate
+// employee records. Duplicate employees remain blocked before save.
+// This only lets HR see a correct linked-existing-login message when the
+// Edge Function returns a conflict for an email that already has a login.
+function isExistingEmployeeLoginConflict(detail = {}) {
+  const status = Number(detail.status || 0);
+  const message = normalizeText(detail.message || "");
+
+  return (
+    status === 409 ||
+    message.includes("409") ||
+    message.includes("conflict") ||
+    message.includes("already exists") ||
+    message.includes("already registered") ||
+    message.includes("email already") ||
+    message.includes("user already") ||
+    message.includes("duplicate")
+  );
+}
+
+// EMPLOYEE LOGIN INVITE WORDING - STEP 2A
+// HR-readable outcome when the employee email already has a login account.
+function getExistingEmployeeLoginMessage(workEmail = "") {
+  const email = String(workEmail || "").trim();
+
+  return email
+    ? `Existing login account found for ${email}. Employee record was saved and linked. Ask the employee to sign in or use password reset if they cannot access the account.`
+    : "Existing login account found. Employee record was saved and linked. Ask the employee to sign in or use password reset if they cannot access the account.";
+}
+
 // EMPLOYEE LOGIN PROVISIONING
 // Send a login invite to the new employee's work email via the
 // invite-employee-login Supabase edge function.
 //
-// Returns { success: boolean, error: string } regardless of outcome so the
-// caller can surface a soft warning without aborting the employee save.
+// Returns { success: boolean, existingLogin: boolean, error: string } regardless
+// of outcome so the caller can surface a soft warning without aborting the
+// employee save.
 async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
   try {
     const supabase = getSupabaseClient();
@@ -22503,23 +24767,86 @@ async function provisionEmployeeLogin({ workEmail, fullName, companyName }) {
     );
 
     if (error) {
-      const message = String(error?.message || "").trim() ||
+      const detail = await getEmployeeLoginProvisionErrorDetail(error);
+
+      if (isExistingEmployeeLoginConflict(detail)) {
+        console.info("Employee login already exists; treating as linked existing account.", detail);
+
+        return {
+          success: false,
+          existingLogin: true,
+          error: getExistingEmployeeLoginMessage(payload.workEmail),
+        };
+      }
+
+      const message =
+        String(detail.message || "").trim() ||
         "Login invite could not be sent.";
+
       console.error("provisionEmployeeLogin edge function error:", error);
-      return { success: false, error: message };
+
+      return {
+        success: false,
+        existingLogin: false,
+        error: message,
+      };
     }
 
     if (data?.success === false || data?.error) {
-      const message = String(data.error || "Login invite could not be sent.").trim();
-      return { success: false, error: message };
+      const detail = {
+        status: Number(data?.status || data?.statusCode || 0),
+        message: String(
+          data?.message ||
+          data?.error ||
+          "Login invite could not be sent.",
+        ).trim(),
+      };
+
+      if (isExistingEmployeeLoginConflict(detail)) {
+        return {
+          success: false,
+          existingLogin: true,
+          error: getExistingEmployeeLoginMessage(payload.workEmail),
+        };
+      }
+
+      return {
+        success: false,
+        existingLogin: false,
+        error: detail.message,
+      };
     }
 
-    return { success: true, error: "" };
+    return {
+      success: true,
+      existingLogin: false,
+      error: "",
+    };
   } catch (err) {
-    const message = String(err?.message || "").trim() ||
+    // EMPLOYEE LOGIN INVITE WORDING - STEP 2A FINAL
+    // Keep existing-login conflicts out of the failed-invite wording even when
+    // the Supabase client throws before returning a normal Edge Function result.
+    const detail = await getEmployeeLoginProvisionErrorDetail(err);
+
+    if (isExistingEmployeeLoginConflict(detail)) {
+      return {
+        success: false,
+        existingLogin: true,
+        error: getExistingEmployeeLoginMessage(workEmail),
+      };
+    }
+
+    const message =
+      String(detail.message || err?.message || "").trim() ||
       "Login invite could not be sent due to an unexpected error.";
+
     console.error("provisionEmployeeLogin unexpected error:", err);
-    return { success: false, error: message };
+
+    return {
+      success: false,
+      existingLogin: false,
+      error: message,
+    };
   }
 }
 
@@ -22829,12 +25156,23 @@ async function handleEmployeeSave() {
     );
 
     if (duplicateEmployee) {
+      // EMPLOYEE LOGIN INVITE - STEP 2B
+      // Duplicate employee emails must remain blocked at HR record level.
+      // Also show a floating toast so HR sees the outcome even after the page
+      // scrolls or the alert is above the current viewport.
       showPageAlert(
         "warning",
         `An employee record already exists for <strong>${escapeHtml(
           employeePayload.work_email,
         )}</strong>.`,
       );
+
+      showDashboardToast(
+        "warning",
+        "Duplicate employee email",
+        `An employee record already exists for ${employeePayload.work_email}. Use Edit on the existing employee record instead.`,
+      );
+
       return;
     }
 
@@ -22920,6 +25258,7 @@ async function handleEmployeeSave() {
     // If the invite fails the employee record is already saved — HR sees a
     // warning in the success message rather than a hard error.
     let loginInviteSent = false;
+    let loginInviteExistingAccount = false;
     let loginInviteError = "";
 
     if (!isEditMode) {
@@ -22930,6 +25269,7 @@ async function handleEmployeeSave() {
       });
 
       loginInviteSent = loginResult.success;
+      loginInviteExistingAccount = Boolean(loginResult.existingLogin);
       loginInviteError = loginResult.error || "";
     }
 
@@ -23020,9 +25360,15 @@ async function handleEmployeeSave() {
         savedEmployeeName,
       )}</strong> was updated successfully.`;
     } else {
+      // EMPLOYEE LOGIN INVITE WORDING - STEP 2A
+      // Existing login account is not an HR failure. It means the email already
+      // has a Supabase Auth login, so HR should ask the employee to sign in or
+      // use password reset instead of seeing "invite failed".
       const inviteNote = loginInviteSent
         ? ` A login invite has been sent to <strong>${escapeHtml(employeePayload.work_email)}</strong>.`
-        : ` <span class="text-warning">⚠ Login invite could not be sent${loginInviteError ? ` — ${escapeHtml(loginInviteError)}` : ""}. You can resend it from the employee's profile.</span>`;
+        : loginInviteExistingAccount
+          ? ` <span class="text-success">Existing login account found for <strong>${escapeHtml(employeePayload.work_email)}</strong>. Employee record was saved and linked. Ask the employee to sign in or use password reset if needed.</span>`
+          : ` <span class="text-warning">⚠ Login invite could not be sent${loginInviteError ? ` — ${escapeHtml(loginInviteError)}` : ""}. You can resend it from the employee's profile.</span>`;
 
       employeeSaveSuccessMessage =
         `Employee profile for <strong>${escapeHtml(savedEmployeeName)}</strong> was created successfully` +
@@ -23035,10 +25381,19 @@ async function handleEmployeeSave() {
     // If no login profile exists yet, HR gets a warning but the employee record
     // and selected system role still save successfully.
     const roleSyncMessage = roleSyncResult?.message || "";
+    // EMPLOYEE LOGIN INVITE WORDING - STEP 2A
+    // Existing login account is a successful linked-account outcome, not a
+    // failed invite outcome.
     const employeeSaveAlertType =
       roleSyncResult?.profile_found === false
         ? "warning"
-        : (loginInviteSent || isEditMode ? "success" : "warning");
+        : (
+          loginInviteSent ||
+            loginInviteExistingAccount ||
+            isEditMode
+            ? "success"
+            : "warning"
+        );
 
     if (roleSyncMessage) {
       employeeSaveSuccessMessage += `
@@ -23074,10 +25429,16 @@ async function handleEmployeeSave() {
         "Employee created",
         `Login invite sent to ${employeePayload.work_email}.`,
       );
+    } else if (loginInviteExistingAccount) {
+      showDashboardToast(
+        "success",
+        "Employee linked to existing login",
+        `Employee saved. Existing login found for ${employeePayload.work_email}; ask the employee to sign in or use password reset if needed.`,
+      );
     } else {
       showDashboardToast(
         "warning",
-        "Employee created, invite failed",
+        "Employee created, invite pending",
         loginInviteError
           ? `Employee saved, but login invite was not sent: ${loginInviteError}`
           : "Employee saved, but login invite was not sent.",
@@ -27487,13 +29848,13 @@ function getActiveStatutoryDeductionsForCurrentPayroll() {
 function getStatutoryDeductionBaseAmount(deductionType = "") {
   const type = String(deductionType || "").trim();
 
-if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
-  // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-  // Pension setup should calculate from the final visible BHT after salary
-  // setup and allowance components have been applied, not from an earlier
-  // pre-setup Regular structure snapshot.
-  return calculateCurrentVisibleBhtForPension();
-}
+  if (type === "EMPLOYEE_PENSION" || type === "EMPLOYER_PENSION") {
+    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
+    // Pension setup should calculate from the final visible BHT after salary
+    // setup and allowance components have been applied, not from an earlier
+    // pre-setup Regular structure snapshot.
+    return calculateCurrentVisibleBhtForPension();
+  }
 
   if (type === "NHF") {
     return calculateRegularBasicPay();
@@ -27526,20 +29887,20 @@ function calculateStatutoryDeductionAmount(record = {}) {
     return calculateRegularPayeTax();
   }
 
-if (type === "EMPLOYEE_PENSION") {
-  // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-  // Rule-based Employee Pension applies only when HR created an active
-  // statutory pension setup row. It uses 8% of final visible BHT.
-  return calculateCurrentVisibleBhtForPension() * 0.08;
-}
+  if (type === "EMPLOYEE_PENSION") {
+    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
+    // Rule-based Employee Pension applies only when HR created an active
+    // statutory pension setup row. It uses 8% of final visible BHT.
+    return calculateCurrentVisibleBhtForPension() * 0.08;
+  }
 
-if (type === "EMPLOYER_PENSION") {
-  // PAYROLL WORKFLOW UX REPAIR - STEP 7B
-  // Rule-based Employer Pension applies only when HR created an active
-  // statutory employer pension setup row. It uses 10% of final visible BHT.
-  // This remains employer cost and is excluded from employee Net Pay.
-  return calculateCurrentVisibleBhtForPension() * 0.1;
-}
+  if (type === "EMPLOYER_PENSION") {
+    // PAYROLL WORKFLOW UX REPAIR - STEP 7B
+    // Rule-based Employer Pension applies only when HR created an active
+    // statutory employer pension setup row. It uses 10% of final visible BHT.
+    // This remains employer cost and is excluded from employee Net Pay.
+    return calculateCurrentVisibleBhtForPension() * 0.1;
+  }
 
   if (type === "NHF") {
     return calculateRegularBasicPay() * 0.025;

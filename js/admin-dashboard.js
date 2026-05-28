@@ -1789,9 +1789,11 @@ async function populateCompanyUserDepartmentOptions() {
 
     const departments = Array.isArray(data) ? data : [];
 
+    // ADMIN COMPANY USER BOOTSTRAP - STEP 1E
+    // No departments should not block first HR bootstrap.
     select.innerHTML = departments.length
       ? `<option value="">Select department</option>`
-      : `<option value="">No departments set up yet</option>`;
+      : `<option value="">No departments set up yet — optional for invite</option>`;
 
     departments.forEach((dept) => {
       const option = document.createElement("option");
@@ -1803,7 +1805,11 @@ async function populateCompanyUserDepartmentOptions() {
     select.disabled = departments.length === 0;
   } catch (err) {
     console.error("populateCompanyUserDepartmentOptions error:", err);
-    select.innerHTML = `<option value="">Could not load departments</option>`;
+
+    // ADMIN COMPANY USER BOOTSTRAP - STEP 1E
+    // Department lookup failure must not block Admin from inviting the first
+    // HR/Manager/Employee user. The department can be completed later in HR setup.
+    select.innerHTML = `<option value="">Could not load departments — optional for invite</option>`;
     select.disabled = true;
   }
 
@@ -2504,14 +2510,15 @@ function updateCompanyUserInviteButtonState() {
   const email = String(state.dom.companyUserEmail?.value || "").trim();
   const role = String(state.dom.companyUserRole?.value || "").trim();
   const tenantId = String(state.dom.companyUserTenantId?.value || "").trim();
-  const department = String(state.dom.companyUserDepartment?.value || "").trim();
-
+  // ADMIN COMPANY USER BOOTSTRAP - STEP 1E
+  // Department is optional during first company-user bootstrap.
+  // A newly created company may not have HR departments configured yet,
+  // so Admin must still be able to invite the first HR user.
   const canSubmit = Boolean(
     fullName &&
     isCompanyUserEmailValid(email) &&
     role &&
-    tenantId &&
-    department,
+    tenantId,
   );
 
   button.disabled = !canSubmit;
@@ -2557,15 +2564,9 @@ function validateCompanyUserInviteForm() {
     return false;
   }
 
-  const department = String(state.dom.companyUserDepartment?.value || "").trim();
-
-  if (!department) {
-    state.dom.companyUserDepartment?.classList.add("is-invalid");
-    showCompanyUserInviteAlert("warning", "Select a department from the list.");
-    state.dom.companyUserDepartment?.focus();
-    return false;
-  }
-
+  // ADMIN COMPANY USER BOOTSTRAP - STEP 1E
+  // Department is optional here. Admin may be creating the first HR user before
+  // the company has configured departments in the HR workspace.
   return true;
 }
 
