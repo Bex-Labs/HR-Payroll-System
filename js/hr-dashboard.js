@@ -2811,8 +2811,14 @@ function getHrWorkspaceMemoryKey() {
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Save only the active workspace key. Do not store employee, payroll,
 // bank, salary, payslip, or form data in browser storage.
+// In-memory fallback — survives within the page session even when
+// sessionStorage is blocked by browser tracking prevention.
+let _hrWorkspaceInMemory = null;
+
 function rememberHrWorkspace(workspace = "") {
   if (!isValidHrWorkspaceKey(workspace)) return;
+
+  _hrWorkspaceInMemory = workspace;
 
   try {
     sessionStorage.setItem(getHrWorkspaceMemoryKey(), workspace);
@@ -2824,6 +2830,10 @@ function rememberHrWorkspace(workspace = "") {
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Read the last workspace for this signed-in HR user and company only.
 function getRememberedHrWorkspace() {
+  // Prefer in-memory value (set when user clicks a tab this session).
+  // Falls back to sessionStorage for page refreshes.
+  if (isValidHrWorkspaceKey(_hrWorkspaceInMemory)) return _hrWorkspaceInMemory;
+
   try {
     const workspace = sessionStorage.getItem(getHrWorkspaceMemoryKey());
 

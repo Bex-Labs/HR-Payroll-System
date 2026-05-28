@@ -123,8 +123,14 @@ function getManagerWorkspaceMemoryKey() {
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Save only the active workspace key. Do not store leave, employee, team,
 // decision, comment, or manager-sensitive data in browser storage.
+// In-memory fallback — survives the page session even when
+// sessionStorage is blocked by browser tracking prevention.
+let _managerWorkspaceInMemory = null;
+
 function rememberManagerWorkspace(workspace = "") {
   if (!isValidManagerWorkspaceKey(workspace)) return;
+
+  _managerWorkspaceInMemory = workspace;
 
   try {
     sessionStorage.setItem(getManagerWorkspaceMemoryKey(), workspace);
@@ -141,6 +147,9 @@ function rememberManagerWorkspace(workspace = "") {
 // Read the remembered workspace for this manager session.
 // Fresh login naturally falls back to Profile after logout clears the keys.
 function getRememberedManagerWorkspace() {
+  // Prefer in-memory value (set when user clicks a tab this session).
+  if (isValidManagerWorkspaceKey(_managerWorkspaceInMemory)) return _managerWorkspaceInMemory;
+
   try {
     const scopedWorkspace = sessionStorage.getItem(getManagerWorkspaceMemoryKey());
     const bootWorkspace = sessionStorage.getItem(MANAGER_DASHBOARD_WORKSPACE_BOOT_KEY);
