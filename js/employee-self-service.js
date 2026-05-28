@@ -617,10 +617,10 @@
       total_days,
       reason,
       status,
-      created_at,
-      updated_at,
-      decision_date,
+      submitted_at,
+      decision_at,
       decision_by,
+      decision_by_name,
       decision_comment,
       leave_types ( name )
     `);
@@ -631,7 +631,7 @@
       query = query.in("employee_id", candidates);
     }
 
-    const { data, error } = await query.order("created_at", { ascending: false });
+    const { data, error } = await query.order("submitted_at", { ascending: false });
 
     if (error) {
       console.error("[SS] Error loading leave requests:", error);
@@ -681,7 +681,7 @@
       const startDate = ssFormatDate(request.start_date);
       const endDate = ssFormatDate(request.end_date);
       const totalDays = request.total_days || 0;
-      const submittedAt = ssFormatDate(request.created_at);
+      const submittedAt = ssFormatDate(request.submitted_at);
       const isReturned = ssNormalizeText(status).includes("returned");
 
       const card = document.createElement("div");
@@ -741,8 +741,8 @@
 
     const latest = decided[0];
     const leaveTypeName = latest.leave_types?.name || "Leave";
-    const decisionDate = latest.decision_date || latest.updated_at;
-    const decisionBy = latest.decision_by || "--";
+    const decisionDate = latest.decision_at;
+    const decisionBy = latest.decision_by_name || latest.decision_by || "--";
     const comment = latest.decision_comment || "No comment provided.";
 
     decisionEmptyState.classList.add("d-none");

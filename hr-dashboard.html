@@ -5096,132 +5096,6 @@ Disable browser address autofill popup on HR employee address fields. -->
                Close Payroll Records collapsible body. -->
             </div>
       </section>
-  </main>
-  <!-- BATCH PAYROLL DEFAULT - STEP 6D
-       Floating Back to Top button.
-       This supports long HR/payroll pages by letting HR return to the top
-       without scrolling manually through employee and payroll records. -->
-  <button type="button" id="backToTopBtn" class="btn rounded-circle shadow d-none bexhr-back-to-top-btn"
-    aria-label="Back to top" title="Back to top"
-    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px; background-color: #8a5a05; border-color: #8a5a05; color: #fff;"
-    <i class="bi bi-arrow-up"></i>
-  </button>
-  <!-- BATCH PAYROLL DEFAULT - STEP 8A
-       Floating dashboard notification.
-       This makes important blocking messages visible immediately even when
-       HR is scrolled away from the top page alert. -->
-  <div id="dashboardToast" class="d-none position-fixed" role="status" aria-live="polite"
-    style="right: 1.5rem; bottom: 5rem; z-index: 1065; max-width: 430px; width: calc(100% - 3rem);">
-    <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
-      <div id="dashboardToastAccent" class="bg-warning" style="height: 4px;"></div>
-
-      <div class="card-body p-3">
-        <div class="d-flex align-items-start gap-3">
-          <div id="dashboardToastIcon"
-            class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 text-bg-warning"
-            style="width: 36px; height: 36px;">
-            <i class="bi bi-exclamation-triangle"></i>
-          </div>
-
-          <div class="flex-grow-1">
-            <div id="dashboardToastTitle" class="fw-bold mb-1">
-              Notification
-            </div>
-
-            <div id="dashboardToastMessage" class="small text-secondary">
-              --
-            </div>
-          </div>
-
-          <button type="button" id="dashboardToastCloseBtn" class="btn btn-sm btn-light border rounded-circle"
-            aria-label="Close notification">
-            <i class="bi bi-x-lg"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <!-- PAYROLL SECURE DELIVERY - STEP 2F-3A
-     Payslip Preview modal.
-     HR uses this to review finalised payslip content before or after
-     controlled payslip notification delivery. Employee secure viewing
-     will be handled separately through a protected access route. -->
-  <div id="payslipPreviewModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
-    style="z-index: 1060; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
-    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
-      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 880px; max-height: 92vh; overflow: auto;">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
-          <div>
-            <h2 id="payslipPreviewTitle" class="h4 mb-1">Payslip Preview</h2>
-            <p class="text-secondary mb-0">
-              Review the finalised payslip details. Email notifications are sent separately through Send Selected
-              Payslips.
-            </p>
-          </div>
-
-          <button type="button" id="closePayslipPreviewBtn" class="btn btn-sm btn-outline-secondary"
-            aria-label="Close payslip preview">
-            <i class="bi bi-x-lg"></i>
-          </button>
-        </div>
-
-        <div id="payslipPreviewContent" class="card-body p-4">
-          <div class="text-center text-secondary py-4">
-            Select a finalised payroll record to preview a payslip.
-          </div>
-        </div>
-
-        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
-          <button type="button" id="printPayslipBtn" class="btn btn-outline-primary dashboard-action-btn">
-            <i class="bi bi-printer me-2"></i>Print
-          </button>
-          <button type="button" id="closePayslipPreviewFooterBtn"
-            class="btn btn-outline-secondary dashboard-action-btn">
-            Close Preview
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
-       Read-only HR view of the employee's filled form.
-       This is intentionally separate from Edit Employee Profile so HR can
-       review records without accidentally changing saved employee data. -->
-  <div id="employeeFilledFormModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
-    style="z-index: 1055; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
-    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
-      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 980px; max-height: 92vh; overflow: auto;">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
-          <div>
-            <h2 id="employeeFilledFormTitle" class="h4 mb-1">Employee Filled Form</h2>
-            <p class="text-secondary mb-0">
-              Read-only HR view of the employee information currently held on record.
-            </p>
-          </div>
-
-          <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Close employee filled form"
-            onclick="window.hrCloseEmployeeFilledForm?.()">
-            <i class="bi bi-x-lg"></i>
-          </button>
-        </div>
-
-        <div id="employeeFilledFormContent" class="card-body p-4">
-          <div class="text-center text-secondary py-4">
-            Select an employee record to view the filled form.
-          </div>
-        </div>
-
-        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
-          <button type="button" class="btn btn-outline-secondary dashboard-action-btn"
-            onclick="window.hrCloseEmployeeFilledForm?.()">
-            Close View
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- EMPLOYEE SELF-SERVICE SECTION
        HR staff use this section to manage their own leave and payroll,
        just like an employee dashboard embedded inside the HR workspace.
@@ -5591,6 +5465,134 @@ Disable browser address autofill popup on HR employee address fields. -->
     </div>
 
   </section>
+
+  </main>
+  <!-- BATCH PAYROLL DEFAULT - STEP 6D
+       Floating Back to Top button.
+       This supports long HR/payroll pages by letting HR return to the top
+       without scrolling manually through employee and payroll records. -->
+  <button type="button" id="backToTopBtn" class="btn rounded-circle shadow d-none bexhr-back-to-top-btn"
+    aria-label="Back to top" title="Back to top"
+    style="position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1050; width: 46px; height: 46px; background-color: #8a5a05; border-color: #8a5a05; color: #fff;"
+    <i class="bi bi-arrow-up"></i>
+  </button>
+  <!-- BATCH PAYROLL DEFAULT - STEP 8A
+       Floating dashboard notification.
+       This makes important blocking messages visible immediately even when
+       HR is scrolled away from the top page alert. -->
+  <div id="dashboardToast" class="d-none position-fixed" role="status" aria-live="polite"
+    style="right: 1.5rem; bottom: 5rem; z-index: 1065; max-width: 430px; width: calc(100% - 3rem);">
+    <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+      <div id="dashboardToastAccent" class="bg-warning" style="height: 4px;"></div>
+
+      <div class="card-body p-3">
+        <div class="d-flex align-items-start gap-3">
+          <div id="dashboardToastIcon"
+            class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 text-bg-warning"
+            style="width: 36px; height: 36px;">
+            <i class="bi bi-exclamation-triangle"></i>
+          </div>
+
+          <div class="flex-grow-1">
+            <div id="dashboardToastTitle" class="fw-bold mb-1">
+              Notification
+            </div>
+
+            <div id="dashboardToastMessage" class="small text-secondary">
+              --
+            </div>
+          </div>
+
+          <button type="button" id="dashboardToastCloseBtn" class="btn btn-sm btn-light border rounded-circle"
+            aria-label="Close notification">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- PAYROLL SECURE DELIVERY - STEP 2F-3A
+     Payslip Preview modal.
+     HR uses this to review finalised payslip content before or after
+     controlled payslip notification delivery. Employee secure viewing
+     will be handled separately through a protected access route. -->
+  <div id="payslipPreviewModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
+    style="z-index: 1060; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
+      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 880px; max-height: 92vh; overflow: auto;">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+          <div>
+            <h2 id="payslipPreviewTitle" class="h4 mb-1">Payslip Preview</h2>
+            <p class="text-secondary mb-0">
+              Review the finalised payslip details. Email notifications are sent separately through Send Selected
+              Payslips.
+            </p>
+          </div>
+
+          <button type="button" id="closePayslipPreviewBtn" class="btn btn-sm btn-outline-secondary"
+            aria-label="Close payslip preview">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div id="payslipPreviewContent" class="card-body p-4">
+          <div class="text-center text-secondary py-4">
+            Select a finalised payroll record to preview a payslip.
+          </div>
+        </div>
+
+        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+          <button type="button" id="printPayslipBtn" class="btn btn-outline-primary dashboard-action-btn">
+            <i class="bi bi-printer me-2"></i>Print
+          </button>
+          <button type="button" id="closePayslipPreviewFooterBtn"
+            class="btn btn-outline-secondary dashboard-action-btn">
+            Close Preview
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1A
+       Read-only HR view of the employee's filled form.
+       This is intentionally separate from Edit Employee Profile so HR can
+       review records without accidentally changing saved employee data. -->
+  <div id="employeeFilledFormModal" class="d-none position-fixed top-0 start-0 w-100 h-100"
+    style="z-index: 1055; background: rgba(15, 23, 42, 0.45);" aria-hidden="true">
+    <div class="container h-100 d-flex align-items-center justify-content-center py-4">
+      <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 980px; max-height: 92vh; overflow: auto;">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+          <div>
+            <h2 id="employeeFilledFormTitle" class="h4 mb-1">Employee Filled Form</h2>
+            <p class="text-secondary mb-0">
+              Read-only HR view of the employee information currently held on record.
+            </p>
+          </div>
+
+          <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Close employee filled form"
+            onclick="window.hrCloseEmployeeFilledForm?.()">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div id="employeeFilledFormContent" class="card-body p-4">
+          <div class="text-center text-secondary py-4">
+            Select an employee record to view the filled form.
+          </div>
+        </div>
+
+        <div class="card-footer bg-light border-0 d-flex justify-content-end gap-2 p-4">
+          <button type="button" class="btn btn-outline-secondary dashboard-action-btn"
+            onclick="window.hrCloseEmployeeFilledForm?.()">
+            Close View
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
 
   <!-- DASHBOARD WORKSPACE MEMORY - REFRESH FIX
        Runs after all DOM elements are parsed but before any external JS.
