@@ -88,7 +88,7 @@ const state = {
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Only these top-level Manager workspaces are safe to restore after refresh.
 function isValidManagerWorkspaceKey(workspace = "") {
-  return ["profile", "team"].includes(String(workspace || "").trim());
+  return ["profile", "team", "selfservice"].includes(String(workspace || "").trim());
 }
 
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
@@ -220,8 +220,16 @@ function cacheDomElements() {
 
     managerTabProfileBtn: document.getElementById("managerTabProfileBtn"),
     managerTabTeamBtn: document.getElementById("managerTabTeamBtn"),
+
+    // EMPLOYEE SELF-SERVICE - MANAGER
+    // Self-Service workspace tab and section for Managers to manage their own
+    // leave and payroll as if they were using the employee dashboard.
+    managerTabSelfServiceBtn: document.getElementById("managerTabSelfServiceBtn"),
     managerProfileSection: document.getElementById("managerProfileSection"),
     managerTeamSection: document.getElementById("managerTeamSection"),
+
+    // EMPLOYEE SELF-SERVICE - MANAGER
+    managerSelfServiceSection: document.getElementById("managerSelfServiceSection"),
 
     managerEmail: document.getElementById("managerEmail"),
     managerRole: document.getElementById("managerRole"),
@@ -599,6 +607,15 @@ function bindEvents() {
     switchManagerWorkspace("team");
   });
 
+  // EMPLOYEE SELF-SERVICE - MANAGER
+  // Manager opens their own employee self-service workspace (leave + payroll).
+  // Data loads lazily on first open; subsequent opens simply show the section.
+  state.dom.managerTabSelfServiceBtn?.addEventListener("click", () => {
+    rememberManagerWorkspace("selfservice");
+    switchManagerWorkspace("selfservice");
+    initManagerSelfServiceOnFirstOpen();
+  });
+
   state.dom.managerProfileForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await saveManagerOwnProfile();
@@ -940,9 +957,11 @@ ${errorMessage}`);
 function switchManagerWorkspace(workspace) {
   const isProfile = workspace === "profile";
   const isTeam = workspace === "team";
+  const isSelfService = workspace === "selfservice";
 
   state.dom.managerProfileSection?.classList.toggle("d-none", !isProfile);
   state.dom.managerTeamSection?.classList.toggle("d-none", !isTeam);
+  state.dom.managerSelfServiceSection?.classList.toggle("d-none", !isSelfService);
 
   state.dom.managerTabProfileBtn.className = isProfile
     ? "btn btn-primary dashboard-action-btn"
@@ -952,10 +971,18 @@ function switchManagerWorkspace(workspace) {
     ? "btn btn-primary dashboard-action-btn"
     : "btn btn-outline-primary dashboard-action-btn";
 
+  if (state.dom.managerTabSelfServiceBtn) {
+    state.dom.managerTabSelfServiceBtn.className = isSelfService
+      ? "btn btn-primary dashboard-action-btn text-nowrap"
+      : "btn btn-outline-primary dashboard-action-btn text-nowrap";
+  }
+
   if (state.dom.managerModuleValue) {
     state.dom.managerModuleValue.textContent = isProfile
       ? "Profile"
-      : "Team Management";
+      : isSelfService
+        ? "My Self-Service"
+        : "Team Management";
   }
 
   // CROSS-DASHBOARD SIDEBAR REPLICATION - MANAGER STEP 1C-2
@@ -965,9 +992,30 @@ function switchManagerWorkspace(workspace) {
   [
     { id: "sidebarManagerProfileBtn", active: isProfile },
     { id: "sidebarManagerTeamBtn", active: isTeam },
+    { id: "sidebarManagerSelfServiceBtn", active: isSelfService },
   ].forEach(({ id, active }) => {
     const item = document.getElementById(id);
     if (item) item.classList.toggle("active", active);
+  });
+}
+
+// EMPLOYEE SELF-SERVICE - MANAGER
+// Lazily initialises the self-service module on the first time the Manager opens
+// the Self-Service tab. Subsequent clicks only remember/switch the workspace.
+let _managerSelfServiceInitialised = false;
+
+function initManagerSelfServiceOnFirstOpen() {
+  if (_managerSelfServiceInitialised) return;
+
+  if (!window.EmployeeSelfService) {
+    console.warn("EmployeeSelfService module is not loaded.");
+    return;
+  }
+
+  _managerSelfServiceInitialised = true;
+  window.EmployeeSelfService.init(state.currentUser, state.currentProfile).catch((err) => {
+    console.error("Manager self-service init error:", err);
+    _managerSelfServiceInitialised = false; // allow retry on next open
   });
 }
 
