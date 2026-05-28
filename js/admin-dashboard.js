@@ -2638,6 +2638,61 @@ function resetCompanyUserInviteForm() {
   updateCompanyUserInviteButtonState();
 }
 
+// ADMIN-CREATED COMPANY USERS TO EMPLOYEE RECORDS - STEP 3A
+// After Admin successfully invites a company HR/Manager/Employee user,
+// create or link the minimal employee shell via secure Supabase RPC.
+// This keeps Admin from writing directly to employees in frontend code.
+async function syncCompanyUserEmployeeRecord(payload = {}) {
+  const role = String(payload.role || "").trim().toLowerCase();
+
+  if (!["hr", "manager", "employee"].includes(role)) {
+    return {
+      success: true,
+      skipped: true,
+      action: "skipped_role",
+      message: "This role does not require an employee record.",
+    };
+  }
+
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase.rpc(
+    "admin_sync_company_user_employee",
+    {
+      p_email: String(payload.email || "").trim().toLowerCase(),
+      p_tenant_id: String(payload.tenantId || "").trim(),
+      p_full_name: String(payload.fullName || "").trim(),
+      p_role: role,
+      p_department: String(payload.department || "").trim() || null,
+    },
+  );
+
+  if (error) {
+    console.error("Admin company user employee sync error:", error);
+
+    return {
+      success: false,
+      action: "sync_failed",
+      message:
+        String(error?.message || "").trim() ||
+        "Employee record could not be created after invite.",
+    };
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+
+  return {
+    success: Boolean(result?.success),
+    skipped: false,
+    action: String(result?.action || "").trim(),
+    employeeId: String(result?.employee_id || "").trim(),
+    employeeNumber: String(result?.employee_number || "").trim(),
+    message:
+      String(result?.message || "").trim() ||
+      "Employee record sync completed.",
+  };
+}
+
 async function inviteCompanyUser() {
   if (!validateCompanyUserInviteForm()) {
     updateCompanyUserInviteButtonState();
@@ -2664,29 +2719,55 @@ async function inviteCompanyUser() {
 
     if (error) throw error;
 
+    // ADMIN-CREATED COMPANY USERS TO EMPLOYEE RECORDS - STEP 3A
+    // Invite/profile access must succeed first. Then create/link the employee
+    // shell so HR, Manager, and Employee users appear in the HR Employee List
+    // and can later be used for payroll, leave, and self-service.
+    const employeeSyncResult = await syncCompanyUserEmployeeRecord(payload);
+
+    const employeeSyncSucceeded = Boolean(employeeSyncResult?.success);
+    const employeeSyncNumber = String(employeeSyncResult?.employeeNumber || "").trim();
+
+    const employeeSyncNote = employeeSyncSucceeded
+      ? employeeSyncNumber
+        ? ` Employee record ${employeeSyncNumber} is ready for HR/payroll.`
+        : " Employee record is ready for HR/payroll."
+      : ` Invite succeeded, but employee record sync needs review: ${
+          employeeSyncResult?.message || "No employee record was created."
+        }`;
+
     showCompanyUserInviteAlert(
-      "success",
-      data?.message ||
-      `${payload.fullName} has been invited to ${payload.companyName || "the selected company"}.`,
+      employeeSyncSucceeded ? "success" : "warning",
+      `${
+        data?.message ||
+        `${payload.fullName} has been invited to ${payload.companyName || "the selected company"}.`
+      }${employeeSyncNote}`,
     );
 
     showPageAlert(
-      "success",
-      data?.message ||
-      `${payload.fullName} has been invited successfully.`,
+      employeeSyncSucceeded ? "success" : "warning",
+      `${
+        data?.message ||
+        `${payload.fullName} has been invited successfully.`
+      }${employeeSyncNote}`,
     );
 
     showDashboardToast(
-      "success",
-      "Company user invited",
-      `${payload.fullName} was invited to ${payload.companyName || "the selected company"}.`,
+      employeeSyncSucceeded ? "success" : "warning",
+      employeeSyncSucceeded
+        ? "Company user invited"
+        : "Invite sent, employee sync pending",
+      employeeSyncSucceeded
+        ? `${payload.fullName} was invited and linked to an employee record${employeeSyncNumber ? ` (${employeeSyncNumber})` : ""}.`
+        : employeeSyncNote,
     );
 
     resetCompanyUserInviteForm();
 
-    // ADMIN COMPANY USER BOOTSTRAP - STEP 1D
+    // ADMIN-CREATED COMPANY USERS TO EMPLOYEE RECORDS - STEP 3A
     // Refresh access records so the newly created profile appears in the
-    // existing User Access Records table.
+    // existing User Access Records table. The employee record will appear
+    // in the selected company's HR Employee List after HR refreshes/logs in.
     await refreshProfileTenantLinkingWorkspace();
 
     redirectToAdminUserCompanyLinksAfterSave();

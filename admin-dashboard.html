@@ -791,9 +791,11 @@
                 </div>
               </div>
 
-              <!-- ADMIN COMPANY USER BOOTSTRAP - STEP 1C
-       This form will call the secure invite-company-user Edge Function in the
-       next JavaScript step. It does not create employee records. -->
+<!-- ADMIN-CREATED COMPANY USERS TO EMPLOYEE RECORDS - STEP 3A
+       This form calls the secure invite-company-user Edge Function first.
+       After invite/profile access succeeds, Admin JS calls a secure RPC to
+       create or link the minimum employee record needed for HR list, payroll,
+       leave, and employee self-service. -->
               <form id="companyUserInviteForm" class="border rounded-4 p-4 bg-light-subtle mb-5" novalidate>
                 <div class="row g-4 align-items-start">
                   <div class="col-lg-6">
