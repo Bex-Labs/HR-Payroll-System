@@ -387,6 +387,145 @@
         </div>
       </section>
 
+      <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+           Real HR review queue for correction requests submitted from Employee Self Service.
+           This step is read-only: HR can see requests before approve/reject actions are wired. -->
+      <section class="card dashboard-section-card mb-4" id="profileCorrectionRequestsCard">
+        <div class="card-body p-4 p-lg-5">
+          <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1E FIX
+         Restore a stable card header layout and reuse the same normal
+         dashboard-action-btn shape used across the HR dashboard.
+         Keep controls separate from the summary tiles so the card never
+         squeezes the heading, counters, or queue into narrow vertical columns. -->
+          <div class="mb-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+              <div class="flex-grow-1">
+                <h2 class="section-heading h4 mb-1">Profile Correction Requests</h2>
+                <p class="section-subtext mb-0">
+                  Review employee-submitted requests to correct HR-held profile information.
+                </p>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 align-self-start">
+                <button type="button" id="refreshProfileCorrectionRequestsBtn"
+                  class="btn btn-outline-primary dashboard-action-btn align-self-start">
+                  <i class="bi bi-arrow-clockwise me-2"></i>
+                  Refresh Requests
+                </button>
+
+                <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1E FILTER HEIGHT FIX
+     Keep this as a real select so the dropdown stays white/native.
+     Do not use dashboard-action-btn here because that makes the select taller
+     than the Refresh and Collapse buttons. -->
+                <select id="profileCorrectionRequestsViewFilter" class="form-select align-self-start"
+                  style="width: auto; min-width: 136px; height: 38px; min-height: 38px; padding-top: 0.375rem; padding-bottom: 0.375rem; border-radius: 0.75rem; background-color: #fff; font-weight: 600;"
+                  aria-label="Filter profile correction requests">
+                  <option value="open" selected>Open Only</option>
+                  <option value="all">All Requests</option>
+                </select>
+
+                <button type="button" id="toggleProfileCorrectionRequestsBtn"
+                  class="btn btn-outline-secondary dashboard-action-btn align-self-start" aria-expanded="true"
+                  aria-controls="profileCorrectionRequestsCollapse">
+                  <i class="bi bi-chevron-up me-2"></i>
+                  <span>Collapse</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-4 mb-4">
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Pending Review</div>
+                <div class="summary-tile-value h6 mb-0" id="profileCorrectionPendingCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Open Requests</div>
+                <div class="summary-tile-value h6 mb-0" id="profileCorrectionOpenCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Closed Requests</div>
+                <div class="summary-tile-value h6 mb-0" id="profileCorrectionClosedCount">0</div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-xl-3">
+              <div class="summary-tile">
+                <div class="summary-tile-label">Total Requests</div>
+                <div class="summary-tile-value h6 mb-0" id="profileCorrectionTotalCount">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1B
+     Collapse only the operational queue content.
+     Summary tiles remain visible so HR can still see whether work exists. -->
+          <div id="profileCorrectionRequestsCollapse">
+            <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1D
+       Lifecycle guidance for HR reviewers.
+       Approved is not final because HR still needs to manually update
+       the employee master record before marking the request Completed. -->
+            <div class="alert alert-light border mb-4">
+              <div class="fw-semibold mb-2">HR review lifecycle guidance</div>
+
+              <div class="row g-3 small text-secondary">
+                <div class="col-md-6 col-xl-3">
+                  <span class="badge text-bg-primary me-1">In Review</span>
+                  HR is checking the request.
+                </div>
+
+                <div class="col-md-6 col-xl-3">
+                  <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1H
+       Display the workflow meaning clearly. The stored database value remains Approved. -->
+                  <span class="badge text-bg-info me-1">Ready to Update</span>
+                  HR accepts the correction. Open the edit form, update the profile, then mark Completed.
+                </div>
+
+                <div class="col-md-6 col-xl-3">
+                  <span class="badge text-bg-success me-1">Completed</span>
+                  Use only after HR has manually updated the employee profile.
+                </div>
+
+                <div class="col-md-6 col-xl-3">
+                  <span class="badge text-bg-danger me-1">Rejected</span>
+                  Use when HR does not accept the request. Add a reason.
+                </div>
+              </div>
+            </div>
+
+            <div id="profileCorrectionRequestsStatus" class="alert d-none mb-4" role="status"></div>
+
+            <div id="profileCorrectionRequestsEmptyState" class="alert alert-light border mb-0">
+              No profile correction requests have been submitted yet.
+            </div>
+
+            <div id="profileCorrectionRequestsTableWrapper" class="dashboard-table-wrap table-responsive d-none"
+              style="max-height: 460px; overflow-y: auto;">
+              <table class="table align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Field</th>
+                    <th>Request Details</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th class="text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="profileCorrectionRequestsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="card dashboard-section-card mb-4">
         <div class="card-body p-4 p-lg-5">
           <!-- MANAGE ORGANIZATION CARD - STEP 3

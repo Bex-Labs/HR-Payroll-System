@@ -276,6 +276,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // =========================================================
     await refreshEmployeeWorkspace();
 
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+    // Load employee-submitted correction requests after employees are loaded,
+    // so the queue can resolve employee names from state.employees.
+    await refreshProfileCorrectionRequestsWorkspace();
+
     // DYNAMIC EDUCATION SUGGESTIONS - STEP 1A
     // Load saved schools/courses into the Education datalists after HR access
     // is confirmed and Supabase is available.
@@ -1648,6 +1653,19 @@ const state = {
   currentProfileEditableBaseline: null,
   employees: [],
   filteredEmployees: [],
+
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+  // Holds employee-submitted correction requests for HR review.
+  // This is read-only in this step; decision actions come after the queue is confirmed.
+  profileCorrectionRequests: [],
+
+  // HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+  // Temporary workflow return context.
+  // Set only when HR opens the employee edit form from a correction request.
+  // After the employee profile is saved, HR is returned to the correction queue
+  // so the request can be marked Completed.
+  profileCorrectionRequestEditReturnContext: null,
+
   // MANAGE ORGANIZATION CARD - STEP 3
   // Holds the single company/organization settings record loaded from Supabase.
   organizationSettings: null,
@@ -3530,6 +3548,31 @@ function cacheDomElements() {
     // Safe employee list CSV export. This is separate from batch employee import
     // and separate from payroll bank/payment CSV export.
     downloadEmployeeListCsvBtn: document.getElementById("downloadEmployeeListCsvBtn"),
+
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+    // HR-side review queue for employee-submitted profile correction requests.
+    profileCorrectionRequestsCard: document.getElementById("profileCorrectionRequestsCard"),
+    refreshProfileCorrectionRequestsBtn: document.getElementById("refreshProfileCorrectionRequestsBtn"),
+
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1C
+    // Controls whether HR sees active work only or the full audit history.
+    profileCorrectionRequestsViewFilter: document.getElementById("profileCorrectionRequestsViewFilter"),
+
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1B
+    // Collapse control for the operational request queue only.
+    // Summary tiles stay visible for HR workload awareness.
+    toggleProfileCorrectionRequestsBtn: document.getElementById("toggleProfileCorrectionRequestsBtn"),
+    profileCorrectionRequestsCollapse: document.getElementById("profileCorrectionRequestsCollapse"),
+
+    profileCorrectionPendingCount: document.getElementById("profileCorrectionPendingCount"),
+    profileCorrectionOpenCount: document.getElementById("profileCorrectionOpenCount"),
+    profileCorrectionClosedCount: document.getElementById("profileCorrectionClosedCount"),
+    profileCorrectionTotalCount: document.getElementById("profileCorrectionTotalCount"),
+    profileCorrectionRequestsStatus: document.getElementById("profileCorrectionRequestsStatus"),
+    profileCorrectionRequestsEmptyState: document.getElementById("profileCorrectionRequestsEmptyState"),
+    profileCorrectionRequestsTableWrapper: document.getElementById("profileCorrectionRequestsTableWrapper"),
+    profileCorrectionRequestsTableBody: document.getElementById("profileCorrectionRequestsTableBody"),
+
     // HRP-78 - BATCH EMPLOYEE CSV IMPORT - STEP 1B
     // Cache the Batch Employee Import UI elements added to the Employees workspace.
     // This only connects the existing HTML elements to JavaScript.
@@ -4148,6 +4191,14 @@ function getDashboardWorkingCardPairs() {
   return [
     [state.dom.toggleOrganizationSettingsCardBtn, state.dom.organizationSettingsCardCollapse],
     [state.dom.toggleEmployeeListCardBtn, state.dom.employeeListCardCollapse],
+
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1B
+    // Add Profile Correction Requests to the shared HR card behaviour.
+    // Double-click works on the card shell/summary/blank space, but the existing
+    // double-click guard ignores table content, buttons, links, selects, inputs,
+    // labels, and textareas so HR does not accidentally collapse while reviewing
+    // or saving a request decision.
+    [state.dom.toggleProfileCorrectionRequestsBtn, state.dom.profileCorrectionRequestsCollapse],
     [state.dom.toggleEmployeeFormCardBtn, state.dom.employeeFormCardCollapse],
     [state.dom.toggleBankDirectoryCardBtn, state.dom.bankDirectoryCardCollapse],
     [state.dom.toggleEmployeeBankDetailsCardBtn, state.dom.employeeBankDetailsCardCollapse],
@@ -5176,6 +5227,81 @@ function openEmployeeListCard() {
     state.dom.employeeListCardCollapse,
     true,
   );
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+// Keep correction-request return behaviour separate from the normal employee
+// save redirect. Only the correction request workflow should come back here.
+function openProfileCorrectionRequestsCard() {
+  setDashboardCardExpanded(
+    state.dom.toggleProfileCorrectionRequestsBtn,
+    state.dom.profileCorrectionRequestsCollapse,
+    true,
+  );
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+// Store the exact request/employee context only when HR opens the edit form
+// from the correction request queue.
+function setProfileCorrectionRequestEditReturnContext(request = {}, employeeId = "") {
+  state.profileCorrectionRequestEditReturnContext = {
+    requestId: String(request.id || "").trim(),
+    employeeId: String(employeeId || request.employee_id || "").trim(),
+  };
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+// Clear the temporary workflow context so normal employee edits still return
+// to Full Employee List as before.
+function clearProfileCorrectionRequestEditReturnContext() {
+  state.profileCorrectionRequestEditReturnContext = null;
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+// Confirm that the employee just saved is the employee opened from the
+// correction request workflow.
+function shouldReturnToProfileCorrectionRequestsAfterEmployeeSave(employeeId = "") {
+  const context = state.profileCorrectionRequestEditReturnContext;
+  const savedEmployeeId = String(employeeId || "").trim();
+
+  return Boolean(
+    context?.requestId &&
+    context?.employeeId &&
+    savedEmployeeId &&
+    context.employeeId === savedEmployeeId,
+  );
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+// After HR saves the employee profile, return them to the correction queue
+// instead of the Full Employee List so they can close the request properly.
+async function redirectToProfileCorrectionRequestsAfterEmployeeSave() {
+  switchHrWorkspace("employees");
+  closeEmployeeFormCard();
+  openProfileCorrectionRequestsCard();
+
+  if (state.dom.profileCorrectionRequestsViewFilter) {
+    state.dom.profileCorrectionRequestsViewFilter.value = "open";
+  }
+
+  await refreshProfileCorrectionRequestsWorkspace();
+
+  openProfileCorrectionRequestsCard();
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1I COPY FIX
+// Use the same lifecycle wording as the dropdown status.
+// After the employee profile save, HR only needs to close the request.
+setProfileCorrectionRequestsStatus(
+  "info",
+  "Employee profile was saved. Review the correction request, add your HR response, then select Completed to close the request.",
+);
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      openProfileCorrectionRequestsCard();
+      scrollToDashboardTarget(state.dom.profileCorrectionRequestsCard, 16);
+    });
+  });
 }
 
 // EMPLOYEE BIODATA COMPLETION - STEP 3K
@@ -7794,6 +7920,11 @@ function alignEmployeeWorkspaceCardOrder() {
   const employeeListCard =
     state.dom.employeeListCardCollapse?.closest(".dashboard-section-card");
 
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+  // Keep correction requests near the top of People because they are HR action work,
+  // not setup data and not payroll processing.
+  const profileCorrectionRequestsCard = state.dom.profileCorrectionRequestsCard;
+
   const employeeFormCard =
     state.dom.employeeFormCardCollapse?.closest(".dashboard-section-card");
 
@@ -7812,10 +7943,11 @@ function alignEmployeeWorkspaceCardOrder() {
 
   [
     employeeSummaryCard,
+    profileCorrectionRequestsCard,
     employeeListCard,
     employeeFormCard,
     batchEmployeeImportCard,
-  ].forEach((card) => {
+  ].filter(Boolean).forEach((card) => {
     card.classList.add("mb-4");
   });
 
@@ -7823,6 +7955,12 @@ function alignEmployeeWorkspaceCardOrder() {
   employeeSummaryCard.insertAdjacentElement("afterend", batchEmployeeImportCard);
   employeeSummaryCard.insertAdjacentElement("afterend", employeeFormCard);
   employeeSummaryCard.insertAdjacentElement("afterend", employeeListCard);
+
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+  // Final insertion keeps this queue directly after the People summary.
+  profileCorrectionRequestsCard?.insertAdjacentElement
+    ? employeeSummaryCard.insertAdjacentElement("afterend", profileCorrectionRequestsCard)
+    : null;
 }
 
 function bindEvents() {
@@ -8021,6 +8159,26 @@ function bindEvents() {
 
   state.dom.refreshEmployeesBtn?.addEventListener("click", async () => {
     await handleEmployeeRecordsRefresh();
+  });
+
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+  // Refresh only the correction request queue.
+  state.dom.refreshProfileCorrectionRequestsBtn?.addEventListener("click", async () => {
+    await refreshProfileCorrectionRequestsWorkspace({ showAlert: true });
+  });
+
+  // HR PROFILE CORRECTION REQUESTS UX - STEP 1C
+  // Filter the visible queue only. Summary tiles still show the full workload.
+  // When HR deliberately changes the filter, keep the queue expanded so the
+  // result of the filter change is visible immediately.
+  state.dom.profileCorrectionRequestsViewFilter?.addEventListener("change", () => {
+    renderProfileCorrectionRequests(state.profileCorrectionRequests || []);
+
+    setDashboardCardExpanded(
+      state.dom.toggleProfileCorrectionRequestsBtn,
+      state.dom.profileCorrectionRequestsCollapse,
+      true,
+    );
   });
 
   state.dom.employeeCreateForm?.addEventListener("submit", async (event) => {
@@ -8260,6 +8418,14 @@ function bindEvents() {
   bindCardCollapseToggle(
     state.dom.toggleEmployeeListCardBtn,
     state.dom.employeeListCardCollapse,
+  );
+
+  // HR PROFILE CORRECTION REQUESTS UX - STEP 1B
+  // Bind the Profile Correction Requests queue collapse button.
+  // This collapses only the queue details; the summary tiles stay visible.
+  bindCardCollapseToggle(
+    state.dom.toggleProfileCorrectionRequestsBtn,
+    state.dom.profileCorrectionRequestsCollapse,
   );
 
   // MANAGE ORGANIZATION CARD - STEP 3
@@ -12773,7 +12939,803 @@ async function handleEmployeeRecordsRefresh() {
     setWorkspaceRefreshLoading(button, true);
     await waitForNextPaint();
     await refreshEmployeeWorkspace();
+
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+    // Employee names used by the queue can change after People refresh,
+    // so reload the queue immediately after employee records refresh.
+    await refreshProfileCorrectionRequestsWorkspace();
   } finally {
+    setWorkspaceRefreshLoading(button, false);
+  }
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Status normalisation used only for HR correction-request display.
+function normalizeProfileCorrectionRequestStatus(status = "") {
+  return normalizeText(status).replaceAll("_", " ");
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Pending and in-review requests are still active HR work.
+function isOpenProfileCorrectionRequest(record = {}) {
+  const status = normalizeProfileCorrectionRequestStatus(record.status || "Pending");
+
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C
+  // Approved is still open HR work because HR must manually update the
+  // employee master record before marking the request Completed.
+  return status === "pending" || status === "in review" || status === "approved";
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Badge colour for request lifecycle status.
+function getProfileCorrectionRequestStatusBadgeClass(status = "") {
+  const normalisedStatus = normalizeProfileCorrectionRequestStatus(status || "Pending");
+
+  if (normalisedStatus === "pending") return "text-bg-warning";
+  if (normalisedStatus === "in review") return "text-bg-primary";
+  if (normalisedStatus === "approved") return "text-bg-success";
+  if (normalisedStatus === "completed") return "text-bg-success";
+  if (normalisedStatus === "rejected") return "text-bg-danger";
+  if (normalisedStatus === "closed") return "text-bg-secondary";
+
+  return "text-bg-light border text-dark";
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Resolve employee display details from the already-loaded tenant employee list.
+function getProfileCorrectionRequestEmployeeDisplay(record = {}) {
+  const employeeId = String(record.employee_id || "").trim();
+
+  const employee = (state.employees || []).find(
+    (item) => String(item.id || "").trim() === employeeId,
+  );
+
+  if (!employee) {
+    return {
+      name: "Unknown Employee",
+      email: "--",
+      employeeNumber: "--",
+    };
+  }
+
+  return {
+    name: getEmployeeDisplayNameById(employeeId),
+    email: employee.work_email || employee.email || "--",
+    employeeNumber: employee.employee_number || employee.employee_id || "--",
+  };
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Keep newest active requests first, then newest closed requests.
+function sortProfileCorrectionRequests(records = []) {
+  return [...records].sort((a, b) => {
+    const aOpen = isOpenProfileCorrectionRequest(a) ? 1 : 0;
+    const bOpen = isOpenProfileCorrectionRequest(b) ? 1 : 0;
+
+    if (bOpen !== aOpen) {
+      return bOpen - aOpen;
+    }
+
+    const aTime = new Date(a.created_at || a.updated_at || 0).getTime() || 0;
+    const bTime = new Date(b.created_at || b.updated_at || 0).getTime() || 0;
+
+    return bTime - aTime;
+  });
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1B
+// Smart default:
+// - open HR work should stay visible;
+// - fully closed/no-work queue should stay compact.
+// This only collapses the queue details, not the summary tiles.
+function syncProfileCorrectionRequestsSmartCollapse(records = []) {
+  const requests = Array.isArray(records) ? records : [];
+  const hasOpenRequests = requests.some(isOpenProfileCorrectionRequest);
+
+  setDashboardCardExpanded(
+    state.dom.toggleProfileCorrectionRequestsBtn,
+    state.dom.profileCorrectionRequestsCollapse,
+    hasOpenRequests,
+  );
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1C
+// Default HR operational view is Open Only.
+// All Requests is available for audit/history review.
+function getProfileCorrectionRequestsViewFilter() {
+  const selectedFilter = String(
+    state.dom.profileCorrectionRequestsViewFilter?.value || "open",
+  )
+    .trim()
+    .toLowerCase();
+
+  return selectedFilter === "all" ? "all" : "open";
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1C
+// This affects table visibility only.
+// Summary tiles and saved request data remain based on the full request list.
+function filterProfileCorrectionRequestsForCurrentView(records = []) {
+  const requests = Array.isArray(records) ? records : [];
+
+  if (getProfileCorrectionRequestsViewFilter() === "all") {
+    return requests;
+  }
+
+  return requests.filter(isOpenProfileCorrectionRequest);
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Update correction request summary tiles.
+function updateProfileCorrectionRequestSummary(records = []) {
+  const requests = Array.isArray(records) ? records : [];
+  const pendingCount = requests.filter(
+    (record) => normalizeProfileCorrectionRequestStatus(record.status || "Pending") === "pending",
+  ).length;
+  const openCount = requests.filter(isOpenProfileCorrectionRequest).length;
+  const closedCount = requests.length - openCount;
+
+  if (state.dom.profileCorrectionPendingCount) {
+    state.dom.profileCorrectionPendingCount.textContent = String(pendingCount);
+  }
+
+  if (state.dom.profileCorrectionOpenCount) {
+    state.dom.profileCorrectionOpenCount.textContent = String(openCount);
+  }
+
+  if (state.dom.profileCorrectionClosedCount) {
+    state.dom.profileCorrectionClosedCount.textContent = String(closedCount);
+  }
+
+  if (state.dom.profileCorrectionTotalCount) {
+    state.dom.profileCorrectionTotalCount.textContent = String(requests.length);
+  }
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Local status helper for the HR review queue.
+function setProfileCorrectionRequestsStatus(type = "info", message = "") {
+  const status = state.dom.profileCorrectionRequestsStatus;
+  if (!status) return;
+
+  const safeType = ["success", "info", "warning", "danger"].includes(type)
+    ? type
+    : "info";
+
+  status.className = `alert alert-${safeType} border mb-4`;
+  status.innerHTML = message || "";
+  status.classList.toggle("d-none", !message);
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C
+// Show a real loading row while HR correction requests are being read.
+function renderProfileCorrectionRequestsLoadingState() {
+  if (!state.dom.profileCorrectionRequestsTableBody) return;
+
+  state.dom.profileCorrectionRequestsEmptyState?.classList.add("d-none");
+  state.dom.profileCorrectionRequestsTableWrapper?.classList.remove("d-none");
+
+  state.dom.profileCorrectionRequestsTableBody.innerHTML = `
+    <tr>
+      <td colspan="6" class="text-center text-secondary py-4">
+        Loading profile correction requests.
+      </td>
+    </tr>
+  `;
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C
+// HR response/comment display helper.
+// Keep fallback names defensive so older database snapshots do not break rendering.
+function getProfileCorrectionRequestHrResponse(record = {}) {
+  return String(
+    record.hr_response ||
+    record.hr_comment ||
+    record.hr_response_comment ||
+    record.review_comment ||
+    record.review_notes ||
+    "",
+  ).trim();
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C
+// Only allow controlled lifecycle decisions from the HR queue.
+// This prevents accidental free-text statuses from being saved.
+function isValidProfileCorrectionDecisionStatus(status = "") {
+  return [
+    "Pending",
+    "In Review",
+    "Approved",
+    "Rejected",
+    "Completed",
+  ].includes(String(status || "").trim());
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C UX FIX
+// Rejected and Completed decisions need a clear HR audit note.
+// In Review and Approved can move without comment because they are lifecycle states.
+function doesProfileCorrectionDecisionRequireComment(status = "") {
+  const cleanStatus = normalizeProfileCorrectionRequestStatus(status);
+
+  return cleanStatus === "rejected" || cleanStatus === "completed";
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1H
+// Display Approved as "Ready to Update" so HR understands this is not final.
+// The stored database value remains Approved to avoid breaking existing rows.
+function formatProfileCorrectionDecisionDisplayLabel(status = "") {
+  const cleanStatus = normalizeProfileCorrectionRequestStatus(status);
+
+  if (cleanStatus === "pending") return "Pending Review";
+  if (cleanStatus === "in review") return "In Review";
+  if (cleanStatus === "approved") return "Ready to Update";
+  if (cleanStatus === "rejected") return "Rejected";
+  if (cleanStatus === "completed") return "Completed";
+  if (cleanStatus === "closed") return "Closed";
+
+  return formatStatusLabel(status || "Pending");
+}
+
+// HR PROFILE CORRECTION REQUESTS UX - STEP 1D
+// Give HR clear status-specific guidance beside the decision control.
+// This is display guidance only; it does not update employee master data.
+function getProfileCorrectionDecisionGuidance(status = "") {
+  const cleanStatus = normalizeProfileCorrectionRequestStatus(status);
+
+  if (cleanStatus === "in review") {
+    return "Use while HR is checking the employee’s request.";
+  }
+
+  if (cleanStatus === "approved") {
+    return "Ready to Update means HR accepts the correction. Open the edit form, update the employee profile manually, then mark this request Completed.";
+  }
+
+  if (cleanStatus === "completed") {
+    return "Use Completed only after the employee master record has been manually updated.";
+  }
+
+  if (cleanStatus === "rejected") {
+    return "Rejected requires an HR response/comment explaining why the request was not accepted.";
+  }
+
+  return "Pending Review means the request is waiting for HR review.";
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C UX FIX
+// Pending Review is the system intake/default state, not a normal HR decision.
+// Keep it visible only when the request is still pending, then remove it once HR has started review.
+function buildProfileCorrectionDecisionOptions(currentStatus = "") {
+  const cleanCurrentStatus = normalizeProfileCorrectionRequestStatus(currentStatus);
+
+  const decisionOptions = [];
+
+  if (cleanCurrentStatus === "pending") {
+    decisionOptions.push({
+      value: "Pending",
+      label: "Pending Review",
+    });
+  }
+
+  decisionOptions.push(
+    {
+      value: "In Review",
+      label: "In Review",
+    },
+    {
+      // HR PROFILE CORRECTION REQUESTS UX - STEP 1H
+      // Keep the saved database value as Approved, but display the HR workflow
+      // meaning more clearly: this request is accepted and ready for manual update.
+      value: "Approved",
+      label: "Ready to Update",
+    },
+    {
+      value: "Rejected",
+      label: "Rejected",
+    },
+    {
+      value: "Completed",
+      label: "Completed",
+    },
+  );
+
+  return decisionOptions
+    .map((option) => {
+      const isSelected =
+        normalizeProfileCorrectionRequestStatus(option.value) === cleanCurrentStatus;
+
+      return `
+        <option value="${option.value}" ${isSelected ? "selected" : ""}>
+          ${option.label}
+        </option>
+      `;
+    })
+    .join("");
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C
+// Render the HR queue with lifecycle decision controls.
+// This does not update employee master data automatically.
+function renderProfileCorrectionRequests(records = []) {
+  const tbody = state.dom.profileCorrectionRequestsTableBody;
+  if (!tbody) return;
+
+  const requests = sortProfileCorrectionRequests(records);
+
+  // HR PROFILE CORRECTION REQUESTS UX - STEP 1C
+  // Summary tiles stay based on all loaded requests.
+  // The table can then show Open Only or All Requests.
+  const visibleRequests = filterProfileCorrectionRequestsForCurrentView(requests);
+
+  updateProfileCorrectionRequestSummary(requests);
+
+  // HR PROFILE CORRECTION REQUESTS UX - STEP 1B
+  // Keep active HR work expanded, but collapse the queue when there is no open work.
+  syncProfileCorrectionRequestsSmartCollapse(requests);
+
+  tbody.innerHTML = "";
+
+  if (!requests.length) {
+    if (state.dom.profileCorrectionRequestsEmptyState) {
+      state.dom.profileCorrectionRequestsEmptyState.textContent =
+        "No profile correction requests have been submitted yet.";
+    }
+
+    state.dom.profileCorrectionRequestsEmptyState?.classList.remove("d-none");
+    state.dom.profileCorrectionRequestsTableWrapper?.classList.add("d-none");
+    return;
+  }
+
+  if (!visibleRequests.length) {
+    if (state.dom.profileCorrectionRequestsEmptyState) {
+      state.dom.profileCorrectionRequestsEmptyState.textContent =
+        "No open profile correction requests. Switch to All Requests to review completed or rejected request history.";
+    }
+
+    state.dom.profileCorrectionRequestsEmptyState?.classList.remove("d-none");
+    state.dom.profileCorrectionRequestsTableWrapper?.classList.add("d-none");
+    return;
+  }
+
+  state.dom.profileCorrectionRequestsEmptyState?.classList.add("d-none");
+  state.dom.profileCorrectionRequestsTableWrapper?.classList.remove("d-none");
+
+  visibleRequests.forEach((request) => {
+    const employee = getProfileCorrectionRequestEmployeeDisplay(request);
+
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1F
+    // Let HR open the existing read-only employee filled-form modal directly
+    // from the correction request row. This keeps HR inside People and avoids
+    // routing to the employee dashboard or exposing employee IDs in the URL.
+    const requestEmployeeId = String(request.employee_id || "").trim();
+    const canOpenEmployeeProfileFromRequest = Boolean(
+      requestEmployeeId && typeof viewEmployeeFilledForm === "function",
+    );
+
+    const employeeNameHtml = canOpenEmployeeProfileFromRequest
+      ? `
+      <button type="button"
+        class="btn btn-link p-0 fw-semibold text-start text-decoration-none"
+        title="Open employee profile details"
+        aria-label="Open employee profile details for ${escapeHtml(employee.name)}"
+        data-profile-correction-view-employee>
+        ${escapeHtml(employee.name)}
+      </button>
+    `
+      : `<div class="fw-semibold">${escapeHtml(employee.name)}</div>`;
+
+    const status = request.status || "Pending";
+
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1G
+    // HR must not edit directly from the employee name link.
+    // The edit form is exposed only after the request is Approved, because
+    // Approved means HR has accepted the correction but still needs to manually
+    // update the employee master record before marking the request Completed.
+    const canOpenEmployeeEditFromRequest = Boolean(
+      requestEmployeeId &&
+      normalizeProfileCorrectionRequestStatus(status) === "approved" &&
+      canCurrentUserMaintainPeopleData() &&
+      typeof startEmployeeEdit === "function",
+    );
+
+    const employeeEditButtonHtml = canOpenEmployeeEditFromRequest
+      ? `
+      <button type="button"
+        class="btn btn-sm btn-outline-primary dashboard-action-btn w-100 mb-2"
+        data-profile-correction-edit-employee>
+        <i class="bi bi-pencil-square me-1"></i>
+        Open Edit Form
+      </button>
+
+      <div class="form-text mb-2">
+        Update the employee profile manually, then mark this request Completed.
+      </div>
+    `
+      : "";
+
+    const categoryLabel = formatStatusLabel(request.request_category || "");
+    const submittedOn = formatDateTime(request.created_at || request.updated_at);
+
+    const currentValue = String(request.current_value_snapshot || "").trim() || "--";
+    const requestedValue = String(request.requested_value || "").trim() || "Not provided";
+    const reason = String(request.reason || "").trim() || "--";
+    const hrResponse = getProfileCorrectionRequestHrResponse(request);
+
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C UX FIX
+    // Show the saved HR response as read-only audit context.
+    // Keep the action textarea empty after refresh so HR is not looking at a stale input field.
+    const savedHrResponseHtml = hrResponse
+      ? `
+    <div class="small mt-2 pt-2 border-top">
+      <span class="fw-semibold">HR Response:</span>
+      <span class="text-secondary">${escapeHtml(hrResponse)}</span>
+    </div>
+  `
+      : "";
+
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C UX FIX
+    // Build the HR decision dropdown from the current lifecycle state.
+    // This prevents HR from moving an already-reviewed request back to Pending Review.
+    const profileCorrectionDecisionOptionsHtml =
+      buildProfileCorrectionDecisionOptions(status);
+
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+<td class="align-top">
+  <!-- HR PROFILE CORRECTION REQUESTS UX - STEP 1F
+       Employee name is the HR drilldown point for the request.
+       It opens the existing read-only employee profile modal only. -->
+  ${employeeNameHtml}
+  <div class="small text-secondary text-break">${escapeHtml(employee.email)}</div>
+  <div class="small text-secondary">Employee No: ${escapeHtml(employee.employeeNumber)}</div>
+</td>
+
+      <td class="align-top">
+        <div class="fw-semibold">${escapeHtml(request.field_label || request.field_key || "--")}</div>
+        <div class="small text-secondary">${escapeHtml(categoryLabel || "--")}</div>
+      </td>
+
+      <td class="align-top">
+        <div class="small mb-2">
+          <span class="fw-semibold">Current:</span>
+          <span class="text-secondary">${escapeHtml(currentValue)}</span>
+        </div>
+
+        <div class="small mb-2">
+          <span class="fw-semibold">Requested:</span>
+          <span class="text-secondary">${escapeHtml(requestedValue)}</span>
+        </div>
+
+<div class="small">
+  <span class="fw-semibold">Reason:</span>
+  <span class="text-secondary">${escapeHtml(reason)}</span>
+</div>
+
+${savedHrResponseHtml}
+      </td>
+
+      <td class="align-top">
+<span class="badge ${getProfileCorrectionRequestStatusBadgeClass(status)}">
+  ${escapeHtml(formatProfileCorrectionDecisionDisplayLabel(status))}
+</span>
+      </td>
+
+      <td class="align-top text-nowrap">
+        ${escapeHtml(submittedOn)}
+      </td>
+
+      <td class="align-top" style="min-width: 260px;">
+        <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C
+             HR decision controls only update the request lifecycle record.
+             They must not auto-write to the employee master record. -->
+        <label class="form-label small fw-semibold mb-1" for="profileCorrectionStatus-${escapeHtml(request.id)}">
+          HR Decision
+        </label>
+
+<select id="profileCorrectionStatus-${escapeHtml(request.id)}"
+  class="form-select form-select-sm mb-1"
+  data-profile-correction-status>
+  ${profileCorrectionDecisionOptionsHtml}
+</select>
+
+<div class="form-text mb-2" data-profile-correction-decision-guidance>
+  ${escapeHtml(getProfileCorrectionDecisionGuidance(status))}
+</div>
+
+<label class="form-label small fw-semibold mb-1" for="profileCorrectionHrResponse-${escapeHtml(request.id)}">
+  New HR Response / Comment
+</label>
+
+<textarea id="profileCorrectionHrResponse-${escapeHtml(request.id)}"
+  class="form-control form-control-sm mb-1"
+  rows="2"
+  maxlength="500"
+  placeholder="Add a new HR note, rejection reason, or completion comment."
+  data-profile-correction-response></textarea>
+
+<div class="form-text mb-2">
+  Leave blank to keep the existing HR response.
+</div>
+
+${employeeEditButtonHtml}
+
+<button type="button"
+  id="profileCorrectionSaveBtn-${escapeHtml(request.id)}"
+  class="btn btn-sm btn-secondary dashboard-action-btn w-100"
+  data-original-status="${escapeHtml(status)}"
+  data-profile-correction-save
+  disabled>
+  <i class="bi bi-check2-circle me-1"></i>
+  Save Decision
+</button>
+      </td>
+    `;
+
+    const statusControl = row.querySelector("[data-profile-correction-status]");
+    const responseControl = row.querySelector("[data-profile-correction-response]");
+    const saveControl = row.querySelector("[data-profile-correction-save]");
+
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1F
+    // Employee-name drilldown inside correction requests.
+    // Stop propagation so this does not interfere with card double-click collapse.
+    const employeeProfileButton = row.querySelector("[data-profile-correction-view-employee]");
+
+    employeeProfileButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      viewEmployeeFilledForm(requestEmployeeId);
+    });
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1G
+    // Explicit edit action for Approved correction requests only.
+    // This opens the normal HR employee edit form; it does not auto-change data
+    // and it does not mark the correction request Completed.
+    const employeeEditButton = row.querySelector("[data-profile-correction-edit-employee]");
+
+    employeeEditButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!canCurrentUserMaintainPeopleData()) {
+        showHrPeopleAccessDeniedMessage();
+        return;
+      }
+
+      // HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+      // Open the normal employee edit form, but remember this came from a
+      // correction request so save can return HR to the request queue.
+      startEmployeeEdit(requestEmployeeId, {
+        profileCorrectionRequestId: request.id,
+      });
+
+      showPageAlert(
+        "info",
+        "Employee edit form opened. Update the employee profile manually, save the employee record, then mark the request Completed.",
+      );
+    });
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1D
+    // Inline helper text changes as HR changes the decision dropdown.
+    const decisionGuidanceControl = row.querySelector("[data-profile-correction-decision-guidance]");
+
+    const updateSaveDecisionButtonState = () => {
+      const originalStatus = normalizeProfileCorrectionRequestStatus(status);
+      const selectedStatus = normalizeProfileCorrectionRequestStatus(statusControl?.value || "");
+      const newComment = String(responseControl?.value || "").trim();
+
+      const statusChanged = Boolean(selectedStatus && selectedStatus !== originalStatus);
+      const commentAdded = Boolean(newComment);
+      const commentRequired = doesProfileCorrectionDecisionRequireComment(statusControl?.value || "");
+
+      if (responseControl) {
+        responseControl.required = commentRequired;
+      }
+
+      // HR PROFILE CORRECTION REQUESTS UX - STEP 1D
+      // Keep the HR guidance text in sync with the selected lifecycle decision.
+      // This is display guidance only and does not update employee master data.
+      if (decisionGuidanceControl) {
+        decisionGuidanceControl.textContent = getProfileCorrectionDecisionGuidance(
+          statusControl?.value || "",
+        );
+      }
+
+      if (!saveControl) return;
+
+      const canSave = (statusChanged || commentAdded) && (!commentRequired || commentAdded);
+
+      saveControl.disabled = !canSave;
+      saveControl.className = canSave
+        ? "btn btn-sm btn-primary dashboard-action-btn w-100"
+        : "btn btn-sm btn-secondary dashboard-action-btn w-100";
+    };
+
+    statusControl?.addEventListener("change", updateSaveDecisionButtonState);
+    responseControl?.addEventListener("input", updateSaveDecisionButtonState);
+
+    updateSaveDecisionButtonState();
+
+    saveControl?.addEventListener("click", async () => {
+      await handleProfileCorrectionRequestDecisionSave(request.id);
+    });
+
+    tbody.appendChild(row);
+  });
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C
+// Save the HR lifecycle decision only.
+// Critical HR behaviour: this does not overwrite employee master data.
+async function handleProfileCorrectionRequestDecisionSave(requestId) {
+  const cleanRequestId = String(requestId || "").trim();
+
+  if (!cleanRequestId) {
+    showPageAlert("warning", "The selected profile correction request is missing its request ID.");
+    return;
+  }
+
+  const request = (state.profileCorrectionRequests || []).find(
+    (item) => String(item.id || "").trim() === cleanRequestId,
+  );
+
+  if (!request) {
+    showPageAlert(
+      "warning",
+      "The selected profile correction request could not be found. Refresh the queue and try again.",
+    );
+    return;
+  }
+
+  const statusField = document.getElementById(`profileCorrectionStatus-${cleanRequestId}`);
+  const responseField = document.getElementById(`profileCorrectionHrResponse-${cleanRequestId}`);
+  const saveButton = document.getElementById(`profileCorrectionSaveBtn-${cleanRequestId}`);
+
+  const nextStatus = String(statusField?.value || "").trim();
+  const hrResponse = String(responseField?.value || "").trim();
+  const existingHrResponse = getProfileCorrectionRequestHrResponse(request);
+
+  if (!isValidProfileCorrectionDecisionStatus(nextStatus)) {
+    showPageAlert("warning", "Select a valid HR decision status before saving.");
+    return;
+  }
+
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C UX FIX
+  // Rejection and completion are audit-heavy HR decisions, so HR must record
+  // why the request was rejected or what was completed manually.
+  if (doesProfileCorrectionDecisionRequireComment(nextStatus) && !hrResponse) {
+    showPageAlert(
+      "warning",
+      `${formatStatusLabel(nextStatus)} requires an HR response/comment before saving.`,
+    );
+
+    responseField?.focus();
+    return;
+  }
+
+  const supabase = getSupabaseClient();
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+  const reviewedAt = new Date().toISOString();
+
+  const payload = {
+    status: nextStatus,
+    reviewed_by: state.currentUser?.id || null,
+    reviewed_at: reviewedAt,
+    updated_at: reviewedAt,
+  };
+
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1C UX FIX
+  // Empty comment should not wipe the previous saved HR response.
+  // HR can enter a new response when they deliberately want to replace the old one.
+  if (hrResponse || !existingHrResponse) {
+    payload.hr_response = hrResponse || null;
+  }
+
+  try {
+    setWorkspaceRefreshLoading(saveButton, true, "Saving...");
+
+    const { data, error } = await supabase
+      .from("employee_profile_correction_requests")
+      .update(payload)
+      .eq("id", cleanRequestId)
+      .eq("tenant_id", tenantId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      showPageAlert(
+        "warning",
+        "No profile correction request was updated. Refresh the queue and confirm the request still belongs to this company workspace.",
+      );
+      return;
+    }
+
+    setProfileCorrectionRequestsStatus(
+      "success",
+      `Profile correction request marked as ${escapeHtml(formatProfileCorrectionDecisionDisplayLabel(nextStatus))}. Employee master data was not changed automatically.`
+    );
+
+    showPageAlert(
+      "success",
+      `Profile correction request marked as ${formatProfileCorrectionDecisionDisplayLabel(nextStatus)}. Update the employee master record manually where appropriate.`
+    );
+
+    await refreshProfileCorrectionRequestsWorkspace();
+  } catch (error) {
+    console.error("Error saving profile correction request decision:", error);
+
+    setProfileCorrectionRequestsStatus(
+      "danger",
+      error.message || "The HR decision could not be saved.",
+    );
+
+    showPageAlert(
+      "danger",
+      error.message || "The HR decision could not be saved.",
+    );
+  } finally {
+    setWorkspaceRefreshLoading(saveButton, false);
+  }
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Load correction requests for the current HR tenant only.
+async function loadProfileCorrectionRequests() {
+  const supabase = getSupabaseClient();
+  const tenantId = getRequiredTenantIdForHrEmployeeData();
+
+  const { data, error } = await supabase
+    .from("employee_profile_correction_requests")
+    .select("*")
+    .eq("tenant_id", tenantId);
+
+  if (error) throw error;
+
+  state.profileCorrectionRequests = sortProfileCorrectionRequests(
+    Array.isArray(data) ? data : [],
+  );
+
+  renderProfileCorrectionRequests(state.profileCorrectionRequests);
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - HR REVIEW PANEL - STEP 1B
+// Public refresh wrapper used on startup and by the Refresh Requests button.
+async function refreshProfileCorrectionRequestsWorkspace(options = {}) {
+  const { showAlert = false } = options;
+
+  if (!state.dom.profileCorrectionRequestsCard) return;
+
+  const button = state.dom.refreshProfileCorrectionRequestsBtn;
+  const startedAt = Date.now();
+
+  try {
+    setWorkspaceRefreshLoading(button, true, "Refreshing...");
+    renderProfileCorrectionRequestsLoadingState();
+    setProfileCorrectionRequestsStatus("info", "");
+
+    await waitForNextPaint();
+    await loadProfileCorrectionRequests();
+
+    if (showAlert) {
+      showPageAlert(
+        "success",
+        `${state.profileCorrectionRequests.length} profile correction request(s) loaded.`,
+      );
+    }
+  } catch (error) {
+    console.error("Error loading profile correction requests:", error);
+
+    state.profileCorrectionRequests = [];
+    renderProfileCorrectionRequests([]);
+
+    setProfileCorrectionRequestsStatus(
+      "danger",
+      error.message || "Profile correction requests could not be loaded.",
+    );
+  } finally {
+    await waitForMinimumLoadingFeedback(startedAt, 400);
     setWorkspaceRefreshLoading(button, false);
   }
 }
@@ -23040,14 +24002,25 @@ function renderEmployeeRecords(employees) {
         />
       </td>
 
-      <td class="align-middle py-3">
-        <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
-             Keep Employee compact and vertically centred: name + employee number only. -->
-        <div class="fw-semibold text-nowrap">${escapeHtml(fullName || "Unnamed Employee")}</div>
-        <div class="text-secondary small text-nowrap">
-          ${escapeHtml(employee.employee_number || "--")}
-        </div>
-      </td>
+<td class="align-middle py-3">
+  <!-- HR PEOPLE EMPLOYEE PROFILE DRILLDOWN - STEP 1A
+       Employee name is now the natural HR drilldown point.
+       This reuses the existing read-only filled-form modal and does not route
+       HR into the employee dashboard or expose employee IDs in the URL. -->
+  <button
+    type="button"
+    class="btn btn-link p-0 fw-semibold text-start text-decoration-none text-nowrap"
+    title="Open employee profile details"
+    aria-label="Open employee profile details for ${escapeHtml(fullName || "Unnamed Employee")}"
+    onclick="window.hrViewEmployeeFilledForm('${safeEmployeeId}')"
+  >
+    ${escapeHtml(fullName || "Unnamed Employee")}
+  </button>
+
+  <div class="text-secondary small text-nowrap">
+    ${escapeHtml(employee.employee_number || "--")}
+  </div>
+</td>
 
       <td class="align-middle py-3">
         <!-- EMPLOYEE LIST CONTEXTUAL PAYROLL SELECTION - STEP 1C
@@ -23526,6 +24499,23 @@ function startEmployeeEdit(employeeId, options = {}) {
   }
 
   clearPageAlert();
+
+  // HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+  // Only edits opened from a correction request should return to the
+  // correction queue after save. Normal People-list edits must keep their
+  // existing return-to-Full-Employee-List behaviour.
+  if (options.profileCorrectionRequestId) {
+    setProfileCorrectionRequestEditReturnContext(
+      {
+        id: options.profileCorrectionRequestId,
+        employee_id: employee.id,
+      },
+      employee.id,
+    );
+  } else {
+    clearProfileCorrectionRequestEditReturnContext();
+  }
+
   enterEmployeeEditMode(employee);
 
   // EMPLOYEE BIODATA COMPLETION - STEP 3K
@@ -25521,10 +26511,21 @@ async function handleEmployeeSave() {
       );
     }
 
-    // EMPLOYEE CUSTOM ID AUTO GENERATION - STEP 1A
-    // After create/update, clear the form and return HR to the employee list.
+    // HR PROFILE CORRECTION REQUESTS UX - STEP 1I
+    // Normal employee creates/edits still return to Full Employee List.
+    // Edits launched from a correction request return to the request queue
+    // so HR can mark the request Completed after manually updating the profile.
+    const returnToCorrectionRequests =
+      shouldReturnToProfileCorrectionRequestsAfterEmployeeSave(savedEmployeeId);
+
     resetEmployeeForm();
-    redirectToFullEmployeeListAfterEmployeeSave();
+
+    if (returnToCorrectionRequests) {
+      await redirectToProfileCorrectionRequestsAfterEmployeeSave();
+      clearProfileCorrectionRequestEditReturnContext();
+    } else {
+      redirectToFullEmployeeListAfterEmployeeSave();
+    }
   } catch (error) {
     console.error("Error saving employee profile:", error);
 

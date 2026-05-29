@@ -116,6 +116,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       authResult.session.user.email,
     );
 
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+    // Load employee-visible correction request status after the employee row
+    // has been resolved. This is read-only and does not update HR master data.
+    await loadEmployeeProfileCorrectionRequests();
+
     await renderEmployeeProfileImage();
     await loadEmployeeLeaveBalances();
     await loadLeaveTypes();
@@ -143,6 +148,10 @@ const state = {
   currentProfile: null,
   employeeRecord: null,
   payrollRecords: [],
+
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+  // Employee-side read-only status history for correction requests submitted to HR.
+  profileCorrectionRequests: [],
 
   // EMPLOYEE LEAVE POLICY BLOCK - STEP 1C
   // Loaded leave requests are kept in memory so the Request Leave form
@@ -569,6 +578,13 @@ function cacheDomElements() {
     profileCorrectionRequestStatus: document.getElementById("profileCorrectionRequestStatus"),
     submitProfileCorrectionRequestBtn: document.getElementById("submitProfileCorrectionRequestBtn"),
     cancelProfileCorrectionRequestBtn: document.getElementById("cancelProfileCorrectionRequestBtn"),
+
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+    // Read-only request tracking panel for the signed-in employee.
+    profileCorrectionRequestHistoryPanel: document.getElementById("profileCorrectionRequestHistoryPanel"),
+    refreshProfileCorrectionRequestHistoryBtn: document.getElementById("refreshProfileCorrectionRequestHistoryBtn"),
+    profileCorrectionRequestHistoryEmptyState: document.getElementById("profileCorrectionRequestHistoryEmptyState"),
+    profileCorrectionRequestHistoryList: document.getElementById("profileCorrectionRequestHistoryList"),
 
     leaveBalancesEmptyState: document.getElementById("leaveBalancesEmptyState"),
     leaveBalancesGrid: document.getElementById("leaveBalancesGrid"),
@@ -1917,6 +1933,292 @@ function setEmployeeProfileCorrectionSubmitLoading(isLoading) {
   updateEmployeeProfileCorrectionSubmitButtonState();
 }
 
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Normalise correction request statuses from HR and Employee workflows.
+function normalizeEmployeeProfileCorrectionStatus(status = "") {
+  return String(status || "Pending")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Employee-friendly status labels.
+function formatEmployeeProfileCorrectionStatus(status = "") {
+  const cleanStatus = normalizeEmployeeProfileCorrectionStatus(status);
+
+  if (cleanStatus === "pending") return "Pending Review";
+  if (cleanStatus === "in review") return "In Review";
+  if (cleanStatus === "approved") return "Approved";
+  if (cleanStatus === "rejected") return "Rejected";
+  if (cleanStatus === "completed") return "Completed";
+  if (cleanStatus === "closed") return "Closed";
+
+  return status || "Pending Review";
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Status colour mapping for the employee request history cards.
+function getEmployeeProfileCorrectionStatusBadgeClass(status = "") {
+  const cleanStatus = normalizeEmployeeProfileCorrectionStatus(status);
+
+  if (cleanStatus === "pending") return "text-bg-warning";
+  if (cleanStatus === "in review") return "text-bg-primary";
+  if (cleanStatus === "approved") return "text-bg-info";
+  if (cleanStatus === "completed") return "text-bg-success";
+  if (cleanStatus === "rejected") return "text-bg-danger";
+  if (cleanStatus === "closed") return "text-bg-secondary";
+
+  return "text-bg-light border text-dark";
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Explain each HR lifecycle status in employee-friendly language.
+function getEmployeeProfileCorrectionStatusMessage(status = "") {
+  const cleanStatus = normalizeEmployeeProfileCorrectionStatus(status);
+
+  if (cleanStatus === "pending") {
+    return "Your request has been submitted and is waiting for HR review.";
+  }
+
+  if (cleanStatus === "in review") {
+    return "HR is reviewing your request.";
+  }
+
+  if (cleanStatus === "approved") {
+    return "HR has accepted the request. The employee record may still need to be updated manually by HR.";
+  }
+
+  if (cleanStatus === "rejected") {
+    return "HR has rejected the request. Review the HR response where provided.";
+  }
+
+  if (cleanStatus === "completed") {
+    return "HR has completed the request. Review your profile information and contact HR if anything still looks incorrect.";
+  }
+
+  return "Request status is available for review.";
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// HR response/comment may exist under different names while the schema settles.
+// Keep this defensive so old rows do not break the employee dashboard.
+function getEmployeeProfileCorrectionHrResponse(record = {}) {
+  return String(
+    record.hr_response ||
+    record.hr_comment ||
+    record.hr_response_comment ||
+    record.review_comment ||
+    record.review_notes ||
+    "",
+  ).trim();
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Keep active/newer requests first so employees see the most relevant status.
+function sortEmployeeProfileCorrectionRequests(records = []) {
+  return [...records].sort((a, b) => {
+    const aTime = new Date(a.created_at || a.updated_at || 0).getTime() || 0;
+    const bTime = new Date(b.created_at || b.updated_at || 0).getTime() || 0;
+
+    return bTime - aTime;
+  });
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Loading state for the employee-side correction request history.
+function renderEmployeeProfileCorrectionRequestHistoryLoadingState() {
+  const list = state.dom.profileCorrectionRequestHistoryList;
+  if (!list) return;
+
+  state.dom.profileCorrectionRequestHistoryEmptyState?.classList.add("d-none");
+  list.classList.remove("d-none");
+
+  list.innerHTML = `
+    <div class="alert alert-light border mb-0">
+      Loading your correction request status.
+    </div>
+  `;
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Render employee-visible request status history.
+// This is read-only: no employee record and no HR decision record is changed here.
+function renderEmployeeProfileCorrectionRequestHistory(records = []) {
+  const list = state.dom.profileCorrectionRequestHistoryList;
+  if (!list) return;
+
+  const requests = sortEmployeeProfileCorrectionRequests(records);
+
+  list.innerHTML = "";
+
+  if (!requests.length) {
+    state.dom.profileCorrectionRequestHistoryEmptyState?.classList.remove("d-none");
+    list.classList.add("d-none");
+    return;
+  }
+
+  state.dom.profileCorrectionRequestHistoryEmptyState?.classList.add("d-none");
+  list.classList.remove("d-none");
+
+  requests.forEach((request) => {
+    const status = request.status || "Pending";
+    const statusLabel = formatEmployeeProfileCorrectionStatus(status);
+    const statusMessage = getEmployeeProfileCorrectionStatusMessage(status);
+    const statusBadgeClass = getEmployeeProfileCorrectionStatusBadgeClass(status);
+
+    const fieldLabel = String(request.field_label || request.field_key || "Profile Field").trim();
+    const currentValue = String(request.current_value_snapshot || "").trim() || "--";
+    const requestedValue = String(request.requested_value || "").trim() || "Not provided";
+    const reason = String(request.reason || "").trim() || "--";
+    const hrResponse = getEmployeeProfileCorrectionHrResponse(request);
+
+    const submittedAt = formatDateTime(request.created_at || request.updated_at);
+    const reviewedAt = request.reviewed_at
+      ? formatDateTime(request.reviewed_at)
+      : "--";
+
+    const hrResponseHtml = hrResponse
+      ? `
+        <div class="alert alert-light border mt-3 mb-0">
+          <div class="small fw-semibold mb-1">HR Response</div>
+          <div class="small text-secondary">${escapeHtml(hrResponse)}</div>
+        </div>
+      `
+      : `
+        <div class="alert alert-light border mt-3 mb-0">
+          <div class="small fw-semibold mb-1">HR Response</div>
+          <div class="small text-secondary">No HR response has been added yet.</div>
+        </div>
+      `;
+
+    const item = document.createElement("div");
+    item.className = "border rounded-4 p-3 bg-light-subtle";
+
+    item.innerHTML = `
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+        <div>
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+            <span class="badge ${statusBadgeClass}">
+              ${escapeHtml(statusLabel)}
+            </span>
+
+            <span class="fw-semibold">
+              ${escapeHtml(fieldLabel)}
+            </span>
+          </div>
+
+          <div class="small text-secondary">
+            ${escapeHtml(statusMessage)}
+          </div>
+        </div>
+
+        <div class="text-lg-end small">
+          <div class="text-secondary">Submitted</div>
+          <div class="fw-semibold">${escapeHtml(submittedAt)}</div>
+        </div>
+      </div>
+
+      <div class="row g-2">
+        <div class="col-12 col-lg-4">
+          <div class="bg-white border rounded-3 p-2 h-100">
+            <div class="small text-secondary mb-1">Current Value</div>
+            <div class="small fw-semibold">${escapeHtml(currentValue)}</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+          <div class="bg-white border rounded-3 p-2 h-100">
+            <div class="small text-secondary mb-1">Suggested Correction</div>
+            <div class="small fw-semibold">${escapeHtml(requestedValue)}</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+          <div class="bg-white border rounded-3 p-2 h-100">
+            <div class="small text-secondary mb-1">Last HR Review</div>
+            <div class="small fw-semibold">${escapeHtml(reviewedAt)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-3">
+        <div class="small fw-semibold mb-1">Employee Reason</div>
+        <div class="small text-secondary">${escapeHtml(reason)}</div>
+      </div>
+
+      ${hrResponseHtml}
+    `;
+
+    list.appendChild(item);
+  });
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Load only the signed-in employee's own correction requests.
+async function loadEmployeeProfileCorrectionRequests() {
+  const employee = state.employeeRecord || {};
+  const list = state.dom.profileCorrectionRequestHistoryList;
+
+  if (!list) return;
+
+  if (!employee.id || !employee.tenant_id) {
+    state.profileCorrectionRequests = [];
+    renderEmployeeProfileCorrectionRequestHistory([]);
+    return;
+  }
+
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from("employee_profile_correction_requests")
+    .select("*")
+    .eq("tenant_id", employee.tenant_id)
+    .eq("employee_id", employee.id)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  state.profileCorrectionRequests = Array.isArray(data) ? data : [];
+  renderEmployeeProfileCorrectionRequestHistory(state.profileCorrectionRequests);
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+// Manual refresh for employee-side request status.
+async function refreshEmployeeProfileCorrectionRequestHistory() {
+  const button = state.dom.refreshProfileCorrectionRequestHistoryBtn;
+  const startedAt = Date.now();
+
+  try {
+    setRefreshButtonLoading(button, true);
+    renderEmployeeProfileCorrectionRequestHistoryLoadingState();
+
+    await waitForNextPaint();
+    await loadEmployeeProfileCorrectionRequests();
+
+    clearPageAlert();
+    showPageAlert("success", "Profile correction request status refreshed successfully.");
+  } catch (error) {
+    console.error("Error refreshing employee correction request history:", error);
+
+    state.profileCorrectionRequests = [];
+    renderEmployeeProfileCorrectionRequestHistory([]);
+
+    showPageAlert(
+      "danger",
+      error.message || "Unable to refresh profile correction request status.",
+    );
+  } finally {
+    const elapsed = Date.now() - startedAt;
+    const remainingDelay = Math.max(0, 400 - elapsed);
+
+    window.setTimeout(() => {
+      setRefreshButtonLoading(button, false);
+    }, remainingDelay);
+  }
+}
+
 // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
 // Save a formal correction request to Supabase.
 // Employees do not edit employees.* directly; HR reviews this request later.
@@ -1989,6 +2291,15 @@ async function handleEmployeeProfileCorrectionRequestSubmit(event) {
         `${selectedField.fieldLabel} has been sent to HR for review.`,
       );
     }
+
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+    // Immediately refresh the employee-side request history so the employee
+    // can see the new Pending Review request without leaving the page.
+    try {
+      await loadEmployeeProfileCorrectionRequests();
+    } catch (refreshError) {
+      console.warn("Correction request history refresh failed after submit:", refreshError);
+    }
   } catch (error) {
     console.error("Error submitting employee profile correction request:", error);
 
@@ -2027,8 +2338,10 @@ function bindEmployeeProfileCorrectionRequestEvents() {
     setEmployeeProfileCorrectionPanelVisible(true);
   });
 
-  state.dom.cancelProfileCorrectionRequestBtn?.addEventListener("click", () => {
-    resetEmployeeProfileCorrectionRequestForm({ hidePanel: true });
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+  // Let employees manually refresh their own HR correction request status.
+  state.dom.refreshProfileCorrectionRequestHistoryBtn?.addEventListener("click", async () => {
+    await refreshEmployeeProfileCorrectionRequestHistory();
   });
 
   state.dom.profileCorrectionFieldKey?.addEventListener("change", () => {

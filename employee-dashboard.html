@@ -439,6 +439,34 @@
                 </form>
               </div>
 
+              <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 1D
+                   Employee-side request tracking.
+                   Employees can see their submitted correction requests, HR status,
+                   and HR response/comment. This is read-only and does not update
+                   HR master data. -->
+              <div id="profileCorrectionRequestHistoryPanel" class="border rounded-4 bg-white p-3 p-lg-4 mb-3">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                  <div>
+                    <h4 class="h6 fw-bold mb-1">My Correction Requests</h4>
+                    <p class="small text-secondary mb-0">
+                      Track correction requests you have submitted to HR and review HR responses.
+                    </p>
+                  </div>
+
+                  <button type="button" id="refreshProfileCorrectionRequestHistoryBtn"
+                    class="btn btn-sm btn-outline-primary dashboard-action-btn align-self-start">
+                    <i class="bi bi-arrow-clockwise me-1"></i>
+                    Refresh Status
+                  </button>
+                </div>
+
+                <div id="profileCorrectionRequestHistoryEmptyState" class="alert alert-light border mb-0">
+                  No profile correction requests submitted yet.
+                </div>
+
+                <div id="profileCorrectionRequestHistoryList" class="d-grid gap-2 d-none"></div>
+              </div>
+
               <div class="d-flex flex-wrap gap-2 border-bottom pb-3 mb-3" role="tablist"
                 aria-label="HR profile review sections">
                 <button type="button"
