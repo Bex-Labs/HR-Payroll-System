@@ -71,6 +71,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     bindEmployeeLeaveHistoryCardEvents();
 
     bindProfileImageEvents();
+
+    // EMPLOYEE PROFILE REVIEW - STEP 1B
+    // Keep the HR profile review compact by switching between read-only tabs.
+    bindEmployeeProfileReviewTabs();
+
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+    // Bind the formal employee correction request flow.
+    // This saves requests to Supabase and does not edit HR master data.
+    bindEmployeeProfileCorrectionRequestEvents();
+
     bindSyncEvents();
 
     const authResult = await window.SessionManager.protectPage("employee");
@@ -528,6 +538,37 @@ function cacheDomElements() {
     phoneNumber: document.getElementById("phoneNumber"),
     roleName: document.getElementById("roleName"),
     managerName: document.getElementById("managerName"),
+
+    // EMPLOYEE PROFILE REVIEW - STEP 1A
+    // Read-only HR-prepared profile fields. These let employees check
+    // information held by HR without directly editing controlled HR records.
+    reviewEmployeeNumber: document.getElementById("reviewEmployeeNumber"),
+    reviewFullName: document.getElementById("reviewFullName"),
+    reviewPersonalEmail: document.getElementById("reviewPersonalEmail"),
+    reviewAlternativePhone: document.getElementById("reviewAlternativePhone"),
+    reviewDateOfBirth: document.getElementById("reviewDateOfBirth"),
+    reviewGender: document.getElementById("reviewGender"),
+    reviewMaritalStatus: document.getElementById("reviewMaritalStatus"),
+    reviewNationality: document.getElementById("reviewNationality"),
+    reviewStateOfOrigin: document.getElementById("reviewStateOfOrigin"),
+    reviewLga: document.getElementById("reviewLga"),
+    reviewTown: document.getElementById("reviewTown"),
+    reviewMeansOfIdentification: document.getElementById("reviewMeansOfIdentification"),
+    reviewIssuingAuthority: document.getElementById("reviewIssuingAuthority"),
+    reviewNin: document.getElementById("reviewNin"),
+
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+    // Formal correction request controls for HR-held employee profile data.
+    openProfileCorrectionRequestBtn: document.getElementById("openProfileCorrectionRequestBtn"),
+    profileCorrectionRequestPanel: document.getElementById("profileCorrectionRequestPanel"),
+    profileCorrectionRequestForm: document.getElementById("profileCorrectionRequestForm"),
+    profileCorrectionFieldKey: document.getElementById("profileCorrectionFieldKey"),
+    profileCorrectionCurrentValue: document.getElementById("profileCorrectionCurrentValue"),
+    profileCorrectionRequestedValue: document.getElementById("profileCorrectionRequestedValue"),
+    profileCorrectionReason: document.getElementById("profileCorrectionReason"),
+    profileCorrectionRequestStatus: document.getElementById("profileCorrectionRequestStatus"),
+    submitProfileCorrectionRequestBtn: document.getElementById("submitProfileCorrectionRequestBtn"),
+    cancelProfileCorrectionRequestBtn: document.getElementById("cancelProfileCorrectionRequestBtn"),
 
     leaveBalancesEmptyState: document.getElementById("leaveBalancesEmptyState"),
     leaveBalancesGrid: document.getElementById("leaveBalancesGrid"),
@@ -991,6 +1032,50 @@ function bindEmployeePayrollHistoryCardEvents() {
   });
 }
 
+// EMPLOYEE PROFILE REVIEW - STEP 1B
+// Lightweight tab behaviour for the read-only HR Profile Review block.
+// No Bootstrap JS dependency is required, and no HR data is changed.
+function bindEmployeeProfileReviewTabs() {
+  const tabButtons = Array.from(
+    document.querySelectorAll("[data-employee-profile-review-tab]"),
+  );
+
+  const tabPanels = Array.from(
+    document.querySelectorAll("[data-employee-profile-review-panel]"),
+  );
+
+  if (!tabButtons.length || !tabPanels.length) return;
+
+  const activateTab = (targetTab) => {
+    tabButtons.forEach((button) => {
+      const isActive =
+        String(button.dataset.employeeProfileReviewTab || "") === targetTab;
+
+      button.classList.toggle("btn-primary", isActive);
+      button.classList.toggle("btn-outline-primary", !isActive);
+      button.setAttribute("aria-selected", String(isActive));
+    });
+
+    tabPanels.forEach((panel) => {
+      const isActive =
+        String(panel.dataset.employeeProfileReviewPanel || "") === targetTab;
+
+      panel.classList.toggle("d-none", !isActive);
+    });
+  };
+
+  tabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const targetTab = String(
+        button.dataset.employeeProfileReviewTab || "core",
+      );
+
+      activateTab(targetTab);
+    });
+  });
+
+  activateTab("core");
+}
 
 function bindProfileImageEvents() {
   // EMPLOYEE UI CLEANUP - STEP 1J
@@ -1443,6 +1528,528 @@ function getEmployeePhoneDisplayValue(employee) {
   );
 }
 
+// EMPLOYEE PROFILE REVIEW - STEP 1A
+// Standard display fallback for read-only HR profile review fields.
+function getEmployeeProfileReviewValue(value) {
+  const cleanValue = String(value || "").trim();
+  return cleanValue || "--";
+}
+
+// EMPLOYEE PROFILE REVIEW - STEP 1A
+// Build the full HR-held name including middle name where HR has recorded it.
+function getEmployeeHrFullName(employee = {}) {
+  return [
+    employee.first_name,
+    employee.middle_name,
+    employee.last_name,
+  ]
+    .map((namePart) => String(namePart || "").trim())
+    .filter(Boolean)
+    .join(" ") || "Employee";
+}
+
+// EMPLOYEE PROFILE REVIEW - STEP 1A
+// NIN is sensitive. Show only the last four digits in Employee Self Service.
+function getMaskedEmployeeNin(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+
+  if (!digits) return "--";
+
+  if (digits.length <= 4) {
+    return `••••${digits}`;
+  }
+
+  return `•••••••${digits.slice(-4)}`;
+}
+
+// EMPLOYEE PROFILE REVIEW - STEP 1A
+// Safe setter for read-only input fields.
+function setEmployeeProfileReviewField(field, value) {
+  if (!field) return;
+  field.value = getEmployeeProfileReviewValue(value);
+}
+
+// EMPLOYEE PROFILE REVIEW - STEP 1A
+// Render HR-prepared employee data for employee review. This is display-only.
+function renderEmployeeHrProfileReview(employee = {}) {
+  setEmployeeProfileReviewField(
+    state.dom.reviewEmployeeNumber,
+    getEmployeeIdDisplayValue(employee),
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewFullName,
+    getEmployeeHrFullName(employee),
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewPersonalEmail,
+    employee.personal_email,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewAlternativePhone,
+    employee.alternative_phone_number,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewDateOfBirth,
+    employee.date_of_birth ? formatDate(employee.date_of_birth) : "",
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewGender,
+    employee.gender || employee.sex,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewMaritalStatus,
+    employee.marital_status,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewNationality,
+    employee.nationality,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewStateOfOrigin,
+    employee.state_of_origin,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewLga,
+    employee.local_government_area,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewTown,
+    employee.town,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewMeansOfIdentification,
+    employee.means_of_identification,
+  );
+
+  // EMPLOYEE PROFILE REVIEW - STEP 1A FIX
+  // HR saves Issuing State / Authority as identification_issue_state.
+  // Keep identification_issuing_state as a fallback in case older records
+  // or schema variants still use that property name.
+  setEmployeeProfileReviewField(
+    state.dom.reviewIssuingAuthority,
+    employee.identification_issue_state || employee.identification_issuing_state,
+  );
+
+  setEmployeeProfileReviewField(
+    state.dom.reviewNin,
+    getMaskedEmployeeNin(employee.nin),
+  );
+    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+  // Keep the correction field picker aligned with the latest HR-held values.
+  populateEmployeeProfileCorrectionFieldOptions();
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Build the list of HR-held fields that employees can flag for HR review.
+// NIN is shown only as the masked display value; the full NIN is never copied
+// into the correction request snapshot.
+function getEmployeeProfileCorrectionFieldOptions(employee = state.employeeRecord || {}) {
+  return [
+    {
+      category: "core",
+      categoryLabel: "Core Details",
+      fieldKey: "employee_number",
+      fieldLabel: "Employee Number",
+      currentValue: getEmployeeIdDisplayValue(employee),
+    },
+    {
+      category: "core",
+      categoryLabel: "Core Details",
+      fieldKey: "full_name",
+      fieldLabel: "Full Name Held by HR",
+      currentValue: getEmployeeHrFullName(employee),
+    },
+    {
+      category: "core",
+      categoryLabel: "Core Details",
+      fieldKey: "personal_email",
+      fieldLabel: "Personal Email",
+      currentValue: employee.personal_email,
+    },
+    {
+      category: "core",
+      categoryLabel: "Core Details",
+      fieldKey: "alternative_phone_number",
+      fieldLabel: "Alternative Phone Number",
+      currentValue: employee.alternative_phone_number,
+    },
+    {
+      category: "personal_origin",
+      categoryLabel: "Personal & Origin",
+      fieldKey: "date_of_birth",
+      fieldLabel: "Date of Birth",
+      currentValue: employee.date_of_birth ? formatDate(employee.date_of_birth) : "",
+    },
+    {
+      category: "personal_origin",
+      categoryLabel: "Personal & Origin",
+      fieldKey: "gender",
+      fieldLabel: "Sex / Gender",
+      currentValue: employee.gender || employee.sex,
+    },
+    {
+      category: "personal_origin",
+      categoryLabel: "Personal & Origin",
+      fieldKey: "marital_status",
+      fieldLabel: "Marital Status",
+      currentValue: employee.marital_status,
+    },
+    {
+      category: "personal_origin",
+      categoryLabel: "Personal & Origin",
+      fieldKey: "nationality",
+      fieldLabel: "Nationality",
+      currentValue: employee.nationality,
+    },
+    {
+      category: "personal_origin",
+      categoryLabel: "Personal & Origin",
+      fieldKey: "state_of_origin",
+      fieldLabel: "State of Origin",
+      currentValue: employee.state_of_origin,
+    },
+    {
+      category: "personal_origin",
+      categoryLabel: "Personal & Origin",
+      fieldKey: "local_government_area",
+      fieldLabel: "Local Government Area",
+      currentValue: employee.local_government_area,
+    },
+    {
+      category: "personal_origin",
+      categoryLabel: "Personal & Origin",
+      fieldKey: "town",
+      fieldLabel: "Town / Village / Community",
+      currentValue: employee.town,
+    },
+    {
+      category: "identity",
+      categoryLabel: "Identity",
+      fieldKey: "means_of_identification",
+      fieldLabel: "Means of Identification",
+      currentValue: employee.means_of_identification,
+    },
+    {
+      category: "identity",
+      categoryLabel: "Identity",
+      fieldKey: "identification_issue_state",
+      fieldLabel: "Issuing State / Authority",
+      currentValue: employee.identification_issue_state || employee.identification_issuing_state,
+    },
+    {
+      category: "identity",
+      categoryLabel: "Identity",
+      fieldKey: "nin",
+      fieldLabel: "NIN",
+      currentValue: getMaskedEmployeeNin(employee.nin),
+    },
+  ];
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Rebuild the correction field dropdown from the current signed-in employee record.
+function populateEmployeeProfileCorrectionFieldOptions() {
+  const select = state.dom.profileCorrectionFieldKey;
+  if (!select) return;
+
+  const currentValue = String(select.value || "").trim();
+  const fieldOptions = getEmployeeProfileCorrectionFieldOptions();
+
+  select.innerHTML = '<option value="">Select field</option>';
+
+  fieldOptions.forEach((field) => {
+    const option = document.createElement("option");
+    option.value = field.fieldKey;
+    option.textContent = `${field.categoryLabel} - ${field.fieldLabel}`;
+    select.appendChild(option);
+  });
+
+  if (
+    currentValue &&
+    fieldOptions.some((field) => field.fieldKey === currentValue)
+  ) {
+    select.value = currentValue;
+  }
+
+  syncEmployeeProfileCorrectionCurrentValue();
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Resolve the selected correction field and its display-safe current value.
+function getSelectedEmployeeProfileCorrectionField() {
+  const selectedKey = String(state.dom.profileCorrectionFieldKey?.value || "").trim();
+
+  if (!selectedKey) return null;
+
+  return getEmployeeProfileCorrectionFieldOptions().find(
+    (field) => field.fieldKey === selectedKey,
+  ) || null;
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Keep the read-only current value aligned with the selected field.
+function syncEmployeeProfileCorrectionCurrentValue() {
+  const selectedField = getSelectedEmployeeProfileCorrectionField();
+
+  if (state.dom.profileCorrectionCurrentValue) {
+    state.dom.profileCorrectionCurrentValue.value = getEmployeeProfileReviewValue(
+      selectedField?.currentValue,
+    );
+  }
+
+  updateEmployeeProfileCorrectionSubmitButtonState();
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Show/hide the request panel without changing any HR-held employee data.
+function setEmployeeProfileCorrectionPanelVisible(shouldShow) {
+  const panel = state.dom.profileCorrectionRequestPanel;
+  if (!panel) return;
+
+  panel.classList.toggle("d-none", !shouldShow);
+
+  if (shouldShow) {
+    populateEmployeeProfileCorrectionFieldOptions();
+
+    window.setTimeout(() => {
+      panel.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }, 50);
+  }
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Inline status helper for correction request feedback.
+function setEmployeeProfileCorrectionRequestStatus(type = "info", message = "") {
+  const status = state.dom.profileCorrectionRequestStatus;
+  if (!status) return;
+
+  const cleanType = ["success", "info", "warning", "danger"].includes(type)
+    ? type
+    : "info";
+
+  status.className = `alert alert-${cleanType} border mb-0`;
+  status.innerHTML = message;
+  status.classList.toggle("d-none", !message);
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// The employee must select a field and provide a reason.
+// Suggested correction remains optional so sensitive fields can be flagged
+// without forcing employees to type sensitive values into the request.
+function updateEmployeeProfileCorrectionSubmitButtonState() {
+  const button = state.dom.submitProfileCorrectionRequestBtn;
+  if (!button) return;
+
+  const hasField = Boolean(String(state.dom.profileCorrectionFieldKey?.value || "").trim());
+  const hasReason = Boolean(String(state.dom.profileCorrectionReason?.value || "").trim());
+  const isLoading = button.dataset.loading === "true";
+
+  const canSubmit = hasField && hasReason && !isLoading;
+
+  button.disabled = !canSubmit;
+  button.className = canSubmit
+    ? "btn btn-primary dashboard-action-btn"
+    : "btn btn-secondary dashboard-action-btn";
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Reset only the correction request form and status.
+// This does not touch the read-only HR Profile Review fields.
+function resetEmployeeProfileCorrectionRequestForm({ hidePanel = false } = {}) {
+  state.dom.profileCorrectionRequestForm?.reset();
+
+  if (state.dom.profileCorrectionCurrentValue) {
+    state.dom.profileCorrectionCurrentValue.value = "";
+  }
+
+  state.dom.profileCorrectionFieldKey?.classList.remove("is-invalid");
+  state.dom.profileCorrectionReason?.classList.remove("is-invalid");
+
+  setEmployeeProfileCorrectionRequestStatus("info", "");
+
+  if (hidePanel) {
+    setEmployeeProfileCorrectionPanelVisible(false);
+  } else {
+    populateEmployeeProfileCorrectionFieldOptions();
+  }
+
+  updateEmployeeProfileCorrectionSubmitButtonState();
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Loading state for the correction request submit button.
+function setEmployeeProfileCorrectionSubmitLoading(isLoading) {
+  const button = state.dom.submitProfileCorrectionRequestBtn;
+  if (!button) return;
+
+  button.dataset.loading = String(isLoading);
+  button.disabled = isLoading;
+
+  if (isLoading) {
+    button.dataset.originalHtml = button.innerHTML;
+    button.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+      Submitting Request...
+    `;
+    return;
+  }
+
+  if (button.dataset.originalHtml) {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+  }
+
+  delete button.dataset.loading;
+  updateEmployeeProfileCorrectionSubmitButtonState();
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Save a formal correction request to Supabase.
+// Employees do not edit employees.* directly; HR reviews this request later.
+async function handleEmployeeProfileCorrectionRequestSubmit(event) {
+  event.preventDefault();
+
+  const selectedField = getSelectedEmployeeProfileCorrectionField();
+  const employee = state.employeeRecord || {};
+  const reason = String(state.dom.profileCorrectionReason?.value || "").trim();
+  const requestedValue = String(state.dom.profileCorrectionRequestedValue?.value || "").trim();
+
+  state.dom.profileCorrectionFieldKey?.classList.toggle("is-invalid", !selectedField);
+  state.dom.profileCorrectionReason?.classList.toggle("is-invalid", !reason);
+
+  if (!selectedField || !reason) {
+    setEmployeeProfileCorrectionRequestStatus(
+      "warning",
+      "Select the field to correct and provide a reason before submitting.",
+    );
+    updateEmployeeProfileCorrectionSubmitButtonState();
+    return;
+  }
+
+  if (!employee.id || !employee.tenant_id || !state.currentUser?.id) {
+    setEmployeeProfileCorrectionRequestStatus(
+      "danger",
+      "Your employee profile link is incomplete. Please sign out, sign in again, and try submitting the request.",
+    );
+    return;
+  }
+
+  const payload = {
+    tenant_id: employee.tenant_id,
+    employee_id: employee.id,
+    requested_by: state.currentUser.id,
+    request_category: selectedField.category,
+    field_key: selectedField.fieldKey,
+    field_label: selectedField.fieldLabel,
+    current_value_snapshot: getEmployeeProfileReviewValue(selectedField.currentValue),
+    requested_value: requestedValue || null,
+    reason,
+    status: "Pending",
+  };
+
+  const startedAt = Date.now();
+
+  try {
+    setEmployeeProfileCorrectionSubmitLoading(true);
+    setEmployeeProfileCorrectionRequestStatus("info", "");
+
+    const supabase = getSupabaseClient();
+
+    const { error } = await supabase
+      .from("employee_profile_correction_requests")
+      .insert(payload);
+
+    if (error) throw error;
+
+    resetEmployeeProfileCorrectionRequestForm();
+
+    setEmployeeProfileCorrectionRequestStatus(
+      "success",
+      `Correction request submitted for <strong>${escapeHtml(selectedField.fieldLabel)}</strong>. HR will review it from the HR dashboard.`,
+    );
+
+    if (typeof showDashboardToast === "function") {
+      showDashboardToast(
+        "success",
+        "Correction request submitted",
+        `${selectedField.fieldLabel} has been sent to HR for review.`,
+      );
+    }
+  } catch (error) {
+    console.error("Error submitting employee profile correction request:", error);
+
+    const errorText = `${error.code || ""} ${error.message || ""}`.toLowerCase();
+    const isDuplicateActiveRequest =
+      error.code === "23505" ||
+      errorText.includes("duplicate key value") ||
+      errorText.includes("uq_employee_profile_correction_requests_active_field");
+
+    if (isDuplicateActiveRequest) {
+      setEmployeeProfileCorrectionRequestStatus(
+        "warning",
+        "You already have an active correction request for this field. HR must review or close the existing request before another one can be submitted.",
+      );
+      return;
+    }
+
+    setEmployeeProfileCorrectionRequestStatus(
+      "danger",
+      escapeHtml(error.message || "Correction request could not be submitted."),
+    );
+  } finally {
+    const elapsed = Date.now() - startedAt;
+    const remainingDelay = Math.max(0, 500 - elapsed);
+
+    window.setTimeout(() => {
+      setEmployeeProfileCorrectionSubmitLoading(false);
+    }, remainingDelay);
+  }
+}
+
+// EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+// Bind correction request UI events once on page startup.
+function bindEmployeeProfileCorrectionRequestEvents() {
+  state.dom.openProfileCorrectionRequestBtn?.addEventListener("click", () => {
+    setEmployeeProfileCorrectionPanelVisible(true);
+  });
+
+  state.dom.cancelProfileCorrectionRequestBtn?.addEventListener("click", () => {
+    resetEmployeeProfileCorrectionRequestForm({ hidePanel: true });
+  });
+
+  state.dom.profileCorrectionFieldKey?.addEventListener("change", () => {
+    syncEmployeeProfileCorrectionCurrentValue();
+  });
+
+  state.dom.profileCorrectionRequestedValue?.addEventListener("input", () => {
+    updateEmployeeProfileCorrectionSubmitButtonState();
+  });
+
+  state.dom.profileCorrectionReason?.addEventListener("input", () => {
+    state.dom.profileCorrectionReason?.classList.remove("is-invalid");
+    updateEmployeeProfileCorrectionSubmitButtonState();
+  });
+
+  state.dom.profileCorrectionRequestForm?.addEventListener(
+    "submit",
+    handleEmployeeProfileCorrectionRequestSubmit,
+  );
+}
+
 function renderEmployeeRecord(employee) {
   const firstName = employee.first_name || "";
   const lastName = employee.last_name || "";
@@ -1499,6 +2106,10 @@ function renderEmployeeRecord(employee) {
   if (state.dom.phoneNumber) state.dom.phoneNumber.value = phone;
   if (state.dom.roleName) state.dom.roleName.value = role;
   if (state.dom.managerName) state.dom.managerName.value = managerName;
+
+  // EMPLOYEE PROFILE REVIEW - STEP 1A
+  // Populate the extended read-only HR profile review block.
+  renderEmployeeHrProfileReview(employee);
 }
 
 /* =========================================================

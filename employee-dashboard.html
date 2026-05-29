@@ -225,27 +225,36 @@
             <span class="badge text-bg-light border px-3 py-2">Employee Profile</span>
           </div>
 
-          <div class="row g-4 align-items-stretch">
+          <!-- EMPLOYEE PROFILE REVIEW - STEP 1C
+     Keep the profile image/upload card compact. The HR Profile Review tabs
+     can be taller on the right, but the left employee summary card should not
+     stretch into a large empty panel. -->
+          <div class="row g-4 align-items-start">
             <div class="col-12 col-xl-4">
-              <div class="info-tile h-100 text-center d-flex flex-column justify-content-center">
+              <!-- EMPLOYEE PROFILE REVIEW - STEP 1C
+     Compact employee summary card. Do not use h-100 or vertical centering here,
+     otherwise the upload area stretches awkwardly beside the HR review tabs. -->
+              <div class="info-tile text-center">
                 <div class="mb-3">
                   <img id="profileImage" src="https://placehold.co/120x120?text=EMP" alt="Employee Profile"
                     class="profile-avatar" />
                 </div>
 
-                <div class="d-grid gap-2 mb-3">
-                  <input type="file" id="profileImageInput" class="form-control"
+                <!-- EMPLOYEE PROFILE REVIEW - STEP 1C
+     Compact upload controls. This keeps the profile card as a summary area,
+     not a large upload panel. -->
+                <div class="d-grid gap-2 mb-2">
+                  <input type="file" id="profileImageInput" class="form-control form-control-sm"
                     accept="image/png,image/jpeg,image/webp" />
                   <!-- EMPLOYEE UI CLEANUP - STEP 1J
-                       Upload button starts disabled because there is no selected image yet. -->
-                  <button type="button" id="saveProfileImageBtn" class="btn btn-outline-primary dashboard-action-btn"
-                    disabled>
-                    <i class="bi bi-cloud-upload me-2"></i>Upload Profile
-                    Picture
+       Upload button starts disabled because there is no selected image yet. -->
+                  <button type="button" id="saveProfileImageBtn"
+                    class="btn btn-sm btn-outline-primary dashboard-action-btn" disabled>
+                    <i class="bi bi-cloud-upload me-2"></i>Upload Picture
                   </button>
                 </div>
 
-                <div class="small text-secondary mb-3">
+                <div class="small text-secondary mb-2">
                   PNG, JPG, or WEBP only. Maximum 5MB.
                 </div>
 
@@ -297,6 +306,248 @@
               </div>
             </div>
           </div>
+
+          <!-- EMPLOYEE PROFILE REVIEW - STEP 1D
+               HR Profile Review sits below the whole profile summary row.
+               Left side remains profile photo/upload. Right side remains basic
+               account details. This full-width area is for HR-held employee data. -->
+          <div class="mt-4">
+
+            <!-- EMPLOYEE PROFILE REVIEW - STEP 1B
+                   Tabbed read-only HR profile review. This keeps employee
+                   self-service professional and avoids a long, awkward form
+                   block beside the profile picture. Employees can review
+                   HR-held data but cannot edit controlled HR records here. -->
+            <div class="border rounded-4 bg-light-subtle p-3 p-lg-4 mt-4">
+              <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                <div>
+                  <h3 class="h6 fw-bold mb-1">HR Profile Review</h3>
+                  <p class="small text-secondary mb-0">
+                    Review the information HR currently holds for you.
+                  </p>
+                </div>
+
+                <span class="badge text-bg-light border">
+                  Read-only
+                </span>
+              </div>
+
+              <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+     Employees must not edit HR-controlled records directly.
+     This opens a formal correction request form that saves to Supabase. -->
+              <div class="alert alert-info border small mb-3">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                  <div>
+                    If any information is incorrect, submit a correction request for HR review.
+                  </div>
+
+                  <button type="button" id="openProfileCorrectionRequestBtn"
+                    class="btn btn-sm btn-outline-primary dashboard-action-btn align-self-start align-self-md-center">
+                    <i class="bi bi-flag me-1"></i>
+                    Request Correction
+                  </button>
+                </div>
+              </div>
+
+              <!-- EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+     Real correction request form. It is hidden until the employee chooses
+     Request Correction. The employee can flag HR-held data without editing
+     the employee master record. -->
+              <div id="profileCorrectionRequestPanel" class="border rounded-4 bg-white p-3 p-lg-4 d-none mb-3">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                  <div>
+                    <h4 class="h6 fw-bold mb-1">Profile Correction Request</h4>
+                    <p class="small text-secondary mb-0">
+                      Select the field that looks incorrect and explain what HR should review.
+                    </p>
+                  </div>
+
+                  <span class="badge text-bg-light border">
+                    HR review required
+                  </span>
+                </div>
+
+                <form id="profileCorrectionRequestForm" novalidate>
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <label for="profileCorrectionFieldKey" class="form-label fw-semibold">
+                        Field to Correct <span class="text-danger">*</span>
+                      </label>
+                      <select id="profileCorrectionFieldKey" class="form-select" required>
+                        <option value="">Select field</option>
+                      </select>
+                      <div class="invalid-feedback">
+                        Please select the field HR should review.
+                      </div>
+                    </div>
+
+                    <div class="col-12 col-lg-6">
+                      <label for="profileCorrectionCurrentValue" class="form-label fw-semibold">
+                        Current Value Shown
+                      </label>
+                      <input type="text" id="profileCorrectionCurrentValue" class="form-control bg-light" readonly />
+                      <div class="form-text">
+                        Sensitive values, such as NIN, stay masked.
+                      </div>
+                    </div>
+
+                    <div class="col-12">
+                      <label for="profileCorrectionRequestedValue" class="form-label fw-semibold">
+                        Suggested Correction
+                      </label>
+                      <textarea id="profileCorrectionRequestedValue" class="form-control" rows="3" maxlength="500"
+                        placeholder="Enter the correct value if it is safe to share here. For NIN, do not type the full number; ask HR to contact you."></textarea>
+                      <div class="form-text">
+                        Optional for sensitive fields. Maximum 500 characters.
+                      </div>
+                    </div>
+
+                    <div class="col-12">
+                      <label for="profileCorrectionReason" class="form-label fw-semibold">
+                        Reason / Explanation <span class="text-danger">*</span>
+                      </label>
+                      <textarea id="profileCorrectionReason" class="form-control" rows="3" maxlength="500"
+                        placeholder="Briefly explain what is wrong and what HR should check." required></textarea>
+                      <div class="invalid-feedback">
+                        Please explain why this correction is needed.
+                      </div>
+                      <div class="form-text">
+                        Maximum 500 characters.
+                      </div>
+                    </div>
+
+                    <div class="col-12">
+                      <div id="profileCorrectionRequestStatus" class="alert d-none mb-0" role="status"></div>
+                    </div>
+
+                    <div class="col-12">
+                      <div class="d-flex flex-wrap gap-2">
+                        <button type="submit" id="submitProfileCorrectionRequestBtn"
+                          class="btn btn-secondary dashboard-action-btn" disabled>
+                          <i class="bi bi-send-check me-2"></i>
+                          Submit Correction Request
+                        </button>
+
+                        <button type="button" id="cancelProfileCorrectionRequestBtn"
+                          class="btn btn-outline-secondary dashboard-action-btn">
+                          <i class="bi bi-x-circle me-2"></i>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 border-bottom pb-3 mb-3" role="tablist"
+                aria-label="HR profile review sections">
+                <button type="button"
+                  class="btn btn-sm btn-primary dashboard-action-btn employee-profile-review-tab-btn"
+                  data-employee-profile-review-tab="core" aria-selected="true">
+                  Core Details
+                </button>
+
+                <button type="button"
+                  class="btn btn-sm btn-outline-primary dashboard-action-btn employee-profile-review-tab-btn"
+                  data-employee-profile-review-tab="personal" aria-selected="false">
+                  Personal & Origin
+                </button>
+
+                <button type="button"
+                  class="btn btn-sm btn-outline-primary dashboard-action-btn employee-profile-review-tab-btn"
+                  data-employee-profile-review-tab="identity" aria-selected="false">
+                  Identity
+                </button>
+              </div>
+
+              <div data-employee-profile-review-panel="core">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Employee Number</label>
+                    <input type="text" id="reviewEmployeeNumber" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Full Name Held by HR</label>
+                    <input type="text" id="reviewFullName" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Personal Email</label>
+                    <input type="text" id="reviewPersonalEmail" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Alternative Phone Number</label>
+                    <input type="text" id="reviewAlternativePhone" class="form-control" readonly />
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-none" data-employee-profile-review-panel="personal">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Date of Birth</label>
+                    <input type="text" id="reviewDateOfBirth" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Sex / Gender</label>
+                    <input type="text" id="reviewGender" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Marital Status</label>
+                    <input type="text" id="reviewMaritalStatus" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Nationality</label>
+                    <input type="text" id="reviewNationality" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label fw-semibold">State of Origin</label>
+                    <input type="text" id="reviewStateOfOrigin" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label fw-semibold">Local Government Area</label>
+                    <input type="text" id="reviewLga" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label fw-semibold">Town / Village / Community</label>
+                    <input type="text" id="reviewTown" class="form-control" readonly />
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-none" data-employee-profile-review-panel="identity">
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <label class="form-label fw-semibold">Means of Identification</label>
+                    <input type="text" id="reviewMeansOfIdentification" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label fw-semibold">Issuing State / Authority</label>
+                    <input type="text" id="reviewIssuingAuthority" class="form-control" readonly />
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label fw-semibold">NIN</label>
+                    <input type="text" id="reviewNin" class="form-control" readonly />
+                    <div class="form-text">
+                      Masked for privacy.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
         </div>
       </section>
     </section>
