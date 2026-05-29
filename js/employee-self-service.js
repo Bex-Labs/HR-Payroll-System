@@ -176,6 +176,10 @@
       ssNavLeaveBtn: document.getElementById("ssNavLeaveBtn"),
       ssNavPayrollBtn: document.getElementById("ssNavPayrollBtn"),
 
+      // HR SELF-SERVICE LEAVE PARITY - STEP 1C-2
+      // Visible shortcut from the Leave screen back to Payroll.
+      ssGoToPayrollFromLeaveBtn: document.getElementById("ssGoToPayrollFromLeaveBtn"),
+
       ssLeaveSection: document.getElementById("ssLeaveSection"),
       ssPayrollSection: document.getElementById("ssPayrollSection"),
 
@@ -224,6 +228,11 @@
       ssCurrentTotalDeductions: document.getElementById("ssCurrentTotalDeductions"),
       ssCurrentNetPay: document.getElementById("ssCurrentNetPay"),
       ssTogglePayrollFiguresBtn: document.getElementById("ssTogglePayrollFiguresBtn"),
+
+      // HR SELF-SERVICE LEAVE PARITY - STEP 1C-1
+      // Visible payroll-header shortcut back to HR's own Leave Management.
+      ssGoToLeaveFromPayrollBtn: document.getElementById("ssGoToLeaveFromPayrollBtn"),
+
       ssRefreshPayrollBtn: document.getElementById("ssRefreshPayrollBtn"),
 
       // Payroll history
@@ -254,10 +263,48 @@
         ? "btn btn-primary dashboard-action-btn"
         : "btn btn-outline-primary dashboard-action-btn";
     }
+
     if (ssState.dom.ssNavPayrollBtn) {
       ssState.dom.ssNavPayrollBtn.className = isPayroll
         ? "btn btn-primary dashboard-action-btn"
         : "btn btn-outline-primary dashboard-action-btn";
+    }
+
+    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3
+    // Employee Dashboard behaviour:
+    // - Leave Balances stays closed by default.
+    // - Latest Leave Decision stays closed by default.
+    // - My Leave History opens so the employee/HR user can immediately
+    //   see submitted requests and manager decisions.
+    if (isLeave) {
+      setSsCardExpanded(
+        ssState.dom.ssToggleLeaveBalancesCardBtn,
+        ssState.dom.ssLeaveBalancesCardCollapse,
+        false,
+      );
+
+      setSsCardExpanded(
+        ssState.dom.ssToggleLatestDecisionCardBtn,
+        ssState.dom.ssLatestDecisionCardCollapse,
+        false,
+      );
+
+      setSsCardExpanded(
+        ssState.dom.ssToggleLeaveHistoryCardBtn,
+        ssState.dom.ssLeaveHistoryCardCollapse,
+        true,
+      );
+    }
+
+    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3
+    // Payroll opens with Payroll History visible because this is where HR
+    // confirms their own authorised payslip records.
+    if (isPayroll) {
+      setSsCardExpanded(
+        ssState.dom.ssTogglePayrollHistoryCardBtn,
+        ssState.dom.ssPayrollHistoryCardCollapse,
+        true,
+      );
     }
   }
 
@@ -269,6 +316,19 @@
     ssState.dom.ssNavPayrollBtn?.addEventListener("click", () => {
       switchSsSubSection("payroll");
     });
+
+    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-2
+    // Let HR return from Leave to Payroll without refreshing the dashboard.
+    ssState.dom.ssGoToPayrollFromLeaveBtn?.addEventListener("click", () => {
+      switchSsSubSection("payroll");
+
+      window.requestAnimationFrame(() => {
+        ssState.dom.ssPayrollSection?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -276,12 +336,200 @@
   // -----------------------------------------------------------------------
   function setSsCardExpanded(btn, body, shouldExpand) {
     if (!btn || !body) return;
+
     body.classList.toggle("d-none", !shouldExpand);
     btn.querySelector("i")?.classList.toggle("bi-chevron-down", !shouldExpand);
     btn.querySelector("i")?.classList.toggle("bi-chevron-up", shouldExpand);
+
     const label = btn.querySelector("span");
     if (label) label.textContent = shouldExpand ? "Collapse" : "Expand";
+
     btn.setAttribute("aria-expanded", String(shouldExpand));
+
+    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3D
+    // Keep Request Leave and My Leave History aligned only while history
+    // is expanded. Collapsed history must shrink to header-only.
+    scheduleSsLeaveMainCardHeightSync();
+  }
+
+  // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3D
+  // Recalculate card height after the browser has applied collapse/expand
+  // changes. The second delayed pass covers rendered leave-history records.
+  function scheduleSsLeaveMainCardHeightSync() {
+    window.setTimeout(syncSsLeaveMainCardHeights, 0);
+    window.setTimeout(syncSsLeaveMainCardHeights, 120);
+  }
+
+  // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3D
+  // Match Employee Dashboard leave behaviour:
+  // - while My Leave History is expanded on desktop, align it with Request Leave
+  // - when My Leave History is collapsed, remove the forced height
+  // - keep leave records scrolling inside the existing inner scroll area
+  function syncSsLeaveMainCardHeights() {
+    window.requestAnimationFrame(() => {
+      const row = document.querySelector("#hrSelfServiceSection .ss-leave-main-row");
+      const requestCard = document.querySelector(
+        "#hrSelfServiceSection .dashboard-form-card.ss-leave-equal-card",
+      );
+      const historyPanel =
+        ssState.dom.ssLeaveHistoryCardCollapse ||
+        document.getElementById("ssLeaveHistoryCardCollapse");
+      const selfServiceSection = document.getElementById("hrSelfServiceSection");
+      const leaveSection =
+        ssState.dom.ssLeaveSection ||
+        document.getElementById("ssLeaveSection");
+
+      if (!row || !requestCard || !historyPanel) return;
+
+      const clearHeight = () => {
+        row.style.removeProperty("--ss-leave-card-height");
+        row.removeAttribute("data-ss-leave-card-height");
+      };
+
+      const isDesktop = window.matchMedia("(min-width: 1200px)").matches;
+      const isHistoryExpanded = !historyPanel.classList.contains("d-none");
+      const isSelfServiceHidden = selfServiceSection?.classList.contains("d-none");
+      const isLeaveHidden = leaveSection?.classList.contains("d-none");
+
+      if (!isDesktop || isSelfServiceHidden || isLeaveHidden || !isHistoryExpanded) {
+        clearHeight();
+        return;
+      }
+
+      clearHeight();
+
+      const measuredHeight = Math.ceil(requestCard.getBoundingClientRect().height);
+
+      if (measuredHeight > 0) {
+        row.style.setProperty("--ss-leave-card-height", `${measuredHeight}px`);
+        row.setAttribute("data-ss-leave-card-height", "true");
+      }
+    });
+  }
+
+  // HR SELF-SERVICE REFRESH UX - STEP 1C-3D
+  // Let the browser paint the spinner before the async reload starts.
+  function waitForSsNextPaint() {
+    return new Promise((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(resolve);
+      });
+    });
+  }
+
+  // HR SELF-SERVICE REFRESH UX - STEP 1C-3D
+  // One shared refresh loading helper for both icon-only and labelled buttons.
+  // This replaces the duplicate helper versions previously introduced.
+  function setSsRefreshButtonLoading(
+    button,
+    isLoading,
+    { iconOnly = false, loadingLabel = "Refreshing..." } = {},
+  ) {
+    if (!button) return;
+
+    button.disabled = isLoading;
+
+    if (isLoading) {
+      if (!button.dataset.originalHtml) {
+        button.dataset.originalHtml = button.innerHTML;
+      }
+
+      button.innerHTML = iconOnly
+        ? `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>`
+        : `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>${loadingLabel}`;
+
+      return;
+    }
+
+    if (button.dataset.originalHtml) {
+      button.innerHTML = button.dataset.originalHtml;
+      delete button.dataset.originalHtml;
+    }
+  }
+
+  // HR SELF-SERVICE PAYROLL REFRESH - STEP 1C-3D
+  // Refresh the signed-in staff member's own authorised payroll records.
+  // This does not run payroll and does not touch HR payroll operations.
+  async function refreshSsPayrollManually() {
+    if (!ssState.currentUser) return;
+
+    const button = ssState.dom.ssRefreshPayrollBtn;
+
+    try {
+      setSsRefreshButtonLoading(button, true, { iconOnly: true });
+      await waitForSsNextPaint();
+
+      await loadSsPayroll();
+
+      clearSsAlert();
+      showSsAlert("success", "Payroll information refreshed successfully.");
+    } catch (error) {
+      console.error("[SS] Manual payroll refresh failed:", error);
+      showSsAlert(
+        "danger",
+        error.message || "Unable to refresh payroll information right now.",
+      );
+    } finally {
+      setSsRefreshButtonLoading(button, false, { iconOnly: true });
+    }
+  }
+
+  // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3D
+  // Refresh leave history using visible feedback and reload balances as well
+  // because manager decisions can affect used/remaining leave figures.
+  async function refreshSsLeaveHistoryManually() {
+    if (!ssState.currentUser) return;
+
+    const button = ssState.dom.ssRefreshLeaveRequestsBtn;
+
+    try {
+      setSsRefreshButtonLoading(button, true, { loadingLabel: "Refreshing..." });
+      await waitForSsNextPaint();
+
+      await loadSsLeaveRequests();
+      await loadSsLeaveBalances();
+
+      clearSsAlert();
+      showSsAlert("success", "Leave history refreshed successfully.");
+    } catch (error) {
+      console.error("[SS] Manual leave history refresh failed:", error);
+      showSsAlert(
+        "danger",
+        error.message || "Unable to refresh leave history right now.",
+      );
+    } finally {
+      setSsRefreshButtonLoading(button, false);
+      scheduleSsLeaveMainCardHeightSync();
+    }
+  }
+
+  // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3D
+  // Whole-card double-click collapse. Interactive controls and the existing
+  // leave-history inner scroll area are ignored, so normal clicking/scrolling
+  // does not accidentally collapse the card.
+  function bindSsCardDoubleClickCollapse(btn, body) {
+    if (!btn || !body) return;
+
+    const card = body.closest(".dashboard-section-card");
+    if (!card) return;
+
+    if (card.dataset.ssDoubleClickCollapseBound === "true") return;
+    card.dataset.ssDoubleClickCollapseBound = "true";
+
+    card.addEventListener("dblclick", (event) => {
+      const ignoredTarget = event.target.closest(
+        "button, a, input, select, textarea, label, table, .employee-leave-history-scroll-area, [contenteditable='true']",
+      );
+
+      if (ignoredTarget) return;
+
+      const isExpanded = !body.classList.contains("d-none");
+      if (!isExpanded) return;
+
+      // Use the visible button path so double-click behaves exactly like
+      // pressing Collapse.
+      btn.click();
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -300,6 +548,10 @@
       btn.querySelector("span").textContent = isCollapsed ? "Collapse" : "Expand";
       btn.setAttribute("aria-expanded", String(isCollapsed));
     });
+
+    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3A
+    // One safe double-click collapse binding for Leave Balances only.
+    bindSsCardDoubleClickCollapse(btn, body);
 
     ssState.dom.ssRefreshLeaveBalancesBtn?.addEventListener("click", async () => {
       await loadSsLeaveBalances();
@@ -323,6 +575,10 @@
       btn.setAttribute("aria-expanded", String(isCollapsed));
     });
 
+    // HR SELF-SERVICE LEAVE PARITY - STEP 1C
+    // Allow whole-card shell double-click collapse on Latest Leave Decision.
+    bindSsCardDoubleClickCollapse(btn, body);
+
     ssState.dom.ssRefreshLatestDecisionBtn?.addEventListener("click", async () => {
       await loadSsLeaveRequests();
     });
@@ -338,15 +594,20 @@
 
     btn.addEventListener("click", () => {
       const isCollapsed = body.classList.contains("d-none");
-      body.classList.toggle("d-none", !isCollapsed);
-      btn.querySelector("i")?.classList.toggle("bi-chevron-down", !isCollapsed);
-      btn.querySelector("i")?.classList.toggle("bi-chevron-up", isCollapsed);
-      btn.querySelector("span").textContent = isCollapsed ? "Collapse" : "Expand";
-      btn.setAttribute("aria-expanded", String(isCollapsed));
+
+      // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3D
+      // Use the shared helper so normal click collapse, double-click collapse,
+      // and programmatic collapse all follow the same state/height behaviour.
+      setSsCardExpanded(btn, body, isCollapsed);
     });
 
+    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-3D
+    // Double-clicking the open card shell behaves exactly like pressing
+    // the visible Collapse button.
+    bindSsCardDoubleClickCollapse(btn, body);
+
     ssState.dom.ssRefreshLeaveRequestsBtn?.addEventListener("click", async () => {
-      await loadSsLeaveRequests();
+      await refreshSsLeaveHistoryManually();
     });
   }
 
@@ -390,6 +651,19 @@
   }
 
   function bindSsPayrollEvents() {
+    // HR SELF-SERVICE LEAVE PARITY - STEP 1C-1
+    // Payroll opens first, so provide a visible route back to Leave Management
+    // from the payroll screen itself.
+    ssState.dom.ssGoToLeaveFromPayrollBtn?.addEventListener("click", () => {
+      switchSsSubSection("leave");
+
+      window.requestAnimationFrame(() => {
+        ssState.dom.ssLeaveSection?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
     ssState.dom.ssTogglePayrollFiguresBtn?.addEventListener("click", () => {
       ssState.isPayrollFiguresHidden = !ssState.isPayrollFiguresHidden;
       updateSsPayrollFigureVisibility();
@@ -397,7 +671,10 @@
     });
 
     ssState.dom.ssRefreshPayrollBtn?.addEventListener("click", async () => {
-      await loadSsPayroll();
+      // HR SELF-SERVICE PAYROLL REFRESH - STEP 1C-3C
+      // Use Employee Dashboard-style refresh feedback for the compact
+      // Current Payslip Summary refresh icon.
+      await refreshSsPayrollManually();
     });
 
     ssState.dom.ssClearPayrollFiltersBtn?.addEventListener("click", () => {
@@ -582,27 +859,86 @@
       const used = Number(balance.used_days || 0);
       const remaining = Number(balance.remaining_days ?? entitled - used);
 
+      const usedPercent =
+        entitled > 0
+          ? Math.min(100, Math.max(0, (used / entitled) * 100))
+          : 0;
+
+      const remainingPercent =
+        entitled > 0
+          ? Math.min(100, Math.max(0, (remaining / entitled) * 100))
+          : 0;
+
+      const statusClass =
+        remaining <= 0
+          ? "text-bg-danger"
+          : remainingPercent <= 25
+            ? "text-bg-warning"
+            : "text-bg-success";
+
+      const statusLabel =
+        remaining <= 0
+          ? "Fully Used"
+          : remainingPercent <= 25
+            ? "Low Balance"
+            : "Available";
+
+      const progressClass =
+        remaining <= 0
+          ? "bg-danger"
+          : remainingPercent <= 25
+            ? "bg-warning"
+            : "bg-success";
+
       const col = document.createElement("div");
-      col.className = "col-md-6 col-xl-4";
+      col.className = "col-12 col-md-6 col-xl-4";
+
+      // HR SELF-SERVICE LEAVE PARITY - STEP 1C
+      // Match Employee Dashboard leave balance presentation:
+      // clear leave type, availability status, entitlement breakdown,
+      // and used-entitlement progress bar. This is display-only.
       col.innerHTML = `
         <div class="info-tile h-100">
-          <div class="info-tile-label mb-1">${ssEscapeHtml(leaveTypeName)}</div>
-          <div class="d-flex gap-4 mt-2">
+          <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
             <div>
+              <div class="info-tile-label mb-1">Leave Type</div>
+              <div class="fw-bold">${ssEscapeHtml(leaveTypeName)}</div>
+            </div>
+            <span class="badge ${statusClass}">${statusLabel}</span>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-4">
               <div class="small text-secondary">Entitled</div>
               <div class="fw-semibold">${entitled}</div>
             </div>
-            <div>
+            <div class="col-4">
               <div class="small text-secondary">Used</div>
               <div class="fw-semibold">${used}</div>
             </div>
-            <div>
+            <div class="col-4">
               <div class="small text-secondary">Remaining</div>
-              <div class="fw-semibold ${remaining < 0 ? "text-danger" : ""}">${remaining}</div>
+              <div class="fw-semibold ${remaining <= 0 ? "text-danger" : ""}">
+                ${remaining}
+              </div>
             </div>
+          </div>
+
+          <div class="progress" style="height: 0.5rem;">
+            <div class="progress-bar ${progressClass}" role="progressbar"
+              style="width: ${usedPercent}%"
+              aria-valuenow="${usedPercent.toFixed(0)}"
+              aria-valuemin="0"
+              aria-valuemax="100">
+            </div>
+          </div>
+
+          <div class="small text-secondary mt-2">
+            ${usedPercent.toFixed(0)}% of entitlement used.
           </div>
         </div>
       `;
+
       grid.appendChild(col);
     });
   }
@@ -1529,18 +1865,31 @@
       loadSsPayroll(),
     ]);
 
-    // Default sub-section: leave
-    switchSsSubSection("leave");
+    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
+    // HR users often enter My Self-Service from payslip email/payment context.
+    // Show Payroll first so their own authorised payslip records are immediately visible.
+    // Leave remains available through the Leave Management sub-tab.
+    switchSsSubSection("payroll");
 
-    // Auto-expand key cards so the section does not look empty on first open
+    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
+    // Keep leave cards closed by default. This avoids the Leave workspace
+    // taking over the self-service page when HR is trying to check payroll.
     setSsCardExpanded(
       ssState.dom.ssToggleLeaveBalancesCardBtn,
       ssState.dom.ssLeaveBalancesCardCollapse,
-      true,
+      false,
     );
     setSsCardExpanded(
       ssState.dom.ssToggleLeaveHistoryCardBtn,
       ssState.dom.ssLeaveHistoryCardCollapse,
+      false,
+    );
+
+    // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1B
+    // Payroll History should be open when Payroll is the default sub-section.
+    setSsCardExpanded(
+      ssState.dom.ssTogglePayrollHistoryCardBtn,
+      ssState.dom.ssPayrollHistoryCardCollapse,
       true,
     );
   }

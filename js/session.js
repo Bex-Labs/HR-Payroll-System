@@ -72,15 +72,20 @@
     return data;
   }
 
-  // PAYROLL SECURE DELIVERY - STEP 2F-3B-1
-  // Preserve only the safe employee payroll landing path before redirecting
-  // unauthenticated users to login. Do not store payroll IDs, salary values,
-  // bank details, or arbitrary URLs.
+  // PAYSLIP EMAIL DEEP LINK ROUTING - STEP 1B
+  // Preserve only safe payroll landing routes before redirecting unauthenticated
+  // users to login. Do not store payroll IDs, salary values, bank details,
+  // employee IDs, or arbitrary URLs.
   function cacheSafePostLoginRedirect() {
     try {
       const currentPath = window.location.pathname || "";
       const currentParams = new URLSearchParams(window.location.search || "");
+
       const requestedSection = String(currentParams.get("section") || "")
+        .trim()
+        .toLowerCase();
+
+      const requestedWorkspace = String(currentParams.get("workspace") || "")
         .trim()
         .toLowerCase();
 
@@ -88,10 +93,26 @@
         currentPath.endsWith("/employee-dashboard.html") ||
         currentPath.endsWith("employee-dashboard.html");
 
+      const isHrDashboard =
+        currentPath.endsWith("/hr-dashboard.html") ||
+        currentPath.endsWith("hr-dashboard.html");
+
       if (isEmployeeDashboard && requestedSection === "payroll") {
         sessionStorage.setItem(
           POST_LOGIN_REDIRECT_STORAGE_KEY,
           "/employee-dashboard.html?section=payroll",
+        );
+        return;
+      }
+
+      if (
+        isHrDashboard &&
+        requestedWorkspace === "selfservice" &&
+        requestedSection === "payroll"
+      ) {
+        sessionStorage.setItem(
+          POST_LOGIN_REDIRECT_STORAGE_KEY,
+          "/hr-dashboard.html?workspace=selfservice&section=payroll",
         );
       }
     } catch (error) {
@@ -191,6 +212,33 @@
      Central role redirect
   ========================================================= */
   function redirectToRoleDashboard(role) {
+    // PAYSLIP EMAIL DEEP LINK ROUTING - STEP 1B
+    // If an HR user is already signed in and clicks the protected employee
+    // payslip link, route them to their own HR Self-Service payroll view.
+    // This keeps HR away from the Employee Dashboard while preserving the
+    // payroll landing intent from the email.
+    try {
+      const currentPath = window.location.pathname || "";
+      const currentParams = new URLSearchParams(window.location.search || "");
+      const requestedSection = String(currentParams.get("section") || "")
+        .trim()
+        .toLowerCase();
+
+      const isEmployeePayrollDeepLink =
+        (
+          currentPath.endsWith("/employee-dashboard.html") ||
+          currentPath.endsWith("employee-dashboard.html")
+        ) &&
+        requestedSection === "payroll";
+
+      if (String(role || "").trim().toLowerCase() === "hr" && isEmployeePayrollDeepLink) {
+        window.location.href = "hr-dashboard.html?workspace=selfservice&section=payroll";
+        return;
+      }
+    } catch (error) {
+      console.warn("Role redirect payroll deep link could not be resolved:", error);
+    }
+
     switch (role) {
       case "admin":
         window.location.href = "admin-dashboard.html";

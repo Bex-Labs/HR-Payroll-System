@@ -68,9 +68,10 @@ document.addEventListener("DOMContentLoaded", function () {
     return roleRoutes[role] || "/index.html";
   }
 
-  // PAYROLL SECURE DELIVERY - STEP 2F-3B-1
-  // Return a stored safe post-login destination only when it matches the
-  // signed-in user's role. Currently only employee payroll deep-linking is allowed.
+  // PAYSLIP EMAIL DEEP LINK ROUTING - STEP 1B
+  // Return a stored safe post-login payroll destination based on the signed-in
+  // user's role. The email link may originate from the employee payroll page,
+  // but HR users must land in HR Dashboard > My Self-Service > Payroll.
   function getSafePostLoginRedirectForRole(role = "") {
     const userRole = String(role || "").trim().toLowerCase();
 
@@ -81,11 +82,21 @@ document.addEventListener("DOMContentLoaded", function () {
 
       sessionStorage.removeItem(POST_LOGIN_REDIRECT_STORAGE_KEY);
 
-      if (
-        userRole === "employee" &&
-        storedRedirect === "/employee-dashboard.html?section=payroll"
-      ) {
-        return storedRedirect;
+      const isSafePayrollRedirect = [
+        "/employee-dashboard.html?section=payroll",
+        "/hr-dashboard.html?workspace=selfservice&section=payroll",
+      ].includes(storedRedirect);
+
+      if (!isSafePayrollRedirect) {
+        return "";
+      }
+
+      if (userRole === "employee") {
+        return "/employee-dashboard.html?section=payroll";
+      }
+
+      if (userRole === "hr") {
+        return "/hr-dashboard.html?workspace=selfservice&section=payroll";
       }
     } catch (error) {
       console.warn("Safe post-login redirect could not be resolved:", error);

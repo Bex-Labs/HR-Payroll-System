@@ -2829,7 +2829,46 @@ function rememberHrWorkspace(workspace = "") {
 
 // DASHBOARD WORKSPACE MEMORY - HR PILOT STEP 1
 // Read the last workspace for this signed-in HR user and company only.
+// PAYSLIP EMAIL DEEP LINK ROUTING - STEP 1B
+// Resolve only safe HR dashboard workspace requests from the URL.
+// This allows payslip email login to open HR > My Self-Service without
+// storing payroll IDs, salary values, bank details, or employee IDs in the URL.
+function getRequestedHrWorkspaceFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+
+    const requestedWorkspace = String(params.get("workspace") || "")
+      .trim()
+      .toLowerCase();
+
+    const requestedSection = String(params.get("section") || "")
+      .trim()
+      .toLowerCase();
+
+    if (requestedWorkspace === "selfservice" && requestedSection === "payroll") {
+      return "selfservice";
+    }
+
+    if (isValidHrWorkspaceKey(requestedWorkspace)) {
+      return requestedWorkspace;
+    }
+  } catch (error) {
+    console.warn("HR workspace URL request could not be resolved.", error);
+  }
+
+  return "";
+}
+
 function getRememberedHrWorkspace() {
+  // PAYSLIP EMAIL DEEP LINK ROUTING - STEP 1B
+  // URL request takes priority over remembered workspace so an email link
+  // can deliberately open HR Self-Service > Payroll after login.
+  const requestedWorkspace = getRequestedHrWorkspaceFromUrl();
+
+  if (isValidHrWorkspaceKey(requestedWorkspace)) {
+    return requestedWorkspace;
+  }
+
   // Prefer in-memory value (set when user clicks a tab this session).
   // Falls back to sessionStorage for page refreshes.
   if (isValidHrWorkspaceKey(_hrWorkspaceInMemory)) return _hrWorkspaceInMemory;
@@ -18025,14 +18064,13 @@ function switchHrWorkspace(workspace) {
   const isEmployees = workspace === "employees";
   const isSetup = workspace === "setup";
   const isPayroll = workspace === "payroll";
+
+  // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1A
+  // My Self-Service is the signed-in HR user's own leave and payroll view.
+  // Keep it in the same top-level workspace switch as Profile, People,
+  // Setup, and Payroll so it is visible after click, refresh, or restore.
   const isSelfService = workspace === "selfservice";
 
-  // WORKSPACE REARRANGEMENT - STEP 1H
-  // Four clear workspaces:
-  // Profile = signed-in HR user profile
-  // People = employee records and employee creation/import
-  // Setup = organisation, payroll, deduction, override, and bank master data
-  // Payroll = payroll processing, records, CSV export, and payslip status
   state.dom.hrProfileSection?.classList.toggle("d-none", !isProfile);
   state.dom.hrEmployeesSection?.classList.toggle("d-none", !isEmployees);
   state.dom.hrSetupSection?.classList.toggle("d-none", !isSetup);
@@ -18076,12 +18114,13 @@ function switchHrWorkspace(workspace) {
         ? "People"
         : isSetup
           ? "Setup & Master Data"
-          : isSelfService
-            ? "My Self-Service"
-            : "Payroll Processing";
+          : isPayroll
+            ? "Payroll Processing"
+            : "My Self-Service";
   }
 
-  // BEXHR SIDEBAR — sync active state to match the selected workspace tab.
+  // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1A
+  // Keep the left sidebar active state aligned with the selected workspace.
   const sidebarMap = [
     { id: "sidebarProfileBtn", active: isProfile },
     { id: "sidebarPeopleBtn", active: isEmployees },
@@ -18089,10 +18128,18 @@ function switchHrWorkspace(workspace) {
     { id: "sidebarPayrollBtn", active: isPayroll },
     { id: "sidebarSelfServiceBtn", active: isSelfService },
   ];
+
   sidebarMap.forEach(({ id, active }) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle("active", active);
+    const element = document.getElementById(id);
+    if (element) element.classList.toggle("active", active);
   });
+
+  // HR SELF-SERVICE PAYROLL VISIBILITY - STEP 1A
+  // If the workspace is restored after refresh/login, initialise the shared
+  // EmployeeSelfService module even when HR did not manually click the tab.
+  if (isSelfService) {
+    initHrSelfServiceOnFirstOpen();
+  }
 }
 
 function normalizeText(value) {
