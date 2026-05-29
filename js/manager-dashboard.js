@@ -143,10 +143,55 @@ function rememberManagerWorkspace(workspace = "") {
   }
 }
 
+// MANAGER PAYSLIP EMAIL DEEP LINK ROUTING - STEP 3A
+// Resolve only safe Manager dashboard workspace requests from the URL.
+// This allows a payslip email link to open Manager > My Self-Service > Payroll
+// without putting payroll IDs, salary values, bank details, or employee IDs in the URL.
+function getRequestedManagerWorkspaceFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+
+    const requestedWorkspace = String(params.get("workspace") || "")
+      .trim()
+      .toLowerCase();
+
+    const requestedSection = String(params.get("section") || "")
+      .trim()
+      .toLowerCase();
+
+    // Payslip email safe link formats supported:
+    // manager-dashboard.html?workspace=selfservice&section=payroll
+    // manager-dashboard.html?section=payroll
+    if (
+      requestedSection === "payroll" &&
+      (!requestedWorkspace || requestedWorkspace === "selfservice")
+    ) {
+      return "selfservice";
+    }
+
+    if (isValidManagerWorkspaceKey(requestedWorkspace)) {
+      return requestedWorkspace;
+    }
+  } catch (error) {
+    console.warn("Manager workspace URL request could not be resolved.", error);
+  }
+
+  return "";
+}
+
 // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
 // Read the remembered workspace for this manager session.
 // Fresh login naturally falls back to Profile after logout clears the keys.
 function getRememberedManagerWorkspace() {
+  // MANAGER PAYSLIP EMAIL DEEP LINK ROUTING - STEP 3A
+  // URL request wins over remembered workspace so a payslip email link can
+  // deliberately open Manager > My Self-Service > Payroll after login.
+  const requestedWorkspace = getRequestedManagerWorkspaceFromUrl();
+
+  if (isValidManagerWorkspaceKey(requestedWorkspace)) {
+    return requestedWorkspace;
+  }
+
   // Prefer in-memory value (set when user clicks a tab this session).
   if (isValidManagerWorkspaceKey(_managerWorkspaceInMemory)) return _managerWorkspaceInMemory;
 
@@ -195,6 +240,15 @@ function restoreManagerWorkspaceAfterRefresh() {
   const workspace = getRememberedManagerWorkspace();
 
   switchManagerWorkspace(workspace);
+
+  // MANAGER PAYSLIP EMAIL DEEP LINK ROUTING - STEP 3A
+  // If a payslip email link or remembered workspace opens My Self-Service,
+  // initialise the shared self-service module immediately. Without this,
+  // the Manager workspace can show the shell but not load Payroll/Leave data.
+  if (workspace === "selfservice") {
+    initManagerSelfServiceOnFirstOpen();
+  }
+
   forceManagerDashboardToTopAfterRefresh();
 
   window.requestAnimationFrame(() => {
@@ -2934,7 +2988,6 @@ function buildAssignedEmployeeStatusHtml(member = {}) {
   `;
 }
 
-
 function notifyLeaveDecisionChanged() {
   try {
     localStorage.setItem(
@@ -2960,6 +3013,7 @@ async function refreshManagerWorkspace() {
     state.pendingLeaveRequests = [];
     state.processedLeaveRequests = [];
     state.teamLeaveSchedule = [];
+
     renderPendingLeaveRequests([]);
     renderProcessedLeaveRequests([]);
     renderTeamLeaveSchedule([]);

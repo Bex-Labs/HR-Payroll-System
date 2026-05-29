@@ -367,17 +367,28 @@
   // - keep leave records scrolling inside the existing inner scroll area
   function syncSsLeaveMainCardHeights() {
     window.requestAnimationFrame(() => {
-      const row = document.querySelector("#hrSelfServiceSection .ss-leave-main-row");
-      const requestCard = document.querySelector(
-        "#hrSelfServiceSection .dashboard-form-card.ss-leave-equal-card",
+      const leaveSection =
+        ssState.dom.ssLeaveSection ||
+        document.getElementById("ssLeaveSection");
+
+      // MANAGER SELF-SERVICE PARITY - STEP 2C-2
+      // This shared self-service module runs inside HR and Manager dashboards.
+      // Resolve the active self-service host from the visible Leave section
+      // instead of hardcoding #hrSelfServiceSection. This preserves HR behaviour
+      // and makes Manager My Leave History use the same open/collapse/double-click
+      // height handling as HR.
+      const selfServiceSection =
+        leaveSection?.closest(".workspace-section") ||
+        document.getElementById("hrSelfServiceSection") ||
+        document.getElementById("managerSelfServiceSection");
+
+      const row = selfServiceSection?.querySelector(".ss-leave-main-row");
+      const requestCard = selfServiceSection?.querySelector(
+        ".dashboard-form-card.ss-leave-equal-card",
       );
       const historyPanel =
         ssState.dom.ssLeaveHistoryCardCollapse ||
         document.getElementById("ssLeaveHistoryCardCollapse");
-      const selfServiceSection = document.getElementById("hrSelfServiceSection");
-      const leaveSection =
-        ssState.dom.ssLeaveSection ||
-        document.getElementById("ssLeaveSection");
 
       if (!row || !requestCard || !historyPanel) return;
 
