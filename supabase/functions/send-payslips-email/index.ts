@@ -103,10 +103,15 @@ function getRequiredEnv(name: string) {
   return value;
 }
 
-// PAYROLL SECURE DELIVERY - STEP 2F-3B-3
-// Optional frontend URL used in payslip notification emails.
-// It must be HTTPS when configured in Supabase secrets.
-// Localhost is allowed only for local testing.
+// PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 1
+// The payslip email button must open the public landing page directly.
+// If PAYSLIP_ACCESS_URL is still configured as a protected dashboard route,
+// convert it to /index.html so employees do not briefly see a dashboard or
+// session-expired redirect before reaching the login page.
+// PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 4A
+// Keep the email button on the public landing page to prevent protected
+// dashboard flashes. The query string carries only non-sensitive login intent:
+// it does not include payroll ID, salary, deduction, employee ID, or bank data.
 function getOptionalPayslipAccessUrlEnv(name: string) {
   const value = Deno.env.get(name)?.trim();
 
@@ -123,10 +128,14 @@ function getOptionalPayslipAccessUrlEnv(name: string) {
       throw new Error("Only HTTPS URLs are allowed outside local testing.");
     }
 
-    return parsedUrl.toString();
+    const publicLandingUrl = new URL("/index.html", `${parsedUrl.origin}/`);
+    publicLandingUrl.searchParams.set("payslip", "1");
+    publicLandingUrl.searchParams.set("source", "payslip-email");
+
+    return publicLandingUrl.toString();
   } catch {
     throw new Error(
-      `${name} must be a valid secure employee payroll URL when provided.`,
+      `${name} must be a valid secure HR/payroll landing page URL when provided.`,
     );
   }
 }
@@ -450,17 +459,13 @@ function buildPayslipEmailMessage(
       ? "Please sign in to Alpatech HR & Payroll and open Payroll to access your payslip."
       : "Please sign in to the HR & Payroll System and open Payroll to access your payslip.";
 
-  const brandIntroLines = branding.isAlpatech
-    ? [
-      branding.headerTitle,
-      branding.headerSubtitle,
-    ]
-    : [];
-
+  // ALPATECH EMAIL BRANDING - STEP 2K
+  // The EmailJS visual header already carries the Alpatech brand.
+  // Keep the body clean and operational so the email does not repeat
+  // "Alpatech" too many times.
   return [
-    ...brandIntroLines,
     `Hello ${employeeName},`,
-    `Your ${branding.isAlpatech ? "Alpatech " : ""}payslip for ${payCycle} is now ready to view.${payDate ? `\nPay date: ${payDate}.` : ""}`,
+    `Your payslip for ${payCycle} is now ready to view.${payDate ? `\nPay date: ${payDate}.` : ""}`,
     accessInstruction,
     `For payroll queries, please contact ${branding.payrollContactLabel}.`,
     `This is an automated notification from ${branding.footerName}.`,
@@ -536,10 +541,10 @@ serve(async (request) => {
         "HR & Payroll System",
     };
 
-    // PAYROLL SECURE DELIVERY - STEP 2F-3B-3
-    // Optional secure employee payroll page used in payslip notification emails.
-    // Example production value:
-    // https://your-domain.com/employee-dashboard.html?section=payroll
+    // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 1
+    // EmailJS receives only the public landing page URL.
+    // The employee signs in from the landing page instead of first touching a
+    // protected dashboard route that can flash before session validation finishes.
     const payslipAccessUrl = getOptionalPayslipAccessUrlEnv("PAYSLIP_ACCESS_URL");
 
     const token = getBearerToken(request);

@@ -91,6 +91,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await loadLatestEmployeeProfile();
 
+    // ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+    // Apply final tenant-scoped Employee Dashboard branding after the signed-in
+    // employee profile has loaded. Non-Alpatech tenants are reset to BexHR.
+    applyEmployeeTenantWorkspaceShellBranding();
+
     if (state.dom.employeeDisplayEmail) {
       state.dom.employeeDisplayEmail.textContent =
         state.currentProfile?.email ||
@@ -204,6 +209,149 @@ function getEmployeeWorkspaceTenantScope() {
     console.warn("Employee tenant context could not be read for workspace memory.", error);
 
     return String(state.currentProfile?.tenant_id || "no-tenant").trim();
+  }
+}
+
+// ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+// Read the already validated tenant context created during login.
+// This is used only for visual Employee Dashboard branding and does not
+// change tenant filtering, employee records, payroll, leave, PDF, or access logic.
+function getEmployeeTenantContextForBranding() {
+  try {
+    const rawContext = localStorage.getItem("hrPayrollTenantContext");
+    return rawContext ? JSON.parse(rawContext) : null;
+  } catch (error) {
+    console.warn("Employee tenant branding context could not be read.", error);
+    return null;
+  }
+}
+
+// ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+// Detect only Alpatech from the validated tenant/company context.
+// Non-Alpatech tenants must keep the shared BexHR Employee Dashboard shell.
+function isCurrentEmployeeTenantAlpatechWorkspace() {
+  const tenantContext = getEmployeeTenantContextForBranding();
+
+  const companyName = String(
+    tenantContext?.companyName ||
+    state.currentProfile?.company_name ||
+    "",
+  )
+    .trim()
+    .toLowerCase();
+
+  const tenantCode = String(
+    tenantContext?.tenantCode ||
+    state.currentProfile?.tenant_code ||
+    "",
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    companyName.includes("alpatech") ||
+    tenantCode.includes("alpatech")
+  );
+}
+
+// ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+// Browser tab icon only. The icon changes only for Alpatech employees.
+function applyEmployeeTenantFaviconBranding() {
+  const favicon = document.querySelector("link[rel~='icon']");
+
+  if (!favicon) return;
+
+  if (isCurrentEmployeeTenantAlpatechWorkspace()) {
+    favicon.type = "image/png";
+    favicon.href = "assets/alpatech-favicon-large.png";
+    return;
+  }
+
+  favicon.type = "image/x-icon";
+  favicon.href = "assets/favicon.png";
+}
+
+// ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+// Tenant-scoped Employee Dashboard shell branding.
+// This changes visible branding only. It does not change profile, leave,
+// payroll, payslip PDF, Supabase, session, or role/access behaviour.
+function applyEmployeeTenantWorkspaceShellBranding() {
+  const sidebarBrand = document.getElementById("tenantSidebarBrand");
+  const heroBrandingBlock = document.getElementById("tenantHeroBrandingBlock");
+
+  applyEmployeeTenantFaviconBranding();
+
+  if (isCurrentEmployeeTenantAlpatechWorkspace()) {
+    document.body?.classList.add("alpatech-workspace");
+    document.title = "Alpatech Employee Self-Service | BexHR";
+
+    if (sidebarBrand) {
+      sidebarBrand.className = "bexhr-sidebar-brand alpatech-sidebar-brand";
+      sidebarBrand.innerHTML = `
+        <!-- ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+             Flame icon only. CSS renders the ALPATECH wordmark beside it. -->
+        <span class="alpatech-brand-mark" aria-hidden="true">
+          <img src="assets/alpatech-flame.png" alt="" />
+        </span>
+      `;
+    }
+
+    if (heroBrandingBlock) {
+      heroBrandingBlock.innerHTML = `
+        <!-- ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+             Brand only the signed-in Alpatech Employee Self-Service shell. -->
+        <div class="alpatech-hero-content">
+          <div class="alpatech-hero-kicker-row">
+            <div class="alpatech-hero-brand" aria-label="Alpatech Employee Self-Service">
+              <span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">
+                <img src="assets/alpatech-flame.png" alt="" />
+              </span>
+              <span class="alpatech-brand-wordmark">ALPATECH</span>
+            </div>
+
+            <div class="hero-badge alpatech-hero-badge">
+              <i class="bi bi-person-badge"></i>
+              Employee Self-Service
+            </div>
+          </div>
+
+          <h1 class="display-6 fw-bold mb-2">My Alpatech Self-Service</h1>
+          <p class="mb-0 alpatech-hero-copy">
+            Access your Alpatech profile, leave requests, payroll history, payslip details, and authorised payslip PDFs from one secure workspace.
+          </p>
+        </div>
+      `;
+    }
+
+    document.body?.classList.remove("alpatech-branding-resolving");
+    return;
+  }
+
+  // ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+  // Reset shared app branding for every non-Alpatech tenant.
+  document.body?.classList.remove("alpatech-workspace", "alpatech-branding-resolving");
+  document.title = "Employee Dashboard | BexHR";
+
+  if (sidebarBrand) {
+    sidebarBrand.className = "bexhr-sidebar-brand";
+    sidebarBrand.innerHTML = `
+      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">EM</span>
+    `;
+  }
+
+  if (heroBrandingBlock) {
+    heroBrandingBlock.innerHTML = `
+      <div class="hero-badge">
+        <i class="bi bi-person-badge"></i>
+        Employee Self Service
+      </div>
+      <h1 class="display-6 fw-bold mb-2">Employee Dashboard</h1>
+      <p class="mb-0" style="max-width: 760px">
+        View your profile information, monitor leave balances, submit
+        leave requests, review payroll history, view payslip details,
+        download payslip PDFs, and track manager leave decisions.
+      </p>
+    `;
   }
 }
 
@@ -1316,6 +1464,24 @@ function getInitialEmployeeDashboardSectionFromUrl() {
   return null;
 }
 
+// PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 4A
+// Detect only the safe payslip email journey after login.
+// This is UI convenience only: it opens Payroll History, but it does not expose
+// payroll IDs, salary values, deductions, bank details, or employee IDs.
+function isPayslipEmailDashboardLanding() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+
+    return (
+      normalizeText(params.get("section") || "") === "payroll" &&
+      normalizeText(params.get("source") || "") === "payslip-email"
+    );
+  } catch (error) {
+    console.warn("Payslip email dashboard landing could not be resolved:", error);
+    return false;
+  }
+}
+
 // PAYROLL SECURE DELIVERY - STEP 2F-3B-1
 // Open the requested safe section after all employee data has loaded.
 // This keeps payslip access behind the normal authenticated employee dashboard.
@@ -1326,10 +1492,19 @@ function showInitialEmployeeDashboardSection() {
   // Otherwise, browser refresh restores the remembered workspace.
   const requestedSection = getInitialEmployeeDashboardSectionFromUrl();
   const sectionToShow = requestedSection || getRememberedEmployeeWorkspace();
+  const shouldOpenPayrollHistoryFromEmail =
+    sectionToShow === "payroll" && isPayslipEmailDashboardLanding();
 
   rememberEmployeeWorkspace(sectionToShow);
   showSection(sectionToShow);
   restoreEmployeeWorkspaceAfterRefresh();
+
+  // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 4A
+  // Open Payroll History only when the user arrived from a payslip email.
+  // Normal employee Payroll tab navigation keeps the existing collapsed default.
+  if (shouldOpenPayrollHistoryFromEmail) {
+    setEmployeePayrollHistoryCardExpanded(true);
+  }
 }
 
 function showSection(sectionName) {
@@ -1661,7 +1836,7 @@ function renderEmployeeHrProfileReview(employee = {}) {
     state.dom.reviewNin,
     getMaskedEmployeeNin(employee.nin),
   );
-    // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
+  // EMPLOYEE PROFILE CORRECTION REQUESTS - STEP 2B
   // Keep the correction field picker aligned with the latest HR-held values.
   populateEmployeeProfileCorrectionFieldOptions();
 }
@@ -4363,11 +4538,52 @@ function buildPayrollBreakdownSections(record) {
   ];
 }
 
-// EMPLOYEE UI CLEANUP - STEP 1Q-F FIX
-// Build the employee payslip preview content used inside the modal.
-// This follows the HR View Payslip card concept, but remains scoped to
-// Employee self-service. It does not change payroll data, PDF generation,
-// filtering, calculations, or authorised-record rules.
+// ALPATECH EMPLOYEE PAYSLIP PREVIEW BRANDING - STEP 1C-FIX 2
+// Match the HR Alpatech document header exactly:
+// compact flame, tight ALPATECH wordmark spacing, subtitle aligned under
+// the wordmark, and no large logo tile.
+// Branding only; no payroll values, calculations, PDF, Supabase, or access logic changes.
+function buildEmployeeAlpatechDocumentBrandHeaderHtml({
+  documentLabel = "Confidential employee payslip",
+  rightTitle = "",
+  rightLine1 = "",
+  rightLine2 = "",
+} = {}) {
+  const rightPanelHtml = rightTitle || rightLine1 || rightLine2
+    ? `
+      <div style="text-align:right;color:#667085;font-size:0.82rem;line-height:1.45;">
+        ${rightTitle ? `<div style="color:#08446d;font-weight:700;font-size:0.95rem;">${escapeHtml(rightTitle)}</div>` : ""}
+        ${rightLine1 ? `<div>${escapeHtml(rightLine1)}</div>` : ""}
+        ${rightLine2 ? `<div>${escapeHtml(rightLine2)}</div>` : ""}
+      </div>
+    `
+    : "";
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;padding:16px;border:1px solid #d8e5ee;border-radius:16px;background:linear-gradient(135deg,#f7fbfd 0%,#ffffff 100%);">
+      <!-- ALPATECH EMPLOYEE PAYSLIP PREVIEW BRANDING - STEP 1C-FIX 2
+           Same compact logo composition used by HR payslip/employee record previews. -->
+      <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;">
+        <div style="display:flex;align-items:center;gap:4px;min-width:0;">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:28px;flex:0 0 auto;">
+            <img src="assets/alpatech-flame.png" alt="" style="display:block;width:18px;height:26px;object-fit:contain;" />
+          </span>
+
+          <span style="color:#0b5f95;font-size:1.18rem;font-weight:500;letter-spacing:0.16em;line-height:1;">
+            ALPATECH
+          </span>
+        </div>
+
+        <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:24px;">
+          ${escapeHtml(documentLabel)}
+        </div>
+      </div>
+
+      ${rightPanelHtml}
+    </div>
+  `;
+}
+
 function buildEmployeePayslipPreviewContent(record) {
   const currency = record.currency || "NGN";
   const sections = buildPayrollBreakdownSections(record);
@@ -4388,6 +4604,22 @@ function buildEmployeePayslipPreviewContent(record) {
     state.employeeRecord?.job_title ||
     state.employeeRecord?.position ||
     "Employee";
+
+  // ALPATECH EMPLOYEE PAYSLIP PREVIEW BRANDING - STEP 1C-FIX
+  // Use the same compact document-header pattern as HR payslip preview.
+  // Do not use a second blue banner inside the modal.
+  const isAlpatechPayslipPreview =
+    typeof isCurrentEmployeeTenantAlpatechWorkspace === "function" &&
+    isCurrentEmployeeTenantAlpatechWorkspace();
+
+  const alpatechPayslipPreviewHeaderHtml = isAlpatechPayslipPreview
+    ? buildEmployeeAlpatechDocumentBrandHeaderHtml({
+      documentLabel: "Confidential employee payslip",
+      rightTitle: "Payslip",
+      rightLine1: record.pay_cycle || "--",
+      rightLine2: `Pay Date: ${formatDate(record.pay_date)}`,
+    })
+    : "";
 
   const renderPayslipModalItems = (items = []) => {
     const visibleItems = Array.isArray(items) ? items : [];
@@ -4435,6 +4667,8 @@ function buildEmployeePayslipPreviewContent(record) {
     .join("");
 
   return `
+        ${alpatechPayslipPreviewHeaderHtml}
+
     <div class="border rounded-4 p-3 p-lg-4 mb-4">
       <div class="d-flex flex-column flex-md-row justify-content-between gap-4">
         <div>
@@ -4523,12 +4757,12 @@ function ensureEmployeePayslipPreviewModal() {
   modal.innerHTML = `
     <div class="container h-100 d-flex align-items-center justify-content-center py-4">
       <div class="card border-0 shadow-lg rounded-4 w-100" style="max-width: 880px; max-height: 92vh; overflow: auto;">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
+        <div id="employeePayslipPreviewHeader" class="card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4">
           <div>
             <h2 id="employeePayslipPreviewTitle" class="h4 mb-1">
               Payslip Details
             </h2>
-            <p class="text-secondary mb-0">
+            <p id="employeePayslipPreviewSubtitle" class="text-secondary mb-0">
               Review your authorised payslip details for this pay cycle.
             </p>
           </div>
@@ -4628,11 +4862,34 @@ function openEmployeePayslipPreview(payrollId) {
   clearPageAlert();
 
   const modal = ensureEmployeePayslipPreviewModal();
+  const header = modal.querySelector("#employeePayslipPreviewHeader");
   const title = modal.querySelector("#employeePayslipPreviewTitle");
+  const subtitle = modal.querySelector("#employeePayslipPreviewSubtitle");
+  const closeButton = modal.querySelector("#closeEmployeePayslipPreviewBtn");
   const content = modal.querySelector("#employeePayslipPreviewContent");
 
+  // ALPATECH EMPLOYEE PAYSLIP PREVIEW BRANDING - STEP 1C-FIX
+  // Keep the modal shell consistent with HR: white header, branded document
+  // letterhead inside the payslip content.
+  if (header) {
+    header.className =
+      "card-header bg-white border-0 d-flex justify-content-between align-items-start gap-3 p-4";
+    header.style.background = "";
+  }
+
   if (title) {
-    title.textContent = `Payslip Details - ${payrollRecord.pay_cycle || "Pay Cycle"}`;
+    title.className = "h4 mb-1";
+    title.textContent = `Payslip Preview - ${payrollRecord.pay_cycle || "Payroll"}`;
+  }
+
+  if (subtitle) {
+    subtitle.className = "text-secondary mb-0";
+    subtitle.textContent =
+      "Review your authorised payslip details for this pay cycle.";
+  }
+
+  if (closeButton) {
+    closeButton.className = "btn btn-sm btn-outline-secondary";
   }
 
   if (content) {
@@ -5068,6 +5325,39 @@ function drawPdfSectionTable(doc, title, rows, startY) {
   return y + 6;
 }
 
+// ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
+// Load the Alpatech flame asset for the Employee Dashboard payslip PDF.
+// This is visual branding only. If the image cannot load, the PDF still
+// generates safely using a text fallback.
+async function getEmployeeAlpatechPdfLogoDataUrl() {
+  try {
+    const response = await fetch("assets/alpatech-flame.png", {
+      cache: "force-cache",
+    });
+
+    if (!response.ok) return "";
+
+    const blob = await response.blob();
+
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+
+      reader.onloadend = () => {
+        resolve(String(reader.result || ""));
+      };
+
+      reader.onerror = () => {
+        resolve("");
+      };
+
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.warn("Alpatech PDF logo could not be loaded:", error);
+    return "";
+  }
+}
+
 async function downloadPayslipPdf(payrollId, buttonElement) {
   try {
     clearPageAlert();
@@ -5122,21 +5412,74 @@ async function downloadPayslipPdf(payrollId, buttonElement) {
     const currency = (payrollRecord.currency || "NGN").toUpperCase();
     const payslipSections = buildPayslipSections(payrollRecord);
 
-    doc.setFillColor(185, 106, 16);
-    doc.rect(0, 0, 210, 28, "F");
+    // ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
+    // Keep PDF branding tenant-scoped. Alpatech employees get the Alpatech
+    // payslip header; every other tenant keeps the existing BexHR PDF header.
+    const isAlpatechPayslip =
+      typeof isCurrentEmployeeTenantAlpatechWorkspace === "function" &&
+      isCurrentEmployeeTenantAlpatechWorkspace();
 
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text("BexHR", 14, 14);
+    const alpatechLogoDataUrl = isAlpatechPayslip
+      ? await getEmployeeAlpatechPdfLogoDataUrl()
+      : "";
 
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("Official Employee Payslip", 14, 21);
+    if (isAlpatechPayslip) {
+      doc.setFillColor(7, 59, 99);
+      doc.rect(0, 0, 210, 32, "F");
+
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(14, 6.5, 17, 17, 2.5, 2.5, "F");
+
+      if (alpatechLogoDataUrl) {
+        doc.addImage(alpatechLogoDataUrl, "PNG", 18.2, 8.1, 8.5, 13.5);
+      } else {
+        doc.setTextColor(11, 95, 149);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("A", 22.5, 17.7, { align: "center" });
+      }
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(17);
+      doc.text("ALPATECH", 36, 15.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.text("Official Employee Payslip", 36, 22.2);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("Payslip", 196, 14, { align: "right" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.text(String(payrollRecord.pay_cycle || "--"), 196, 20, {
+        align: "right",
+      });
+      doc.text(`Pay Date: ${formatDate(payrollRecord.pay_date)}`, 196, 25, {
+        align: "right",
+      });
+    } else {
+      doc.setFillColor(185, 106, 16);
+      doc.rect(0, 0, 210, 28, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.text("BexHR", 14, 14);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("Official Employee Payslip", 14, 21);
+    }
 
     doc.setTextColor(17, 24, 39);
 
-    let y = 40;
+    // ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
+    // Alpatech header is slightly taller than the default BexHR header,
+    // so start the content a little lower only for Alpatech PDFs.
+    let y = isAlpatechPayslip ? 44 : 40;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
     doc.text("Employee Details", 14, y);
@@ -5154,10 +5497,10 @@ async function downloadPayslipPdf(payrollId, buttonElement) {
     y += 6;
     doc.text(`Employee Group: ${employeeGroup}`, 14, y);
 
-    let rightY = 48;
+    let rightY = isAlpatechPayslip ? 52 : 48;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
-    doc.text("Pay Details", 120, 40);
+    doc.text("Pay Details", 120, isAlpatechPayslip ? 44 : 40);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10.5);
@@ -5173,7 +5516,7 @@ async function downloadPayslipPdf(payrollId, buttonElement) {
       doc.text("Payroll Model: Generic", 120, rightY);
     }
 
-    y = 86;
+    y = isAlpatechPayslip ? 92 : 86;
     doc.setDrawColor(209, 213, 219);
     doc.line(14, y, 196, y);
     y += 10;
@@ -5186,11 +5529,36 @@ async function downloadPayslipPdf(payrollId, buttonElement) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(107, 114, 128);
+
+    // ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
+    // Footer wording follows the tenant brand without changing payroll data.
     doc.text(
-      "This payslip was generated from an authorised payroll record in BexHR.",
+      isAlpatechPayslip
+        ? "This payslip was generated from an authorised Alpatech payroll record."
+        : "This payslip was generated from an authorised payroll record in BexHR.",
       14,
       y,
     );
+
+    // ALPATECH EMPLOYEE PDF BRANDING - STEP 1B
+    // Add light page numbering to every generated page. This is presentation
+    // only and does not alter any payroll calculations or record values.
+    const totalPages = doc.getNumberOfPages();
+
+    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+      doc.setPage(pageNumber);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(107, 114, 128);
+      doc.text(
+        isAlpatechPayslip ? "Alpatech HR & Payroll" : "BexHR",
+        14,
+        290,
+      );
+      doc.text(`Page ${pageNumber} of ${totalPages}`, 196, 290, {
+        align: "right",
+      });
+    }
 
     const safePayCycle = (payrollRecord.pay_cycle || "Payslip")
       .replace(/\s+/g, "-")
@@ -5199,7 +5567,10 @@ async function downloadPayslipPdf(payrollId, buttonElement) {
     const safeEmployeeName =
       employeeName.replace(/\s+/g, "-").replace(/[^\w-]/g, "") || "Employee";
 
-    const filename = `Payslip_${safePayCycle}_${safeEmployeeName}.pdf`;
+    const filename = isAlpatechPayslip
+      ? `Alpatech-${safeEmployeeName}-Payslip-${safePayCycle}.pdf`
+      : `Payslip_${safePayCycle}_${safeEmployeeName}.pdf`;
+
     doc.save(filename);
 
     showPageAlert("success", "Payslip PDF downloaded successfully.");

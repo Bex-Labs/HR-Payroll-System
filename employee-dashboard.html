@@ -83,6 +83,112 @@
 </head>
 
 <body class="dashboard-page bexhr-has-sidebar">
+  <!-- ALPATECH TENANT BRANDING - EMPLOYEE STEP 1A
+       Pre-apply Alpatech branding from the already validated tenant context.
+
+       HR/product behaviour:
+       - This prevents a BexHR/Employee flash for Alpatech employees.
+       - This does not query Supabase.
+       - This does not change profile, leave, payroll, payslip, PDF, role,
+         session, or tenant-filtering logic.
+       - employee-dashboard.js performs the final tenant-safe branding reset
+         after the employee page starts. -->
+  <script>
+    (function () {
+      function isCachedAlpatechTenant() {
+        var rawTenantContext = window.localStorage.getItem("hrPayrollTenantContext") || "";
+        var tenantContext = rawTenantContext ? JSON.parse(rawTenantContext) : null;
+        var tenantCode = String((tenantContext && tenantContext.tenantCode) || "").trim().toLowerCase();
+        var companyName = String((tenantContext && tenantContext.companyName) || "").trim().toLowerCase();
+        var rawTenantText = String(rawTenantContext || "").toLowerCase();
+
+        return (
+          tenantCode.indexOf("alpatech") !== -1 ||
+          companyName.indexOf("alpatech") !== -1 ||
+          rawTenantText.indexOf("alpatech") !== -1
+        );
+      }
+
+      function preRenderAlpatechEmployeeShell() {
+        try {
+          if (!isCachedAlpatechTenant()) {
+            document.body.classList.remove("alpatech-workspace", "alpatech-branding-resolving");
+            return;
+          }
+
+          document.body.classList.add("alpatech-workspace");
+          document.title = "Alpatech Employee Self-Service | BexHR";
+
+          var favicon = document.querySelector("link[rel~='icon']");
+          if (favicon) {
+            favicon.type = "image/png";
+            favicon.href = "assets/alpatech-favicon-large.png";
+          }
+
+          var sidebarBrand = document.getElementById("tenantSidebarBrand");
+          if (sidebarBrand) {
+            sidebarBrand.className = "bexhr-sidebar-brand alpatech-sidebar-brand";
+            sidebarBrand.innerHTML =
+              '<span class="alpatech-brand-mark" aria-hidden="true">' +
+                '<img src="assets/alpatech-flame.png" alt="" />' +
+              '</span>';
+          }
+
+          var heroBrandingBlock = document.getElementById("tenantHeroBrandingBlock");
+          if (heroBrandingBlock) {
+            heroBrandingBlock.innerHTML =
+              '<div class="alpatech-hero-content">' +
+                '<div class="alpatech-hero-kicker-row">' +
+                  '<div class="alpatech-hero-brand" aria-label="Alpatech Employee Self-Service">' +
+                    '<span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">' +
+                      '<img src="assets/alpatech-flame.png" alt="" />' +
+                    '</span>' +
+                    '<span class="alpatech-brand-wordmark">ALPATECH</span>' +
+                  '</div>' +
+                  '<div class="hero-badge alpatech-hero-badge">' +
+                    '<i class="bi bi-person-badge"></i>' +
+                    ' Employee Self-Service' +
+                  '</div>' +
+                '</div>' +
+                '<h1 class="display-6 fw-bold mb-2">My Alpatech Self-Service</h1>' +
+                '<p class="mb-0 alpatech-hero-copy">' +
+                  'Access your Alpatech profile, leave requests, payroll history, payslip details, and authorised payslip PDFs from one secure workspace.' +
+                '</p>' +
+              '</div>';
+          }
+
+          document.body.classList.remove("alpatech-branding-resolving");
+        } catch (error) {
+          console.warn("Early Alpatech employee branding could not be applied.", error);
+          document.body.classList.remove("alpatech-branding-resolving");
+        }
+      }
+
+      try {
+        if (!isCachedAlpatechTenant()) {
+          return;
+        }
+
+        document.body.classList.add("alpatech-workspace", "alpatech-branding-resolving");
+        document.title = "Alpatech Employee Self-Service | BexHR";
+
+        var favicon = document.querySelector("link[rel~='icon']");
+        if (favicon) {
+          favicon.type = "image/png";
+          favicon.href = "assets/alpatech-favicon-large.png";
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", preRenderAlpatechEmployeeShell, { once: true });
+        } else {
+          preRenderAlpatechEmployeeShell();
+        }
+      } catch (error) {
+        console.warn("Early Alpatech employee branding could not be prepared.", error);
+        document.body.classList.remove("alpatech-branding-resolving");
+      }
+    })();
+  </script>
   <!-- =========================================================
        BEXHR SIDEBAR NAV - EMPLOYEE STEP 1C-3
        Desktop sidebar for Employee Self Service. It proxies to the existing
@@ -90,7 +196,7 @@
        and workspace memory remain unchanged. Hidden on mobile by shared CSS.
        ========================================================= -->
   <nav class="bexhr-sidebar" id="bexhrSidebar" aria-label="Employee workspace navigation">
-    <div class="bexhr-sidebar-brand">
+    <div class="bexhr-sidebar-brand" id="tenantSidebarBrand">
       <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">EM</span>
     </div>
 
@@ -130,7 +236,7 @@
   <main class="container py-4 py-lg-5">
     <section class="dashboard-hero mb-4">
       <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-4">
-        <div>
+        <div id="tenantHeroBrandingBlock">
           <div class="hero-badge">
             <i class="bi bi-person-badge"></i>
             Employee Self Service

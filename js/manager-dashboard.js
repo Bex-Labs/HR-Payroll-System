@@ -22,6 +22,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.currentProfile = access.profile;
 
     await loadLatestManagerProfile();
+
+    // ALPATECH TENANT BRANDING - MANAGER STEP 1D
+    // Apply final tenant-scoped Manager Dashboard branding after the signed-in
+    // manager profile has loaded. Non-Alpatech tenants are reset to BexHR.
+    applyManagerTenantWorkspaceShellBranding();
+
     renderManagerProfile(state.currentProfile, access.session.user);
 
     // MANAGER DASHBOARD WORKSPACE MEMORY - STEP 1A
@@ -108,6 +114,149 @@ function getManagerWorkspaceTenantScope() {
     console.warn("Manager tenant context could not be read for workspace memory.", error);
 
     return String(state.currentProfile?.tenant_id || "no-tenant").trim();
+  }
+}
+
+// ALPATECH TENANT BRANDING - MANAGER STEP 1D
+// Read the already validated tenant context created during login.
+// This is used only for Manager Dashboard visual branding and does not
+// change team visibility, leave approval, self-service, payroll, or access logic.
+function getManagerTenantContextForBranding() {
+  try {
+    const rawContext = localStorage.getItem("hrPayrollTenantContext");
+    return rawContext ? JSON.parse(rawContext) : null;
+  } catch (error) {
+    console.warn("Manager tenant branding context could not be read.", error);
+    return null;
+  }
+}
+
+// ALPATECH TENANT BRANDING - MANAGER STEP 1D
+// Detect only Alpatech from the validated tenant/company context.
+// Non-Alpatech tenants must keep the shared BexHR Manager Dashboard shell.
+function isCurrentManagerTenantAlpatechWorkspace() {
+  const tenantContext = getManagerTenantContextForBranding();
+
+  const companyName = String(
+    tenantContext?.companyName ||
+    state.currentProfile?.company_name ||
+    "",
+  )
+    .trim()
+    .toLowerCase();
+
+  const tenantCode = String(
+    tenantContext?.tenantCode ||
+    state.currentProfile?.tenant_code ||
+    "",
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    companyName.includes("alpatech") ||
+    tenantCode.includes("alpatech")
+  );
+}
+
+// ALPATECH TENANT BRANDING - MANAGER STEP 1D
+// Browser tab icon only. The icon changes only for Alpatech managers.
+function applyManagerTenantFaviconBranding() {
+  const favicon = document.querySelector("link[rel~='icon']");
+
+  if (!favicon) return;
+
+  if (isCurrentManagerTenantAlpatechWorkspace()) {
+    favicon.type = "image/png";
+    favicon.href = "assets/alpatech-favicon-large.png";
+    return;
+  }
+
+  favicon.type = "image/x-icon";
+  favicon.href = "assets/favicon.png";
+}
+
+// ALPATECH TENANT BRANDING - MANAGER STEP 1D
+// Tenant-scoped Manager Dashboard shell branding.
+// This changes visible branding only. It does not change team records,
+// reporting-line visibility, leave approval, self-service, payroll,
+// payslip, Supabase, session, or role/access behaviour.
+function applyManagerTenantWorkspaceShellBranding() {
+  const sidebarBrand = document.getElementById("tenantSidebarBrand");
+  const heroBrandingBlock = document.getElementById("tenantHeroBrandingBlock");
+
+  applyManagerTenantFaviconBranding();
+
+  if (isCurrentManagerTenantAlpatechWorkspace()) {
+    document.body?.classList.add("alpatech-workspace");
+    document.title = "Alpatech Manager Workspace | BexHR";
+
+    if (sidebarBrand) {
+      sidebarBrand.className = "bexhr-sidebar-brand alpatech-sidebar-brand";
+      sidebarBrand.innerHTML = `
+        <!-- ALPATECH TENANT BRANDING - MANAGER STEP 1D
+             Flame icon only. CSS renders the ALPATECH wordmark beside it. -->
+        <span class="alpatech-brand-mark" aria-hidden="true">
+          <img src="assets/alpatech-flame.png" alt="" />
+        </span>
+      `;
+    }
+
+    if (heroBrandingBlock) {
+      heroBrandingBlock.innerHTML = `
+        <!-- ALPATECH TENANT BRANDING - MANAGER STEP 1D
+             Brand only the signed-in Alpatech Manager workspace shell. -->
+        <div class="alpatech-hero-content">
+          <div class="alpatech-hero-kicker-row">
+            <div class="alpatech-hero-brand" aria-label="Alpatech Manager Workspace">
+              <span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">
+                <img src="assets/alpatech-flame.png" alt="" />
+              </span>
+              <span class="alpatech-brand-wordmark">ALPATECH</span>
+            </div>
+
+            <div class="hero-badge alpatech-hero-badge">
+              <i class="bi bi-diagram-3"></i>
+              Manager Workspace
+            </div>
+          </div>
+
+          <h1 class="display-6 fw-bold mb-2">Team Operations Dashboard</h1>
+          <p class="mb-0 alpatech-hero-copy">
+            Review Alpatech team records, leave activity, manager decisions, and your own self-service workspace from one secure dashboard.
+          </p>
+        </div>
+      `;
+    }
+
+    document.body?.classList.remove("alpatech-branding-resolving");
+    return;
+  }
+
+  // ALPATECH TENANT BRANDING - MANAGER STEP 1D
+  // Reset shared app branding for every non-Alpatech tenant.
+  document.body?.classList.remove("alpatech-workspace", "alpatech-branding-resolving");
+  document.title = "Manager Dashboard | BexHR";
+
+  if (sidebarBrand) {
+    sidebarBrand.className = "bexhr-sidebar-brand";
+    sidebarBrand.innerHTML = `
+      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">MG</span>
+    `;
+  }
+
+  if (heroBrandingBlock) {
+    heroBrandingBlock.innerHTML = `
+      <div class="hero-badge">
+        <i class="bi bi-diagram-3"></i>
+        Team Management
+      </div>
+      <h1 class="display-6 fw-bold mb-2">Manager Dashboard</h1>
+      <p class="mb-0" style="max-width: 760px">
+        View assigned employees, review team leave activity, approve leave
+        requests, and manage your own profile details.
+      </p>
+    `;
   }
 }
 

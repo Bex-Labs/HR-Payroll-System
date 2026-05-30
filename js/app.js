@@ -68,10 +68,10 @@ document.addEventListener("DOMContentLoaded", function () {
     return roleRoutes[role] || "/index.html";
   }
 
-  // PAYSLIP EMAIL DEEP LINK ROUTING - STEP 1B
+  // PAYSLIP EMAIL DEEP LINK ROUTING - STEP 4A
   // Return a stored safe post-login payroll destination based on the signed-in
-  // user's role. The email link may originate from the employee payroll page,
-  // but HR users must land in HR Dashboard > My Self-Service > Payroll.
+  // user's role. Payslip email login also carries source=payslip-email so the
+  // Employee Dashboard can open Payroll History by default only for this journey.
   function getSafePostLoginRedirectForRole(role = "") {
     const userRole = String(role || "").trim().toLowerCase();
 
@@ -82,17 +82,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
       sessionStorage.removeItem(POST_LOGIN_REDIRECT_STORAGE_KEY);
 
-      const isSafePayrollRedirect = [
+      const isPayslipEmailRedirect =
+        storedRedirect === "/employee-dashboard.html?section=payroll&source=payslip-email";
+
+      const isStandardPayrollRedirect = [
         "/employee-dashboard.html?section=payroll",
         "/hr-dashboard.html?workspace=selfservice&section=payroll",
       ].includes(storedRedirect);
 
-      if (!isSafePayrollRedirect) {
+      if (!isPayslipEmailRedirect && !isStandardPayrollRedirect) {
         return "";
       }
 
       if (userRole === "employee") {
-        return "/employee-dashboard.html?section=payroll";
+        return isPayslipEmailRedirect
+          ? "/employee-dashboard.html?section=payroll&source=payslip-email"
+          : "/employee-dashboard.html?section=payroll";
       }
 
       if (userRole === "hr") {
@@ -103,6 +108,31 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     return "";
+  }
+
+  // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 4C
+  // The email button opens the public login/landing page first.
+  // When ?payslip=1&source=payslip-email is present, cache a safe payroll
+  // destination for after successful login. The source flag is intentionally
+  // preserved so Employee Dashboard can open Payroll History automatically
+  // only for this email journey.
+  // No payroll ID, salary value, bank detail, employee ID, or arbitrary URL is stored.
+  function cachePayslipEmailLandingIntentFromUrl() {
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      const isPayslipEmailLanding =
+        String(params.get("payslip") || "").trim() === "1" &&
+        String(params.get("source") || "").trim() === "payslip-email";
+
+      if (!isPayslipEmailLanding) return;
+
+      sessionStorage.setItem(
+        POST_LOGIN_REDIRECT_STORAGE_KEY,
+        "/employee-dashboard.html?section=payroll&source=payslip-email",
+      );
+    } catch (error) {
+      console.warn("Payslip email landing intent could not be cached:", error);
+    }
   }
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-3
@@ -562,6 +592,11 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   }
+
+  // PAYSLIP EMAIL LANDING LINK QUICK FIX - STEP 4C
+  // Cache safe payroll intent once before sign-in so the user lands on Payroll
+  // after authentication without first touching a protected dashboard URL.
+  cachePayslipEmailLandingIntentFromUrl();
 
   // HRP-80 - TENANT / COMPANY LOGIN SEGMENTATION - STEP 1F-4
   // Prefill Company/Tenant ID if a valid tenant context is already cached.
