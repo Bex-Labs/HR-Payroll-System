@@ -55,6 +55,23 @@ type EmailJsConfig = {
   fromName: string;
 };
 
+// ALPATECH EMAIL BRANDING - STEP 2E
+// Branding context is resolved server-side from the signed-in company workspace.
+// This must not come from the browser because payslip delivery is tenant-sensitive.
+type PayslipEmailBrandingContext = {
+  isAlpatech: boolean;
+  brandName: string;
+  fromName: string;
+  headerTitle: string;
+  headerSubtitle: string;
+  primaryColor: string;
+  logoUrl: string;
+  payslipAccessLabel: string;
+  fallbackAccessLabel: string;
+  payrollContactLabel: string;
+  footerName: string;
+};
+
 type PayslipEmailDeliveryRequest = {
   config: EmailJsConfig;
   toEmail: string;
@@ -64,6 +81,10 @@ type PayslipEmailDeliveryRequest = {
   initiatedByEmail: string;
   payCycle: string;
   payrollRecordId: string;
+
+  // ALPATECH EMAIL BRANDING - STEP 2E
+  // Used only to pass non-sensitive branding fields to EmailJS.
+  branding: PayslipEmailBrandingContext;
 
   // PAYROLL SECURE DELIVERY - STEP 2F-3B-3
   // Safe employee payroll landing URL.
@@ -136,6 +157,115 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+// ALPATECH EMAIL BRANDING - STEP 2E
+// Default email identity for non-Alpatech tenants.
+const DEFAULT_PAYSLIP_EMAIL_BRANDING: PayslipEmailBrandingContext = {
+  isAlpatech: false,
+  brandName: "HR & Payroll System",
+  fromName: "",
+  headerTitle: "HR & Payroll System",
+  headerSubtitle: "Confidential payslip notification",
+  primaryColor: "#904d00",
+  logoUrl: "",
+  payslipAccessLabel: "View payslip securely",
+  fallbackAccessLabel: "Open HR & Payroll System",
+  payrollContactLabel: "HR/Payroll",
+  footerName: "the HR & Payroll System",
+};
+
+function isAlpatechBrandValue(value: unknown) {
+  return normalise(value).includes("alpatech");
+}
+
+function buildPublicAssetUrl(baseUrl: string, assetPath: string) {
+  const cleanBaseUrl = cleanText(baseUrl);
+  const cleanAssetPath = cleanText(assetPath).replace(/^\/+/, "");
+
+  if (!cleanBaseUrl || !cleanAssetPath) return "";
+
+  try {
+    const parsedBaseUrl = new URL(cleanBaseUrl);
+    return new URL(cleanAssetPath, `${parsedBaseUrl.origin}/`).toString();
+  } catch {
+    return "";
+  }
+}
+
+// ALPATECH EMAIL BRANDING - STEP 2E
+// Resolve tenant branding from trusted backend data only.
+// If tenant lookup is blocked by RLS, the function safely falls back to
+// non-Alpatech branding rather than leaking Alpatech branding to other tenants.
+async function resolvePayslipEmailBrandingContext(
+  supabase: ReturnType<typeof createClient>,
+  profile: Record<string, unknown> | null,
+  payslipAccessUrl: string,
+): Promise<PayslipEmailBrandingContext> {
+  const tenantId = getProfileTenantId(profile);
+
+  const brandCandidates = [
+    profile?.company_name,
+    profile?.tenant_code,
+    profile?.tenant_name,
+    profile?.organization_name,
+  ];
+
+  try {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("company_name, tenant_code")
+      .eq("id", tenantId)
+      .maybeSingle();
+
+    if (!error && data) {
+      brandCandidates.push(data.company_name, data.tenant_code);
+    } else if (error) {
+      console.warn("Payslip email tenant branding lookup skipped.", error);
+    }
+  } catch (error) {
+    console.warn("Payslip email tenant branding lookup failed.", error);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("organization_settings")
+      .select("organization_name")
+      .eq("tenant_id", tenantId)
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      brandCandidates.push(data.organization_name);
+    } else if (error) {
+      console.warn("Payslip email organization branding lookup skipped.", error);
+    }
+  } catch (error) {
+    console.warn("Payslip email organization branding lookup failed.", error);
+  }
+
+  const isAlpatech = brandCandidates.some(isAlpatechBrandValue);
+
+  if (!isAlpatech) {
+    return DEFAULT_PAYSLIP_EMAIL_BRANDING;
+  }
+
+  const configuredPublicBaseUrl = cleanText(Deno.env.get("PUBLIC_APP_BASE_URL"));
+  const logoBaseUrl = configuredPublicBaseUrl || payslipAccessUrl;
+
+  return {
+    isAlpatech: true,
+    brandName: "ALPATECH",
+    fromName: "Alpatech HR & Payroll",
+    headerTitle: "ALPATECH HR & Payroll",
+    headerSubtitle: "Confidential payslip notification",
+    primaryColor: "#0b5f95",
+    logoUrl: buildPublicAssetUrl(logoBaseUrl, "assets/alpatech-flame.png"),
+    payslipAccessLabel: "View Alpatech payslip securely",
+    fallbackAccessLabel: "Open Alpatech HR & Payroll",
+    payrollContactLabel: "Alpatech HR/Payroll",
+    footerName: "Alpatech HR & Payroll",
+  };
+}
+
 async function sendPayslipEmailViaEmailJs({
   config,
   toEmail,
@@ -145,6 +275,7 @@ async function sendPayslipEmailViaEmailJs({
   initiatedByEmail,
   payCycle,
   payrollRecordId,
+  branding,
   payslipAccessUrl,
 }: PayslipEmailDeliveryRequest) {
   const response = await fetch(
@@ -164,10 +295,24 @@ async function sendPayslipEmailViaEmailJs({
           to_name: toName || toEmail,
           subject,
           message,
-          from_name: config.fromName,
+          // ALPATECH EMAIL BRANDING - STEP 2E
+          // from_name is tenant-aware for Alpatech, but falls back to the
+          // configured EmailJS sender name for every other tenant.
+          from_name: branding.fromName || config.fromName,
           initiated_by_email: initiatedByEmail || "",
           pay_cycle: payCycle,
           payroll_record_id: payrollRecordId,
+
+          // ALPATECH EMAIL BRANDING - STEP 2E
+          // Non-sensitive branding parameters for the EmailJS payslip template.
+          // These do not include salary, deduction, bank, or payslip amount data.
+          brand_name: branding.brandName,
+          brand_header_title: branding.headerTitle,
+          brand_header_subtitle: branding.headerSubtitle,
+          brand_primary_color: branding.primaryColor,
+          brand_logo_url: branding.logoUrl,
+          payroll_contact_label: branding.payrollContactLabel,
+          email_footer_name: branding.footerName,
 
           // PAYROLL SECURE DELIVERY - STEP 2F-3B-3
           // Non-sensitive EmailJS params for the protected employee payroll page.
@@ -176,8 +321,8 @@ async function sendPayslipEmailViaEmailJs({
           // PAYROLL SECURE DELIVERY - STEP 2F-3B-4C
           // Short client-ready button label for the EmailJS template.
           payslip_access_label: payslipAccessUrl
-            ? "View payslip securely"
-            : "Open HR & Payroll System",
+            ? branding.payslipAccessLabel
+            : branding.fallbackAccessLabel,
 
           sent_at: new Date().toISOString(),
         },
@@ -274,10 +419,16 @@ function getEmployeeName(record: Record<string, unknown>) {
 // PAYROLL EMAIL DELIVERY - STEP 2E
 // Keep the email content controlled and non-sensitive. This does not include
 // salary, deductions, bank details, or PDF attachments.
-function buildPayslipEmailSubject(record: Record<string, unknown>) {
+function buildPayslipEmailSubject(
+  record: Record<string, unknown>,
+  branding: PayslipEmailBrandingContext = DEFAULT_PAYSLIP_EMAIL_BRANDING,
+) {
   const payCycle = cleanText(record.pay_cycle) || "Payroll";
+  const prefix = branding.isAlpatech
+    ? "Alpatech Payslip Notification"
+    : "Payslip Notification";
 
-  return `Payslip Notification - ${payCycle}`.slice(0, 180);
+  return `${prefix} - ${payCycle}`.slice(0, 180);
 }
 
 // PAYROLL EMAIL DELIVERY - STEP 2F-3B-4D
@@ -287,6 +438,7 @@ function buildPayslipEmailSubject(record: Record<string, unknown>) {
 function buildPayslipEmailMessage(
   record: Record<string, unknown>,
   payslipAccessUrl: string,
+  branding: PayslipEmailBrandingContext = DEFAULT_PAYSLIP_EMAIL_BRANDING,
 ) {
   const employeeName = getEmployeeName(record);
   const payCycle = cleanText(record.pay_cycle) || "the selected pay cycle";
@@ -294,14 +446,24 @@ function buildPayslipEmailMessage(
 
   const accessInstruction = payslipAccessUrl
     ? "Please use the secure button below to access your payslip."
-    : "Please sign in to the HR & Payroll System and open Payroll to access your payslip.";
+    : branding.isAlpatech
+      ? "Please sign in to Alpatech HR & Payroll and open Payroll to access your payslip."
+      : "Please sign in to the HR & Payroll System and open Payroll to access your payslip.";
+
+  const brandIntroLines = branding.isAlpatech
+    ? [
+      branding.headerTitle,
+      branding.headerSubtitle,
+    ]
+    : [];
 
   return [
+    ...brandIntroLines,
     `Hello ${employeeName},`,
-    `Your payslip for ${payCycle} is now ready to view.${payDate ? `\nPay date: ${payDate}.` : ""}`,
+    `Your ${branding.isAlpatech ? "Alpatech " : ""}payslip for ${payCycle} is now ready to view.${payDate ? `\nPay date: ${payDate}.` : ""}`,
     accessInstruction,
-    "For payroll queries, please contact HR/Payroll.",
-    "This is an automated notification from the HR & Payroll System.",
+    `For payroll queries, please contact ${branding.payrollContactLabel}.`,
+    `This is an automated notification from ${branding.footerName}.`,
   ].join("\n\n");
 }
 
@@ -374,11 +536,11 @@ serve(async (request) => {
         "HR & Payroll System",
     };
 
-// PAYROLL SECURE DELIVERY - STEP 2F-3B-3
-// Optional secure employee payroll page used in payslip notification emails.
-// Example production value:
-// https://your-domain.com/employee-dashboard.html?section=payroll
-const payslipAccessUrl = getOptionalPayslipAccessUrlEnv("PAYSLIP_ACCESS_URL");
+    // PAYROLL SECURE DELIVERY - STEP 2F-3B-3
+    // Optional secure employee payroll page used in payslip notification emails.
+    // Example production value:
+    // https://your-domain.com/employee-dashboard.html?section=payroll
+    const payslipAccessUrl = getOptionalPayslipAccessUrlEnv("PAYSLIP_ACCESS_URL");
 
     const token = getBearerToken(request);
 
@@ -392,6 +554,15 @@ const payslipAccessUrl = getOptionalPayslipAccessUrlEnv("PAYSLIP_ACCESS_URL");
         },
       },
     });
+
+    // ALPATECH EMAIL BRANDING - STEP 2H
+    // Use a service-role client only for non-sensitive company branding lookup.
+    // Payroll records, employee ownership, recipient emails, and delivery actions
+    // still use the signed-in user's RLS-scoped client above.
+    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() || "";
+    const brandingSupabase = supabaseServiceRoleKey
+      ? createClient(supabaseUrl, supabaseServiceRoleKey)
+      : supabase;
 
     const { data: userResult, error: userError } = await supabase.auth.getUser(token);
 
@@ -438,6 +609,14 @@ const payslipAccessUrl = getOptionalPayslipAccessUrlEnv("PAYSLIP_ACCESS_URL");
         message: "Your user profile is not linked to a company workspace. Payslip email preparation cannot continue.",
       });
     }
+
+    // ALPATECH EMAIL BRANDING - STEP 2E
+    // Resolve branding only after the signed-in user's tenant is confirmed.
+    const emailBrandingContext = await resolvePayslipEmailBrandingContext(
+      brandingSupabase,
+      profile,
+      payslipAccessUrl,
+    );
 
     const body = await request.json().catch(() => ({}));
 
@@ -517,10 +696,17 @@ const payslipAccessUrl = getOptionalPayslipAccessUrlEnv("PAYSLIP_ACCESS_URL");
         message: "Payslip email preparation stopped because the selected payroll records are missing employee ownership data.",
         summary: {
           finalisedRecords: finalisedRecords.length,
-          prepared: 0,
-          alreadyPending: 0,
-          alreadySent: 0,
-          missingRequiredData: finalisedRecords.length,
+          prepared,
+          alreadyPending,
+          alreadySent,
+          missingRequiredData,
+
+          // ALPATECH EMAIL BRANDING - STEP 2H
+          // Non-sensitive diagnostic so HR can confirm whether the backend
+          // resolved tenant branding for this delivery run.
+          emailBranding: emailBrandingContext.isAlpatech
+            ? "Alpatech"
+            : "Default",
         },
       });
     }
@@ -732,12 +918,16 @@ const payslipAccessUrl = getOptionalPayslipAccessUrlEnv("PAYSLIP_ACCESS_URL");
         continue;
       }
 
-const subject = buildPayslipEmailSubject(record);
+      const subject = buildPayslipEmailSubject(record, emailBrandingContext);
 
-// PAYROLL SECURE DELIVERY - STEP 2F-3B-3
-// Add only the protected employee Payroll page URL.
-// Do not include payroll amounts, bank details, or payroll record IDs in the email body.
-const message = buildPayslipEmailMessage(record, payslipAccessUrl);
+      // PAYROLL SECURE DELIVERY - STEP 2F-3B-3
+      // Add only the protected employee Payroll page URL.
+      // Do not include payroll amounts, bank details, or payroll record IDs in the email body.
+      const message = buildPayslipEmailMessage(
+        record,
+        payslipAccessUrl,
+        emailBrandingContext,
+      );
 
       try {
         const emailJsResult = await sendPayslipEmailViaEmailJs({
@@ -747,15 +937,15 @@ const message = buildPayslipEmailMessage(record, payslipAccessUrl);
           subject,
           message,
           initiatedByEmail: user.email || "",
-payCycle: cleanText(record.pay_cycle),
-payrollRecordId,
+          payCycle: cleanText(record.pay_cycle),
+          payrollRecordId,
 
-// PAYROLL SECURE DELIVERY - STEP 2F-3B-3
-// Passed as an EmailJS template parameter for optional button/link rendering.
-payslipAccessUrl,
+          // ALPATECH EMAIL BRANDING - STEP 2E
+          // Tenant-safe branding context passed to EmailJS template params.
+          branding: emailBrandingContext,
 
-          // PAYROLL SECURE DELIVERY - STEP 2F-1
-          // Pass the optional secure access URL to EmailJS template params.
+          // PAYROLL SECURE DELIVERY - STEP 2F-3B-3
+          // Passed as an EmailJS template parameter for optional button/link rendering.
           payslipAccessUrl,
         });
 

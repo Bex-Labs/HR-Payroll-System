@@ -28941,10 +28941,36 @@ async function handleSendPayslipsEmailRequest() {
 
     const supabase = getSupabaseClient();
 
+    // PAYSLIP EMAIL AUTH FIX - STEP 2I
+    // The Edge Function validates the signed-in HR/payroll user from the
+    // Authorization bearer token. Some browser sessions can have a valid
+    // stored session while functions.invoke does not reliably forward it.
+    // Read the active access token explicitly and pass it in the function
+    // headers so backend user validation is deterministic.
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error(
+        sessionError.message ||
+        "Your signed-in session could not be read. Please sign out and sign in again.",
+      );
+    }
+
+    const accessToken = String(sessionData?.session?.access_token || "").trim();
+
+    if (!accessToken) {
+      throw new Error(
+        "Your signed-in session has expired or could not be found. Please sign out and sign in again before sending payslips.",
+      );
+    }
+
     const { data, error } = await supabase.functions.invoke(
       "send-payslips-email",
       {
         body: requestBody,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
     );
 
