@@ -363,6 +363,240 @@ body:not(.dashboard-page) #roles {
   min-height: 100vh;
 }
 
+/* =========================================================
+   ALPATECH BRANDING - STEP 1C
+   Tenant/workspace shell branding for Alpatech.
+
+   HR/product behaviour:
+   - Changes visual identity only.
+   - Does not change employee, payroll, payslip, CSV export, email,
+     Supabase, tenant filtering, or role/access behaviour.
+   - Uses the flame icon as an image and renders ALPATECH as CSS text
+     so the wordmark remains sharp and professional.
+   ========================================================= */
+
+body.alpatech-workspace {
+  --hr-primary: #0b5f95;
+  --hr-primary-soft: #36b9cf;
+  --hr-primary-dark: #08446d;
+  --hr-background: #f4f8fb;
+  --hr-surface: #ffffff;
+  --hr-text: #101828;
+  --hr-muted: #667085;
+  --hr-border: #d8e5ee;
+  --hr-soft-surface: #eef9fc;
+  background: linear-gradient(180deg, #f4f8fb 0%, #eef4f8 100%);
+}
+
+body.alpatech-workspace .dashboard-hero {
+  padding: clamp(1.65rem, 3vw, 2.6rem);
+  background:
+    radial-gradient(circle at top right, rgba(54, 185, 207, 0.34), transparent 34%),
+    linear-gradient(135deg, #073b63 0%, #0b5f95 58%, #37b9cf 100%);
+  box-shadow: 0 20px 44px rgba(7, 59, 99, 0.2);
+}
+
+body.alpatech-workspace .dashboard-hero::before,
+body.alpatech-workspace .dashboard-hero::after {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+body.alpatech-workspace .hero-badge {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+body.alpatech-workspace .hero-meta-card {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ALPATECH TENANT BRANDING - STEP 1G
+   Keep the hero brand calm and breathable.
+   The logo, badge, heading, and copy now have deliberate spacing instead
+   of being visually packed into one tight cluster. */
+.alpatech-hero-content {
+  max-width: 760px;
+}
+
+.alpatech-hero-kicker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1.05rem;
+}
+
+.alpatech-hero-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 50px;
+  padding: 0.5rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(216, 229, 238, 0.92);
+  box-shadow: 0 14px 30px rgba(7, 59, 99, 0.16);
+}
+
+.alpatech-hero-badge {
+  margin-bottom: 0;
+  min-height: 38px;
+  padding-inline: 0.8rem;
+}
+
+.alpatech-hero-copy {
+  max-width: 690px;
+  line-height: 1.55;
+}
+
+.alpatech-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.alpatech-brand-mark img {
+  display: block;
+  width: 28px;
+  height: 38px;
+  object-fit: contain;
+}
+
+.alpatech-hero-mark img {
+  width: 30px;
+  height: 40px;
+}
+
+.alpatech-brand-wordmark {
+  color: #0b5f95;
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+/* ALPATECH TENANT BRANDING - STEP 1G
+   While the full tenant/company identity is resolving, hide only the
+   brand-bearing areas. This prevents a BexHR flash for Alpatech without
+   hiding operational cards or blocking the whole dashboard. */
+body.alpatech-workspace.alpatech-branding-resolving #tenantSidebarBrand,
+body.alpatech-workspace.alpatech-branding-resolving #tenantHeroBrandingBlock {
+  opacity: 0;
+}
+
+@media (max-width: 575.98px) {
+  body.alpatech-workspace .dashboard-hero {
+    padding: 1.35rem;
+  }
+
+  .alpatech-hero-kicker-row {
+    align-items: flex-start;
+    gap: 0.7rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .alpatech-hero-brand,
+  .alpatech-hero-badge {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .alpatech-brand-wordmark {
+    font-size: 1.25rem;
+  }
+}
+
+body.alpatech-workspace .dashboard-avatar {
+  color: #08446d;
+  background: linear-gradient(135deg, #ffffff 0%, #e7f7fb 100%);
+  border-color: rgba(255, 255, 255, 0.72);
+}
+
+body.alpatech-workspace .btn-primary,
+body.alpatech-workspace .dashboard-action-btn.btn-primary {
+  background-color: #0b5f95;
+  border-color: #0b5f95;
+}
+
+body.alpatech-workspace .btn-primary:hover,
+body.alpatech-workspace .dashboard-action-btn.btn-primary:hover {
+  background-color: #08446d;
+  border-color: #08446d;
+}
+
+body.alpatech-workspace .btn-outline-primary {
+  color: #0b5f95;
+  border-color: #0b5f95;
+}
+
+body.alpatech-workspace .btn-outline-primary:hover {
+  color: #ffffff;
+  background-color: #0b5f95;
+  border-color: #0b5f95;
+}
+
+@media (min-width: 992px) {
+  body.alpatech-workspace .bexhr-sidebar {
+    background:
+      radial-gradient(circle at top left, rgba(54, 185, 207, 0.16), transparent 34%),
+      linear-gradient(180deg, #ffffff 0%, #f3f9fc 100%);
+    border-right-color: rgba(216, 229, 238, 0.95);
+    box-shadow: 8px 0 28px rgba(7, 59, 99, 0.07);
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-brand {
+    border-bottom-color: rgba(216, 229, 238, 0.95);
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-brand::after {
+    content: "ALPATECH";
+    color: #0b5f95;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-brand .alpatech-brand-mark img {
+    width: 24px;
+    height: 34px;
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-item:hover {
+    background: #eaf8fb;
+    color: #08446d;
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-item:hover i {
+    color: #0b5f95;
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-item.active {
+    background: linear-gradient(135deg, #eaf8fb 0%, #f5fbfd 100%);
+    color: #08446d;
+    box-shadow: inset 0 0 0 1px rgba(11, 95, 149, 0.1);
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-item.active::before {
+    background: linear-gradient(180deg, #0b5f95 0%, #36b9cf 100%);
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-item.active i {
+    color: #0b5f95;
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-footer {
+    border-top-color: rgba(216, 229, 238, 0.95);
+  }
+
+  body.alpatech-workspace .bexhr-sidebar-footer .bexhr-sidebar-item:hover {
+    background: #eaf8fb;
+    color: #08446d;
+  }
+}
+
 .dashboard-hero {
   background: linear-gradient(135deg, #7a4300 0%, #b96a10 55%, #e7963a 100%);
   color: #ffffff;

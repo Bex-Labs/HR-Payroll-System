@@ -3215,6 +3215,134 @@ function getAdminControlledOrganizationName() {
   );
 }
 
+// ALPATECH TENANT BRANDING - STEP 1E
+// Detect only the Alpatech tenant/company workspace.
+// This must stay tenant-scoped so Alpatech branding never leaks into
+// other companies renting the same HR/payroll app.
+function isCurrentTenantAlpatechWorkspace() {
+  const companyName = String(state.currentTenantCompany?.company_name || "")
+    .trim()
+    .toLowerCase();
+
+  const tenantCode = String(
+    state.currentTenantCompany?.tenant_code ||
+    getCurrentTenantContext()?.tenantCode ||
+    state.currentProfile?.tenant_code ||
+    "",
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    companyName.includes("alpatech") ||
+    tenantCode.includes("alpatech")
+  );
+}
+
+// ALPATECH TENANT BRANDING - STEP 1E
+// Browser tab icon only.
+// Browsers control the rendered favicon size, so this uses a tighter,
+// fuller Alpatech flame asset to make the icon appear larger inside
+// the browser's fixed favicon slot.
+function applyTenantFaviconBranding() {
+  const favicon = document.querySelector("link[rel~='icon']");
+
+  if (!favicon) return;
+
+  if (isCurrentTenantAlpatechWorkspace()) {
+    favicon.type = "image/png";
+    favicon.href = "assets/alpatech-favicon-large.png";
+    return;
+  }
+
+  favicon.type = "image/x-icon";
+  favicon.href = "assets/favicon.png";
+}
+
+// ALPATECH TENANT BRANDING - STEP 1F
+// Tenant-scoped workspace shell branding.
+// This changes only the visible dashboard shell after the signed-in company
+// has been resolved. It does not change employee data, payroll logic,
+// payslip logic, CSV export, email delivery, Supabase queries, or role access.
+function applyTenantWorkspaceShellBranding() {
+  const sidebarBrand = document.getElementById("tenantSidebarBrand");
+  const heroBrandingBlock = document.getElementById("tenantHeroBrandingBlock");
+
+  if (isCurrentTenantAlpatechWorkspace()) {
+    document.body?.classList.add("alpatech-workspace");
+    document.title = "Alpatech HR & Payroll | BexHR";
+
+    if (sidebarBrand) {
+      sidebarBrand.className = "bexhr-sidebar-brand alpatech-sidebar-brand";
+      sidebarBrand.innerHTML = `
+        <!-- ALPATECH TENANT BRANDING - STEP 1G
+             Flame icon only. CSS renders the ALPATECH wordmark beside it. -->
+        <span class="alpatech-brand-mark" aria-hidden="true">
+          <img src="assets/alpatech-flame.png" alt="" />
+        </span>
+      `;
+    }
+
+    if (heroBrandingBlock) {
+      heroBrandingBlock.innerHTML = `
+        <!-- ALPATECH TENANT BRANDING - STEP 1G
+             Brand only the signed-in Alpatech workspace shell.
+             The top row gives the logo and workspace badge breathing room. -->
+        <div class="alpatech-hero-content">
+          <div class="alpatech-hero-kicker-row">
+            <div class="alpatech-hero-brand" aria-label="Alpatech HR and Payroll Workspace">
+              <span class="alpatech-brand-mark alpatech-hero-mark" aria-hidden="true">
+                <img src="assets/alpatech-flame.png" alt="" />
+              </span>
+              <span class="alpatech-brand-wordmark">ALPATECH</span>
+            </div>
+
+            <div class="hero-badge alpatech-hero-badge">
+              <i class="bi bi-truck"></i>
+              HR & Payroll Workspace
+            </div>
+          </div>
+
+          <h1 class="display-6 fw-bold mb-2">People Operations Dashboard</h1>
+          <p class="mb-0 alpatech-hero-copy">
+            Manage Alpatech employee records, supporting documents, payroll processing, payslips, and payment exports in one place.
+          </p>
+        </div>
+      `;
+    }
+
+    // ALPATECH TENANT BRANDING - STEP 1G
+    // Reveal the tenant-specific brand once the real Alpatech shell has been applied.
+    document.body?.classList.remove("alpatech-branding-resolving");
+    return;
+  }
+
+  // ALPATECH TENANT BRANDING - STEP 1F
+  // Reset shared app branding for every non-Alpatech tenant.
+  document.body?.classList.remove("alpatech-workspace", "alpatech-branding-resolving");
+  document.title = "HR Dashboard | BexHR";
+
+  if (sidebarBrand) {
+    sidebarBrand.className = "bexhr-sidebar-brand";
+    sidebarBrand.innerHTML = `
+      <span class="hr-brand-mark" style="width:34px;height:34px;font-size:0.8rem;">HR</span>
+    `;
+  }
+
+  if (heroBrandingBlock) {
+    heroBrandingBlock.innerHTML = `
+      <div class="hero-badge">
+        <i class="bi bi-people"></i>
+        HR Workspace
+      </div>
+      <h1 class="display-6 fw-bold mb-2">HR Dashboard</h1>
+      <p class="mb-0" style="max-width: 760px">
+        Manage your HR profile, employee records, supporting documents, and payroll records in one place.
+      </p>
+    `;
+  }
+}
+
 
 function cacheDomElements() {
   state.dom = {
@@ -21035,6 +21163,16 @@ async function refreshOrganizationSettingsWorkspace() {
     // Load Admin Company Identity first so HR renders the latest company name.
     await loadCurrentTenantCompanyForHr();
 
+    // ALPATECH TENANT BRANDING - STEP 1E
+    // Apply favicon branding only after the signed-in company identity is known.
+    // Non-Alpatech tenants keep the default shared app favicon.
+    applyTenantFaviconBranding();
+
+    // ALPATECH TENANT BRANDING - STEP 1F
+    // Apply the Alpatech visual shell only for the Alpatech tenant.
+    // Other tenants remain on the shared BexHR shell.
+    applyTenantWorkspaceShellBranding();
+
     const { data, error } = await supabase
       .from("organization_settings")
       .select("*")
@@ -23643,6 +23781,39 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
       : "",
   ].filter(Boolean);
 
+  // ALPATECH DOCUMENT BRANDING - STEP 2C
+  // Brand the read-only employee filled form for Alpatech only.
+  // This is display-only and does not change employee data, payroll data,
+  // Supabase records, role access, or tenant filtering.
+  const isAlpatechEmployeeFilledForm =
+    typeof isCurrentTenantAlpatechWorkspace === "function" &&
+    isCurrentTenantAlpatechWorkspace();
+
+  const employeeFilledFormHeaderHtml = isAlpatechEmployeeFilledForm
+    ? buildAlpatechDocumentBrandHeaderHtml({
+        documentLabel: "Read-only HR Employee Record",
+        rightTitle: "Employee Record",
+        rightLine1: fullName,
+        rightLine2: employee.employee_number ? `Employee No: ${employee.employee_number}` : "",
+      })
+    : "";
+
+  const employeeFilledFormOrganizationLabel = isAlpatechEmployeeFilledForm
+    ? "Employer Details"
+    : "Employee Filled Form";
+
+  const employeeFilledFormOrganizationNameHtml = isAlpatechEmployeeFilledForm
+    ? ""
+    : `<h3 class="h4 fw-bold mb-1">${escapeHtml(organizationName)}</h3>`;
+
+  const employeeFilledFormEmployerFallbackHtml =
+    isAlpatechEmployeeFilledForm &&
+    !organizationContactLines.length &&
+    !organizationAddress &&
+    !organizationRegistrationLines.length
+      ? `<div class="text-secondary small">Company details not yet completed in Organization Setup.</div>`
+      : "";
+
   const addresses = Array.isArray(relatedData.addresses) ? relatedData.addresses : [];
   const nextOfKin = Array.isArray(relatedData.nextOfKin) ? relatedData.nextOfKin : [];
   const education = Array.isArray(relatedData.education) ? relatedData.education : [];
@@ -23650,6 +23821,8 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
   const documents = Array.isArray(relatedData.documents) ? relatedData.documents : [];
 
   return `
+    ${employeeFilledFormHeaderHtml}
+
     <!-- HR EMPLOYEE RECORDS VIEW & EXPORT - STEP 1C
          Company identity header mirrors the payslip design source of truth.
          The company name comes from Admin-controlled company identity, while
@@ -23657,10 +23830,15 @@ function renderEmployeeFilledFormPreview(employee, relatedData = {}) {
     <section class="border rounded-4 p-3 p-lg-4 bg-white mb-4">
       <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
         <div>
+          <!-- ALPATECH DOCUMENT BRANDING - STEP 2C
+               Non-Alpatech tenants keep the normal company heading.
+               Alpatech uses the branded header above, so this body area
+               becomes employer details instead of repeating the brand name. -->
           <div class="small text-secondary text-uppercase fw-semibold mb-1">
-            Employee Filled Form
+            ${escapeHtml(employeeFilledFormOrganizationLabel)}
           </div>
-          <h3 class="h4 fw-bold mb-1">${escapeHtml(organizationName)}</h3>
+          ${employeeFilledFormOrganizationNameHtml}
+          ${employeeFilledFormEmployerFallbackHtml}
           <div class="text-secondary small">
             ${organizationAddress ? escapeHtml(organizationAddress) : "Company address not set"}
           </div>
@@ -29664,6 +29842,54 @@ function closePayslipPreview() {
   document.body.classList.remove("overflow-hidden");
 }
 
+// ALPATECH DOCUMENT BRANDING - STEP 2C
+// Shared compact Alpatech document header used by payslip preview/print
+// and read-only HR employee filled forms.
+// This keeps the flame close to the ALPATECH wordmark and prevents each
+// document renderer from duplicating different logo spacing.
+function buildAlpatechDocumentBrandHeaderHtml({
+  documentLabel = "Confidential HR Document",
+  rightTitle = "",
+  rightLine1 = "",
+  rightLine2 = "",
+} = {}) {
+  const rightPanelHtml = rightTitle || rightLine1 || rightLine2
+    ? `
+      <div style="text-align:right;color:#667085;font-size:0.82rem;line-height:1.45;">
+        ${rightTitle ? `<div style="color:#08446d;font-weight:700;font-size:0.95rem;">${escapeHtml(rightTitle)}</div>` : ""}
+        ${rightLine1 ? `<div>${escapeHtml(rightLine1)}</div>` : ""}
+        ${rightLine2 ? `<div>${escapeHtml(rightLine2)}</div>` : ""}
+      </div>
+    `
+    : "";
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;padding:16px;border:1px solid #d8e5ee;border-radius:16px;background:linear-gradient(135deg,#f7fbfd 0%,#ffffff 100%);">
+      <!-- ALPATECH DOCUMENT BRANDING - STEP 2D
+           Keep the flame and ALPATECH wordmark visually locked together.
+           The icon and text now sit on one compact baseline so payslips and
+           employee filled forms look closer to the official Alpatech wordmark. -->
+      <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;">
+        <div style="display:flex;align-items:center;gap:4px;min-width:0;">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:28px;flex:0 0 auto;">
+            <img src="assets/alpatech-flame.png" alt="" style="display:block;width:18px;height:26px;object-fit:contain;" />
+          </span>
+
+          <span style="color:#0b5f95;font-size:1.18rem;font-weight:500;letter-spacing:0.16em;line-height:1;">
+            ALPATECH
+          </span>
+        </div>
+
+        <div style="color:#667085;font-size:0.82rem;margin-top:4px;margin-left:24px;">
+          ${escapeHtml(documentLabel)}
+        </div>
+      </div>
+
+      ${rightPanelHtml}
+    </div>
+  `;
+}
+
 // DESCRIPTION ITEM 4 - STEP 7
 // Render a simple list of payslip earning/deduction lines.
 function renderPayslipPreviewLineItems(items = [], currency = "NGN", emptyText = "No items recorded.") {
@@ -29771,6 +29997,43 @@ function renderPayslipPreview(payrollRecord) {
       : "",
   ].filter(Boolean);
 
+  // ALPATECH PAYSLIP BRANDING - STEP 2A
+  // Apply Alpatech branding only when the signed-in tenant/company is Alpatech.
+  // This is display-only: it does not change payroll values, employee records,
+  // CSV export, email delivery, Supabase queries, or role/access behaviour.
+  const isAlpatechPayslip =
+    typeof isCurrentTenantAlpatechWorkspace === "function" &&
+    isCurrentTenantAlpatechWorkspace();
+
+  const alpatechPayslipHeaderHtml = isAlpatechPayslip
+    ? buildAlpatechDocumentBrandHeaderHtml({
+        documentLabel: "Confidential Payroll Payslip",
+        rightTitle: "HR & Payroll",
+        rightLine1: payrollRecord.pay_cycle || "Payroll",
+        rightLine2: formatDate(payrollRecord.pay_date),
+      })
+    : "";
+
+    // ALPATECH PAYSLIP BRANDING - STEP 2B
+  // Avoid repeating "Alpatech" twice on the payslip.
+  // For Alpatech, the company identity is already shown in the branded
+  // letterhead, so the body card should show employer details only.
+  const payslipOrganizationLabel = isAlpatechPayslip
+    ? "Employer Details"
+    : "Organization";
+
+  const payslipOrganizationNameHtml = isAlpatechPayslip
+    ? ""
+    : `<div class="h4 mb-1">${escapeHtml(organizationName)}</div>`;
+
+  const payslipEmployerFallbackHtml =
+    isAlpatechPayslip &&
+    !organizationContactLines.length &&
+    !organizationAddress &&
+    !organizationRegistrationLines.length
+      ? `<div class="text-secondary small">Company details not yet completed in Organization Setup.</div>`
+      : "";
+
   const earningsHtml = renderPayslipPreviewLineItems(
     [
       // MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A-2
@@ -29810,6 +30073,8 @@ function renderPayslipPreview(payrollRecord) {
   }
 
   content.innerHTML = `
+    ${alpatechPayslipHeaderHtml}
+
     <!-- MANAGE ORGANIZATION DOWNSTREAM USAGE - STEP 6A
          Payslip preview now uses saved Manage Organization details.
          This keeps the preview aligned with the organisation setup card
@@ -29817,8 +30082,13 @@ function renderPayslipPreview(payrollRecord) {
     <div class="border rounded-4 p-4 mb-4 bg-light-subtle">
       <div class="d-flex flex-column flex-lg-row justify-content-between gap-4">
         <div>
-          <div class="text-secondary small">Organization</div>
-          <div class="h4 mb-1">${escapeHtml(organizationName)}</div>
+          <!-- ALPATECH PAYSLIP BRANDING - STEP 2B
+               Non-Alpatech tenants keep the normal organization name.
+               Alpatech payslips avoid duplicating the brand name because
+               the ALPATECH letterhead is already shown above. -->
+          <div class="text-secondary small">${escapeHtml(payslipOrganizationLabel)}</div>
+          ${payslipOrganizationNameHtml}
+          ${payslipEmployerFallbackHtml}
 
           ${organizationContactLines.length
       ? `<div class="text-secondary small text-break">
